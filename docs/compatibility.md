@@ -19,7 +19,7 @@ Tapwing runs the same orchestration rules as Maestro:
 
 - **Control flow:** file-based and inline `runFlow`, `repeat` (`times` and `while`), `retry` (only on command errors, not script or transport errors), `onFlowStart`, and `onFlowComplete` (always runs, even if the flow fails).
 - **Variables:** `-e KEY=VALUE` overrides top-level flow `env` and shell variables. Shell environment variables prefixed with `MAESTRO_` are injected automatically (preserving the `MAESTRO_` prefix; empty values and internal shard variables `MAESTRO_SHARD_ID`/`MAESTRO_SHARD_INDEX` are excluded), alongside built-in variables `MAESTRO_FILENAME`, `MAESTRO_DEVICE_UDID`, `MAESTRO_SHARD_INDEX`, and `MAESTRO_SHARD_ID`.
-- **JavaScript:** powered by an embedded QuickJS engine supporting `output`, `maestro` (`platform`, `copiedText`), `json()`, `relativePoint()`, `console.log`, synchronous `http.{get,post,put,delete,request}` (with `headers`, `body`, and `multipartForm`), and `faker` (including `faker.expression(...)`).
+- **JavaScript:** powered by an embedded QuickJS engine supporting `output`, `maestro` (`platform`, `copiedText`), `json()`, `relativePoint()`, `console.log`, synchronous `http.{get,post,put,delete,request}` (with `headers`, `body`, and `multipartForm`), and `faker` (including `faker.expression(...)`). Like Maestro, scripts have no time limit (`http.*` keeps Maestro's 5-minute timeout), but the first Ctrl-C or `SIGTERM` stops a running script or an in-flight `http.*` request right away and device cleanup still runs. A script that allocates more than 1 GiB fails with `JavaScript ran out of memory` instead of taking the whole run down.
 
 ## CLI flags parity
 

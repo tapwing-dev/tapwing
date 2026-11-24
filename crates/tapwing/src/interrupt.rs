@@ -16,6 +16,7 @@
 
 use std::fmt;
 use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -181,6 +182,56 @@ pub fn sleep(duration: Duration) -> Result<()> {
     STATE.sleep(duration)
 }
 
+/// Handle on the interrupt state for code that blocks outside Tapwing's own
+/// poll loops (the JavaScript VM, a blocking HTTP request).
+///
+/// [`Watch::process`] observes the process-wide `SIGINT`/`SIGTERM` state. Unit
+/// tests build a private one with `Watch::manual` so they can simulate a signal
+/// without touching the process-global atomics shared by every parallel test.
+#[derive(Clone, Copy)]
+pub struct Watch {
+    state: &'static InterruptState,
+}
+
+impl Watch {
+    /// Watches the real process-wide signal state.
+    pub fn process() -> Self {
+        Self { state: &STATE }
+    }
+
+    /// A private state plus the trigger that simulates the first signal on it.
+    #[cfg(test)]
+    pub(crate) fn manual() -> (Self, impl Fn(i32) + Send + Sync + Copy + 'static) {
+        let state: &'static InterruptState = Box::leak(Box::new(InterruptState::new()));
+        (Self { state }, move |sig| {
+            state.record(sig);
+        })
+    }
+
+    pub fn is_interrupted(&self) -> bool {
+        self.state.is_interrupted()
+    }
+
+    /// Returns `Err(InterruptedError)` once a signal has been recorded.
+    pub fn check(&self) -> Result<()> {
+        self.state.check()
+    }
+
+    /// Blocks until `rx` yields a value, waking every [`SLEEP_CHUNK`] to abort
+    /// with [`InterruptedError`] once a signal arrives. `Ok(None)` means the
+    /// sender went away without sending.
+    pub fn recv<T>(&self, rx: &Receiver<T>) -> Result<Option<T>> {
+        loop {
+            self.check()?;
+            match rx.recv_timeout(SLEEP_CHUNK) {
+                Ok(value) => return Ok(Some(value)),
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => return Ok(None),
+            }
+        }
+    }
+}
+
 /// Whether `err` (or any source in its chain) is an [`InterruptedError`].
 pub fn is_interrupted_error(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| cause.is::<InterruptedError>())
@@ -238,5 +289,25 @@ mod tests {
         handle.join().unwrap();
         assert!(is_interrupted_error(&err));
         assert!(t0.elapsed() < Duration::from_secs(1), "sleep took {:?}", t0.elapsed());
+    }
+
+    #[test]
+    fn watch_recv_returns_values_disconnects_and_interrupts() {
+        let (watch, trigger) = Watch::manual();
+        let (tx, rx) = std::sync::mpsc::channel::<u8>();
+        tx.send(7).unwrap();
+        assert_eq!(watch.recv(&rx).unwrap(), Some(7));
+
+        // Nobody ever writes to the channel again, so only the trigger (fired
+        // from another thread, before or during the wait) can end `recv`.
+        let handle = std::thread::spawn(move || trigger(15));
+        let err = watch.recv(&rx).unwrap_err();
+        handle.join().unwrap();
+        assert_eq!(err.downcast_ref::<InterruptedError>(), Some(&InterruptedError { signal: 15 }));
+        assert!(!Watch::process().is_interrupted(), "a manual watch never touches the process state");
+
+        let (idle, _) = Watch::manual();
+        drop(tx);
+        assert_eq!(idle.recv(&rx).unwrap(), None);
     }
 }

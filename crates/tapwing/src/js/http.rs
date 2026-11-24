@@ -4,13 +4,14 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Context, Result, anyhow};
 use rquickjs::function::Opt;
 use rquickjs::{Ctx, Function, Object, Value};
 
+use crate::interrupt::Watch;
 use crate::random;
 
 use super::{BridgeState, catch_js_error, js_value_to_maestro_string, throw_js_error};
@@ -68,14 +69,13 @@ fn execute_js_http<'js>(
     params: Option<&Object<'js>>,
 ) -> rquickjs::Result<Object<'js>> {
     let t0 = Instant::now();
-    let (agent, script_dir) = {
+    let (agent, interrupt, script_dir) = {
         let b = bridge.borrow();
-        (Arc::clone(&b.http_agent), b.current_script_dir.clone())
+        (Arc::clone(&b.http_agent), b.interrupt, b.current_script_dir.clone())
     };
 
     let mut headers: Vec<(String, String)> = Vec::new();
-    let mut body_str: Option<String> = None;
-    let mut multipart_payload: Option<(String, Vec<u8>)> = None;
+    let mut payload = Payload::Empty;
 
     if let Some(p) = params {
         if let Ok(Some(hdr_val)) = p.get::<_, Option<Value<'js>>>("headers")
@@ -92,36 +92,99 @@ fn execute_js_http<'js>(
         {
             let mp =
                 build_multipart_body(ctx, &mp_obj, script_dir.as_deref()).map_err(|msg| throw_js_error(ctx, &msg))?;
-            multipart_payload = Some(mp);
+            payload = Payload::Multipart { content_type: mp.0, bytes: mp.1 };
         } else if let Ok(Some(b_val)) = p.get::<_, Option<Value<'js>>>("body")
             && !b_val.is_undefined()
             && !b_val.is_null()
         {
-            body_str = Some(js_value_to_maestro_string(ctx, b_val).unwrap_or_default());
+            payload = Payload::Text(js_value_to_maestro_string(ctx, b_val).unwrap_or_default());
         }
     }
 
-    let method_upper = method.to_ascii_uppercase();
-    let mut builder = ureq::http::Request::builder().method(method_upper.as_str()).uri(url);
+    let request = HttpRequest { method: method.to_ascii_uppercase(), url: url.to_string(), headers, payload };
+    let exchange = run_interruptible(agent, request, interrupt).map_err(|e| throw_js_error(ctx, &format!("{e:#}")))?;
+    let ok = (200..300).contains(&exchange.status);
+
+    {
+        let mut b = bridge.borrow_mut();
+        b.http_requests += 1;
+        b.http_ms += t0.elapsed().as_secs_f64() * 1000.0;
+    }
+
+    let js_headers = Object::new(ctx.clone())?;
+    for (k, vals) in exchange.headers {
+        js_headers.set(k.as_str(), vals.join(","))?;
+    }
+
+    let js_resp = Object::new(ctx.clone())?;
+    js_resp.set("ok", ok)?;
+    js_resp.set("status", i32::from(exchange.status))?;
+    js_resp.set("body", exchange.body)?;
+    js_resp.set("headers", js_headers)?;
+    Ok(js_resp)
+}
+
+enum Payload {
+    Empty,
+    Text(String),
+    Multipart { content_type: String, bytes: Vec<u8> },
+}
+
+/// Everything the request needs, detached from the JS context so it can cross
+/// to the worker thread.
+struct HttpRequest {
+    method: String,
+    url: String,
+    headers: Vec<(String, String)>,
+    payload: Payload,
+}
+
+struct HttpExchange {
+    status: u16,
+    /// Lowercased header name to its values in arrival order.
+    headers: HashMap<String, Vec<String>>,
+    body: String,
+}
+
+/// Performs `request` on a worker thread while the calling (JS) thread waits
+/// with the interrupt-aware [`Watch::recv`], so the first `SIGINT`/`SIGTERM`
+/// ends an in-flight request within one poll interval instead of after the
+/// agent's 5-minute timeout. ureq 3 has no way to cancel a blocking request.
+///
+/// On interrupt the worker is abandoned, not joined: it owns only the request
+/// and the agent, and its result goes into a channel whose receiver is gone, so
+/// it can never reach the JS context. It ends with the agent's own timeout or
+/// when the process exits after cleanup.
+fn run_interruptible(agent: Arc<ureq::Agent>, request: HttpRequest, interrupt: Watch) -> Result<HttpExchange> {
+    let (tx, rx) = mpsc::sync_channel(1);
+    std::thread::Builder::new()
+        .name("tapwing-http".to_string())
+        .spawn(move || {
+            let _ = tx.send(perform(&agent, request));
+        })
+        .context("starting the HTTP worker thread")?;
+    match interrupt.recv(&rx)? {
+        Some(result) => result,
+        None => Err(anyhow!("HTTP worker thread ended without a result")),
+    }
+}
+
+fn perform(agent: &ureq::Agent, request: HttpRequest) -> Result<HttpExchange> {
+    let HttpRequest { method, url, headers, payload } = request;
+    let mut builder = ureq::http::Request::builder().method(method.as_str()).uri(url.as_str());
     for (k, v) in &headers {
         builder = builder.header(k.as_str(), v.as_str());
     }
-
-    let response = if let Some((content_type, bytes)) = multipart_payload {
-        builder = builder.header("Content-Type", content_type);
-        let req = builder.body(bytes).map_err(|e| throw_js_error(ctx, &format!("invalid HTTP request: {e}")))?;
-        agent.run(req)
-    } else if let Some(b) = body_str {
-        let req = builder.body(b).map_err(|e| throw_js_error(ctx, &format!("invalid HTTP request: {e}")))?;
-        agent.run(req)
-    } else {
-        let req = builder.body(()).map_err(|e| throw_js_error(ctx, &format!("invalid HTTP request: {e}")))?;
-        agent.run(req)
+    let invalid = |e: ureq::http::Error| anyhow!("invalid HTTP request: {e}");
+    let response = match payload {
+        Payload::Multipart { content_type, bytes } => {
+            agent.run(builder.header("Content-Type", content_type).body(bytes).map_err(invalid)?)
+        }
+        Payload::Text(text) => agent.run(builder.body(text).map_err(invalid)?),
+        Payload::Empty => agent.run(builder.body(()).map_err(invalid)?),
     };
-
-    let mut resp = response.map_err(|e| throw_js_error(ctx, &format!("HTTP {method_upper} {url} failed: {e}")))?;
+    let mut resp = response.map_err(|e| anyhow!("HTTP {method} {url} failed: {e}"))?;
     let status = resp.status().as_u16();
-    let ok = (200..300).contains(&status);
 
     // Join repeated response headers with `,` and lowercase header names (`GraalJsHttp.kt:111-116`).
     let mut header_map: HashMap<String, Vec<String>> = HashMap::new();
@@ -131,26 +194,8 @@ fn execute_js_http<'js>(
         header_map.entry(key).or_default().push(v);
     }
 
-    let resp_body =
-        resp.body_mut().read_to_string().map_err(|e| throw_js_error(ctx, &format!("reading HTTP body failed: {e}")))?;
-
-    {
-        let mut b = bridge.borrow_mut();
-        b.http_requests += 1;
-        b.http_ms += t0.elapsed().as_secs_f64() * 1000.0;
-    }
-
-    let js_headers = Object::new(ctx.clone())?;
-    for (k, vals) in header_map {
-        js_headers.set(k.as_str(), vals.join(","))?;
-    }
-
-    let js_resp = Object::new(ctx.clone())?;
-    js_resp.set("ok", ok)?;
-    js_resp.set("status", i32::from(status))?;
-    js_resp.set("body", resp_body)?;
-    js_resp.set("headers", js_headers)?;
-    Ok(js_resp)
+    let body = resp.body_mut().read_to_string().map_err(|e| anyhow!("reading HTTP body failed: {e}"))?;
+    Ok(HttpExchange { status, headers: header_map, body })
 }
 
 /// Builds an RFC 7578 `multipart/form-data` payload matching `HttpUtils.kt:10-39`.
