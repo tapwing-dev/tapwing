@@ -26,6 +26,8 @@ mod connect;
 pub mod hierarchy;
 pub mod ops;
 mod restart;
+#[cfg(all(test, unix))]
+mod startup_tests;
 pub mod tapwing_apk;
 
 use std::collections::HashMap;
@@ -437,14 +439,57 @@ where
     }
 }
 
+/// The parts of a session start that reach outside the ADB server socket: the
+/// APK on this machine and the two `adb` child processes. A seam, so the rest
+/// of [`start_session_with`] runs in tests against a fake ADB server.
+trait StartHost {
+    /// The driver APK to have on the device.
+    fn install_plan(&self) -> Result<apk::InstallPlan>;
+    /// Installs it unless the device already has it.
+    fn ensure_installed(&self, adb: &Adb, plan: &apk::InstallPlan, cancel: &AtomicBool) -> Result<apk::InstallReport>;
+    /// Starts `command` (`am instrument ...`) in a device shell that lives as
+    /// long as the driver does, with its output going to `log`.
+    fn spawn_instrumentation(&self, adb: &Adb, command: &str, log: fs::File) -> Result<Child>;
+}
+
+/// The real thing: the located APK and the `adb` CLI.
+struct AdbCliHost;
+
+impl StartHost for AdbCliHost {
+    fn install_plan(&self) -> Result<apk::InstallPlan> {
+        Ok(tapwing_apk::locate()?.install_plan())
+    }
+
+    fn ensure_installed(&self, adb: &Adb, plan: &apk::InstallPlan, cancel: &AtomicBool) -> Result<apk::InstallReport> {
+        apk::ensure_installed(adb, plan, cancel)
+    }
+
+    fn spawn_instrumentation(&self, adb: &Adb, command: &str, log: fs::File) -> Result<Child> {
+        adb.command(&["shell", command])
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(log.try_clone()?))
+            .stderr(Stdio::from(log))
+            .spawn()
+            .context("starting `am instrument`")
+    }
+}
+
 /// Installs (if needed), forwards, instruments and waits up to
 /// `readiness_timeout` for gRPC readiness. The returned client owns the
 /// session's teardown guards.
 fn start_session(adb: &Adb, cancel: &CancelSignal, readiness_timeout: Duration) -> Result<NativeDriverClient> {
+    start_session_with(&AdbCliHost, adb, cancel, readiness_timeout)
+}
+
+fn start_session_with(
+    host: &dyn StartHost,
+    adb: &Adb,
+    cancel: &CancelSignal,
+    readiness_timeout: Duration,
+) -> Result<NativeDriverClient> {
     // Neither a missing APK nor one that fails its checksum appears by trying again.
-    let plan =
-        tapwing_apk::locate().map_err(|e| e.context(Unrecoverable("the driver APK is unusable")))?.install_plan();
-    let install = apk::ensure_installed(adb, &plan, cancel.flag())?;
+    let plan = host.install_plan().map_err(|e| e.context(Unrecoverable("the driver APK is unusable")))?;
+    let install = host.ensure_installed(adb, &plan, cancel.flag())?;
     if cancel.is_cancelled() {
         bail!("cancelled");
     }
@@ -476,13 +521,8 @@ fn start_session(adb: &Adb, cancel: &CancelSignal, readiness_timeout: Duration) 
 
     let log = std::env::temp_dir().join(format!("tapwing-instrument-{}-{host_port}.log", std::process::id()));
     let log_file = fs::File::create(&log).context("creating the instrumentation log")?;
-    let child = adb
-        .command(&["shell", &command::instrument_command(install.api_level, DEVICE_PORT)])
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(log_file.try_clone()?))
-        .stderr(Stdio::from(log_file))
-        .spawn()
-        .context("starting `am instrument`")?;
+    let child =
+        host.spawn_instrumentation(adb, &command::instrument_command(install.api_level, DEVICE_PORT), log_file)?;
     let instrumentation = InstrumentationGuard { adb: adb.clone(), child, log };
 
     // Own the guards immediately so any early cancellation or error drops
@@ -951,12 +991,12 @@ mod tests {
             READINESS_PROBE_TIMEOUT,
             READINESS_PROBE_MAX_TIMEOUT,
             Duration::from_millis(5),
-            || Some(InstrumentationExited { status: "1".into(), output: "crash\n".into() }),
+            || Some(InstrumentationExited { status: "exit status: 1".into(), output: "crash\n".into() }),
             |_| Ok(()),
         )
         .unwrap_err()
         .to_string();
-        assert_eq!(err, "the instrumentation exited during startup (exit status 1: crash)");
+        assert_eq!(err, "the instrumentation exited during startup (exit status: 1: crash)");
     }
 
     #[test]

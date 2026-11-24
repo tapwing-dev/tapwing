@@ -53,7 +53,7 @@ impl fmt::Display for Unrecoverable {
 /// still expected to come up.
 #[derive(Debug)]
 pub(super) struct InstrumentationExited {
-    /// The child's exit status, as `ExitStatus` prints it.
+    /// How the child ended, as `ExitStatus` prints it (`exit status: 1`, `signal: 9 (SIGKILL)`).
     pub(super) status: String,
     /// What the child wrote to stdout and stderr.
     pub(super) output: String,
@@ -61,7 +61,7 @@ pub(super) struct InstrumentationExited {
 
 impl fmt::Display for InstrumentationExited {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "the instrumentation exited during startup (exit status {}: {})", self.status, self.output.trim())
+        write!(f, "the instrumentation exited during startup ({}: {})", self.status, self.output.trim())
     }
 }
 
@@ -291,7 +291,7 @@ mod tests {
     const S: Duration = Duration::from_secs(1);
 
     fn exited(output: &str) -> anyhow::Error {
-        anyhow::Error::new(InstrumentationExited { status: "1".into(), output: output.into() })
+        anyhow::Error::new(InstrumentationExited { status: "exit status: 1".into(), output: output.into() })
     }
 
     #[test]

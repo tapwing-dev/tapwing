@@ -596,7 +596,7 @@ impl<'a> NativeOps<'a> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use std::sync::{Arc, Mutex};
 
     use tonic::{Request, Response, Status, Streaming};
@@ -623,8 +623,8 @@ mod tests {
 </hierarchy>"#;
 
     #[derive(Default)]
-    struct FakeState {
-        xml: String,
+    pub(in crate::native_lane) struct FakeState {
+        pub(in crate::native_lane) xml: String,
         taps: Vec<(u32, u32)>,
         typed: Vec<String>,
         erased: Vec<u32>,
@@ -764,8 +764,8 @@ mod tests {
     }
 
     /// A fake driver serving on a free loopback port until stopped or dropped.
-    struct Served {
-        port: u16,
+    pub(in crate::native_lane) struct Served {
+        pub(in crate::native_lane) port: u16,
         thread: Option<std::thread::JoinHandle<()>>,
         stop: Option<tokio::sync::oneshot::Sender<()>>,
     }
@@ -788,7 +788,7 @@ mod tests {
         }
     }
 
-    fn serve(state: Arc<Mutex<FakeState>>) -> Served {
+    pub(in crate::native_lane) fn serve(state: Arc<Mutex<FakeState>>) -> Served {
         let (port_tx, port_rx) = std::sync::mpsc::channel::<u16>();
         let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
         let svc = MaestroDriverServer::new(FakeDriver(state));

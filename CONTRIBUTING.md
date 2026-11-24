@@ -66,7 +66,7 @@ scripts/test-dist.sh
 
 | Suite | Where | What it guards |
 |---|---|---|
-| Unit tests | `crates/tapwing/src/**` (`#[cfg(test)]`) | Driver connection and reconnect handling, driver artifact discovery and SHA-256 checks, reports, trace redaction, planners |
+| Unit tests | `crates/tapwing/src/**` (`#[cfg(test)]`) | Driver connection and reconnect handling, the `launchApp` / `setPermissions` scripts and the Android native-lane startup against a fake ADB server (`device/adb_client/fake.rs`; every script is parsed with `sh -n` and run under the host `sh` with stubbed device commands), driver artifact discovery and SHA-256 checks, reports, trace redaction, planners |
 | CLI end-to-end | `crates/tapwing/tests/cli_e2e.rs` | The compiled `tapwing` binary: `--version`/`--help`, `check`, `init`, `test` argument validation, exit codes and messages |
 | Integration | `crates/tapwing/tests/*.rs` | Parser parity with Maestro (`compat`), workspace planner, sharding, reports (`report_edge_cases`), app health, failure reports, trace, `init` |
 | Dart driver | `packages/tapwing_driver/test` | Selector engine, snapshot semantics, RPC protocol and error wire format, idle detection, input injection |
