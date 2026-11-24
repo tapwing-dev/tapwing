@@ -38,6 +38,8 @@ Commands that can be affected by overlays upfront (`assertNotVisible`, `back`, `
 - Reads are always retried.
 - Taps, text input, and key presses are retried only if the connection was refused before the request could be sent. Otherwise the step fails cleanly instead of risking a duplicate tap, and the lane is ready again for the next step.
 
+On Android a restart is bounded in time as well as in number: each one may take up to 30 seconds (it waits for a device that is briefly `offline` to come back), and all restarts of a run share 60 seconds. The error names the budget when it runs out. A start that cannot succeed (no driver APK, `adb install` refused it, the instrumentation crashed) is not retried and fails at once with that cause.
+
 Mock-location providers created by `setLocation` or `travel` on Android are cleaned up when the session ends.
 
 **Slow cold starts.** On a busy machine, a freshly cleared app can take a while to come up. If the first handshake after `launchApp` gets no answer for 10 seconds, Tapwing reconnects and gives the same process one more chance (up to 20 seconds more). On Android in native or black-box mode, if the screen is still empty after launch, the first required lookup gets an extra 10-second window (disabled under `--maestro-compat strict`).
@@ -50,7 +52,8 @@ Mock-location providers created by `setLocation` or `travel` on Android are clea
 | `TAPWING_IOS_DRIVER_DIR` | bundled | Override the unpacked iOS native driver directory |
 | `TAPWING_NATIVE_STARTUP_TIMEOUT_MS` | `20000` | Android native driver startup timeout (ms) |
 | `TAPWING_IOS_NATIVE_STARTUP_TIMEOUT_MS` | `60000` | iOS XCUITest runner startup timeout (ms) |
-| `TAPWING_NATIVE_RESTART_TIMEOUT_MS` | `30000` | How long Android waits for a device to return after a disconnect (ms) |
+| `TAPWING_NATIVE_RESTART_TIMEOUT_MS` | `30000` | How long one Android driver restart may take, including the wait for a device to return after a disconnect (ms) |
+| `TAPWING_NATIVE_RESTART_BUDGET_MS` | twice the restart timeout | How long all Android driver restarts of one run may take together (ms) |
 
 In JSON reports (`--report`), each flow records its `lane` (`flutter`, `native`, or `hybrid`), per-lane command counts (`laneStats`), `blackbox: true` when no in-app driver connected, and `coldStartRetries` if any occurred.
 

@@ -13,6 +13,7 @@
 //! * [`client`]: synchronous gRPC facade ([`NativeDriverClient`]).
 //! * [`hierarchy`]: UiAutomator XML into the shared selector engine.
 //! * [`ops`]: Maestro-style commands (tap, assert, swipe, ...) on top of both.
+//! * [`restart`]: the time budget of a restart and which start failures it retries.
 //!
 //! [`NativeLaneHandle`] warms the lane up on a background thread so that
 //! pure-Flutter flows never wait for it; the first native command joins it.
@@ -22,6 +23,7 @@ pub mod client;
 pub mod command;
 pub mod hierarchy;
 pub mod ops;
+mod restart;
 pub mod tapwing_apk;
 
 use std::collections::HashMap;
@@ -39,6 +41,9 @@ use anyhow::{Context, Result, anyhow, bail};
 pub use apk::Adb;
 pub use client::NativeDriverClient;
 pub use ops::{ColdStart, NativeOps};
+pub use restart::{RESTART_BUDGET_ENV, RESTART_TIMEOUT_ENV};
+
+use restart::{InstrumentationExited, RESTART_RETRY_INTERVAL, RestartBudget, RestartClock, Unrecoverable};
 
 /// Warning for the deprecated `--native-driver` / `tapwing.nativeDriver` (`origin` names which).
 /// `tapwing` is accepted silently; anything else asks for a driver that no longer exists.
@@ -324,13 +329,13 @@ struct InstrumentationGuard {
 }
 
 impl InstrumentationGuard {
-    /// `Some(output)` when the instrumentation process already exited.
-    fn exited(&mut self) -> Option<String> {
+    /// `Some` when the instrumentation process already exited.
+    fn exited(&mut self) -> Option<InstrumentationExited> {
         match self.child.try_wait() {
-            Ok(Some(status)) => {
-                let out = fs::read_to_string(&self.log).unwrap_or_default();
-                Some(format!("exit status {status}: {}", out.trim()))
-            }
+            Ok(Some(status)) => Some(InstrumentationExited {
+                status: status.to_string(),
+                output: fs::read_to_string(&self.log).unwrap_or_default(),
+            }),
             _ => None,
         }
     }
@@ -394,7 +399,7 @@ fn wait_for_driver_ready<E, F>(
     mut probe: F,
 ) -> Result<()>
 where
-    E: FnMut() -> Option<String>,
+    E: FnMut() -> Option<InstrumentationExited>,
     F: FnMut(Duration) -> Result<()>,
 {
     let deadline = Instant::now() + timeout;
@@ -403,8 +408,8 @@ where
         if cancel.is_cancelled() {
             bail!("cancelled");
         }
-        if let Some(why) = has_exited() {
-            bail!("the instrumentation exited during startup ({why})");
+        if let Some(exited) = has_exited() {
+            return Err(exited.into());
         }
         let rem = deadline.saturating_duration_since(Instant::now());
         if rem.is_zero() {
@@ -430,10 +435,13 @@ where
     }
 }
 
-/// Installs (if needed), forwards, instruments and waits for gRPC readiness.
-/// The returned client owns the session's teardown guards.
-fn start_session(adb: &Adb, cancel: &CancelSignal) -> Result<NativeDriverClient> {
-    let plan = tapwing_apk::locate()?.install_plan();
+/// Installs (if needed), forwards, instruments and waits up to
+/// `readiness_timeout` for gRPC readiness. The returned client owns the
+/// session's teardown guards.
+fn start_session(adb: &Adb, cancel: &CancelSignal, readiness_timeout: Duration) -> Result<NativeDriverClient> {
+    // Neither a missing APK nor one that fails its checksum appears by trying again.
+    let plan =
+        tapwing_apk::locate().map_err(|e| e.context(Unrecoverable("the driver APK is unusable")))?.install_plan();
     let install = apk::ensure_installed(adb, &plan, cancel.flag())?;
     if cancel.is_cancelled() {
         bail!("cancelled");
@@ -480,7 +488,7 @@ fn start_session(adb: &Adb, cancel: &CancelSignal) -> Result<NativeDriverClient>
     let mut guards = SessionGuards { instrumentation: Some(instrumentation), forward: Some(forward) };
     wait_for_driver_ready(
         cancel,
-        startup_timeout(),
+        readiness_timeout,
         READINESS_PROBE_TIMEOUT,
         READINESS_PROBE_MAX_TIMEOUT,
         READINESS_POLL_INTERVAL,
@@ -491,50 +499,27 @@ fn start_session(adb: &Adb, cancel: &CancelSignal) -> Result<NativeDriverClient>
     Ok(client)
 }
 
-/// Overrides how long a restart keeps trying to bring the driver back (ms).
-pub const RESTART_TIMEOUT_ENV: &str = "TAPWING_NATIVE_RESTART_TIMEOUT_MS";
-/// After an adb drop the device is often briefly `offline` or missing while the
-/// adb server reconnects, so a restart keeps trying for a while.
-const DEFAULT_RESTART_TIMEOUT: Duration = Duration::from_secs(30);
-const RESTART_RETRY_INTERVAL: Duration = Duration::from_millis(500);
+impl RestartClock for CancelSignal {
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
 
-fn restart_timeout() -> Duration {
-    std::env::var(RESTART_TIMEOUT_ENV)
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .map(Duration::from_millis)
-        .unwrap_or(DEFAULT_RESTART_TIMEOUT)
-}
+    fn is_cancelled(&self) -> bool {
+        CancelSignal::is_cancelled(self)
+    }
 
-/// Runs `attempt` until it succeeds, `cancel` fires or `timeout` has passed
-/// (an attempt in flight is never interrupted, so the total can overshoot by
-/// one attempt). Returns the last error when it gives up.
-fn retry_until<T>(
-    cancel: &CancelSignal,
-    timeout: Duration,
-    interval: Duration,
-    mut attempt: impl FnMut() -> Result<T>,
-) -> Result<T> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        let err = match attempt() {
-            Ok(v) => return Ok(v),
-            Err(e) => e,
-        };
-        let rem = deadline.saturating_duration_since(Instant::now());
-        if cancel.is_cancelled() || rem.is_zero() {
-            return Err(err);
-        }
-        if cancel.wait_timeout(rem.min(interval)) {
-            return Err(err.context("cancelled"));
-        }
+    fn wait(&self, duration: Duration) -> bool {
+        self.wait_timeout(duration)
     }
 }
 
 /// Starts a replacement session after the transport died, waiting for the
-/// device to come back first if it has to.
-fn restart_session(adb: &Adb, cancel: &CancelSignal) -> Result<NativeDriverClient> {
-    retry_until(cancel, restart_timeout(), RESTART_RETRY_INTERVAL, || start_session(adb, cancel))
+/// device to come back first if it has to, for as long as `budget` allows.
+/// Each attempt's readiness wait is cut to the time the restart has left.
+fn restart_session(adb: &Adb, cancel: &CancelSignal, budget: &mut RestartBudget) -> Result<NativeDriverClient> {
+    restart::restart_within_budget(budget, cancel, RESTART_RETRY_INTERVAL, |left| {
+        start_session(adb, cancel, startup_timeout().min(left))
+    })
 }
 
 enum State {
@@ -561,9 +546,12 @@ impl NativeLaneHandle {
         let adb = Adb::new(serial);
         let starter_adb = adb.clone();
         Self::spawn_with(adb, move |cancel| {
-            let mut client = start_session(&starter_adb, cancel).context("starting the Tapwing Android driver")?;
+            let mut client = start_session(&starter_adb, cancel, startup_timeout())
+                .context("starting the Tapwing Android driver")?;
             let (restart_adb, restart_cancel) = (starter_adb.clone(), cancel.clone());
-            client.set_restart(Box::new(move || restart_session(&restart_adb, &restart_cancel)));
+            // One budget for the run: the closure moves on to each replacement client.
+            let mut budget = RestartBudget::from_env();
+            client.set_restart(Box::new(move || restart_session(&restart_adb, &restart_cancel, &mut budget)));
             Ok(client)
         })
     }
@@ -961,12 +949,12 @@ mod tests {
             READINESS_PROBE_TIMEOUT,
             READINESS_PROBE_MAX_TIMEOUT,
             Duration::from_millis(5),
-            || Some("exit status 1: crash".into()),
+            || Some(InstrumentationExited { status: "1".into(), output: "crash\n".into() }),
             |_| Ok(()),
         )
         .unwrap_err()
         .to_string();
-        assert!(err.contains("the instrumentation exited during startup") && err.contains("crash"), "{err}");
+        assert_eq!(err, "the instrumentation exited during startup (exit status 1: crash)");
     }
 
     #[test]
@@ -1020,44 +1008,6 @@ mod tests {
         let w = deprecated_native_driver_warning("config.yaml tapwing.nativeDriver", "espresso").unwrap();
         assert!(w.contains("tapwing.nativeDriver `espresso`"), "{w}");
     }
-
-    #[test]
-    fn retry_until_retries_until_success_and_gives_up_with_the_last_error() {
-        let cancel = CancelSignal::new();
-        let mut calls = 0;
-        let v = retry_until(&cancel, Duration::from_secs(5), Duration::from_millis(1), || {
-            calls += 1;
-            if calls < 3 { Err(anyhow!("device offline")) } else { Ok(calls) }
-        })
-        .unwrap();
-        assert_eq!(v, 3);
-
-        let mut calls = 0;
-        let t = Instant::now();
-        let err = retry_until::<()>(&cancel, Duration::from_millis(40), Duration::from_millis(5), || {
-            calls += 1;
-            Err(anyhow!("device offline #{calls}"))
-        })
-        .unwrap_err();
-        assert!(calls > 1, "retried before giving up");
-        assert!(err.to_string().contains(&format!("device offline #{calls}")), "last error wins: {err}");
-        assert!(t.elapsed() < Duration::from_secs(2), "stalled for {:?}", t.elapsed());
-    }
-
-    #[test]
-    fn retry_until_stops_at_once_when_cancelled() {
-        let cancel = Arc::new(CancelSignal::new());
-        let canceller = cancel.clone();
-        let t = Instant::now();
-        let err = retry_until::<()>(&cancel, Duration::from_secs(30), Duration::from_secs(10), || {
-            canceller.cancel();
-            Err(anyhow!("device offline"))
-        })
-        .unwrap_err();
-        assert!(err.to_string().contains("device offline"), "{err}");
-        assert!(t.elapsed() < Duration::from_millis(500), "cancellation stalled for {:?}", t.elapsed());
-    }
-
     #[test]
     fn blackbox_tracker_promotes_only_after_two_consecutive_misses() {
         let mut tracker = BlackboxTracker::default();
