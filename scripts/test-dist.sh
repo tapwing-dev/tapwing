@@ -44,6 +44,13 @@ mkdir -p "$FAKE_IOS"
 printf '<plist>xctestrun</plist>\n' >"$FAKE_IOS/tapwing-ios-runner.xctestrun"
 printf 'fake-uitests-zip\n' >"$FAKE_IOS/tapwing-ios-runnerUITests-Runner.zip"
 printf 'fake-host-zip\n' >"$FAKE_IOS/tapwing-ios-runner.zip"
+printf '{"xcodeVersion":"26.1","xcodeBuild":"17B55","sdkVersion":"26.1","sdkBuild":"23B77"}\n' \
+  >"$FAKE_IOS/tapwing-ios-runner.build-info.json"
+# A driver directory built before build-info existed: still packaged, without the file.
+FAKE_IOS_OLD="$WORK/ios-driver-old"
+mkdir -p "$FAKE_IOS_OLD"
+cp "$FAKE_IOS/tapwing-ios-runner.xctestrun" "$FAKE_IOS/tapwing-ios-runnerUITests-Runner.zip" \
+  "$FAKE_IOS/tapwing-ios-runner.zip" "$FAKE_IOS_OLD/"
 
 make_fake_bin() {
   local path=$1 ios_line=$2
@@ -69,8 +76,14 @@ make_fake_bin "$FAKE_LINUX_BIN" "tapwing ios driver: n/a (the iOS Simulator need
 OUT="$WORK/dist"
 
 # Helper: verify tarball checksum + inner SHA256SUMS + exact entry list.
+# expect_ios: yes (with build-info) | old (without build-info) | no.
 verify_tarball() {
   local target=$1 expect_ios=$2
+  local expect_build_info=no
+  case "$expect_ios" in
+    yes) expect_build_info=yes ;;
+    old) expect_ios=yes ;;
+  esac
   local name="tapwing-$VERSION-$target"
   local tb="$OUT/$name.tar.gz"
   local sumfile="$tb.sha256"
@@ -109,6 +122,11 @@ $name/share/tapwing/licenses/THIRD_PARTY_NOTICES.md
 $name/share/tapwing/release
 EOF
 )
+    if [[ "$expect_build_info" == "yes" ]]; then
+      expected_files=$(printf '%s\n%s\n%s\n' "$expected_files" \
+        "$name/share/tapwing/drivers/ios/tapwing-ios-runner.build-info.json" \
+        "$name/share/tapwing/drivers/ios/tapwing-ios-runner.build-info.json.sha256" | LC_ALL=C sort)
+    fi
   else
     expected_files=$(cat <<EOF | LC_ALL=C sort
 $name/LICENSE
@@ -139,6 +157,11 @@ EOF
   local listed expected_listed="android/tapwing-driver.apk"
   if [[ "$expect_ios" == "yes" ]]; then
     expected_listed+=$'\nios/tapwing-ios-runner.xctestrun\nios/tapwing-ios-runner.zip\nios/tapwing-ios-runnerUITests-Runner.zip'
+  fi
+  if [[ "$expect_build_info" == "yes" ]]; then
+    expected_listed+=$'\nios/tapwing-ios-runner.build-info.json'
+    grep -q '"xcodeVersion":"26.1"' "$droot/ios/tapwing-ios-runner.build-info.json" \
+      || fail "$target build-info.json was not copied verbatim"
   fi
   listed=$(awk '{ print $2 }' "$droot/SHA256SUMS" | LC_ALL=C sort)
   [[ "$listed" == "$(LC_ALL=C sort <<<"$expected_listed")" ]] \
@@ -176,10 +199,10 @@ pass "dist.sh layout & checksums for aarch64-apple-darwin"
 
 TAPWING_PREBUILT_BIN="$FAKE_MAC_BIN" \
 TAPWING_ANDROID_DRIVER_APK="$FAKE_APK" \
-TAPWING_IOS_DRIVER_DIR="$FAKE_IOS" \
+TAPWING_IOS_DRIVER_DIR="$FAKE_IOS_OLD" \
   "$ROOT/scripts/dist.sh" --target x86_64-apple-darwin --out-dir "$OUT"
-verify_tarball x86_64-apple-darwin yes
-pass "dist.sh layout & checksums for x86_64-apple-darwin"
+verify_tarball x86_64-apple-darwin old
+pass "dist.sh layout & checksums for x86_64-apple-darwin (iOS driver without build-info)"
 
 # Linux target must omit iOS driver even if TAPWING_IOS_DRIVER_DIR is set.
 TAPWING_PREBUILT_BIN="$FAKE_LINUX_BIN" \

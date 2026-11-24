@@ -10,6 +10,11 @@ scripts/build-ios-driver.sh              # host unit tests + drivers/ios/build/*
 tapwing test ...                         # always uses it
 ```
 
+The build also writes `build/tapwing-ios-runner.build-info.json` with the Xcode
+version and build and the iOS Simulator SDK it used. Tapwing compares it with
+the local Xcode when it starts the runner and warns once if the major versions
+differ; it never refuses to run.
+
 | | |
 |---|---|
 | Host app / runner bundle IDs | `dev.tapwing.ios-runner` / `dev.tapwing.ios-runnerUITests.xctrunner` |

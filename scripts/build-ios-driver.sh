@@ -9,6 +9,7 @@
 #   tapwing-ios-runner.xctestrun (+ .sha256)
 #   tapwing-ios-runnerUITests-Runner.zip (+ .sha256)
 #   tapwing-ios-runner.zip (+ .sha256)
+#   tapwing-ios-runner.build-info.json (+ .sha256): the Xcode and SDK the runner was built with
 #   Debug-iphonesimulator/{TapwingRunnerUITests-Runner.app,TapwingRunner.app}
 #
 # A dev build of `tapwing` finds the build directly in drivers/ios/build/; a
@@ -118,7 +119,33 @@ PY
 (cd "$OUT/Debug-iphonesimulator" && zip -qry "$OUT/tapwing-ios-runnerUITests-Runner.zip" TapwingRunnerUITests-Runner.app)
 (cd "$OUT/Debug-iphonesimulator" && zip -qry "$OUT/tapwing-ios-runner.zip" TapwingRunner.app)
 
-for f in tapwing-ios-runner.xctestrun tapwing-ios-runnerUITests-Runner.zip tapwing-ios-runner.zip; do
+# Record the toolchain that built the runner. `tapwing` compares it with the
+# local Xcode and prints one warning on a major-version mismatch
+# (`ios_native_lane/xcode_compat.rs`); the file is optional for it.
+xcode_info=$(xcodebuild -version)
+sdk_version=$(xcodebuild -version -sdk iphonesimulator SDKVersion 2>/dev/null || true)
+sdk_build=$(xcodebuild -version -sdk iphonesimulator ProductBuildVersion 2>/dev/null || true)
+python3 - "$OUT/tapwing-ios-runner.build-info.json" "$xcode_info" "$sdk_version" "$sdk_build" <<'PY'
+import json, re, sys
+
+dst, xcode_info, sdk_version, sdk_build = sys.argv[1:5]
+version = re.search(r"^Xcode\s+(\S+)", xcode_info, re.M)
+build = re.search(r"^Build version\s+(\S+)", xcode_info, re.M)
+if not version:
+    raise SystemExit(f"unexpected `xcodebuild -version` output: {xcode_info!r}")
+info = {
+    "xcodeVersion": version.group(1),
+    "xcodeBuild": build.group(1) if build else "",
+    "sdkVersion": sdk_version.strip(),
+    "sdkBuild": sdk_build.strip(),
+}
+with open(dst, "w") as f:
+    json.dump(info, f, indent=2, sort_keys=True)
+    f.write("\n")
+PY
+
+for f in tapwing-ios-runner.xctestrun tapwing-ios-runnerUITests-Runner.zip tapwing-ios-runner.zip \
+  tapwing-ios-runner.build-info.json; do
   sum=$(sha256 "$OUT/$f")
   printf '%s  %s\n' "$sum" "$f" >"$OUT/$f.sha256"
   echo "$OUT/$f  sha256 $sum"

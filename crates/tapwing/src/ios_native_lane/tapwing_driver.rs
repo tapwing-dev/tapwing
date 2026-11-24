@@ -7,6 +7,11 @@
 //! sidecars and unpacked once into `~/.tapwing/ios-native-driver/tapwing-<hash>/`),
 //! then the output of `scripts/build-ios-driver.sh` in the source checkout this
 //! binary was built from.
+//!
+//! Each of those directories may also hold `tapwing-ios-runner.build-info.json`
+//! (the Xcode and SDK the runner was built with). It is optional and advisory:
+//! it is not part of the runner layout, the cache key or the checksum
+//! verification, and is read only by `xcode_compat`.
 
 use std::fmt;
 use std::fs;

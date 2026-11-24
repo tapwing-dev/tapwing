@@ -13,6 +13,8 @@
 //! * [`tapwing_driver`]: finds the runner (env override, release bundle, checkout build).
 //! * [`ops`]: Maestro-style commands (tap, assert, swipe, ...) on top of the client.
 //! * `orphans`: removes runners a hard-killed earlier run left on the simulator.
+//! * `session`: the per-session id that tells this run's runner from a stale one.
+//! * `xcode_compat`: one warning when the runner was built with another major Xcode.
 //!
 //! The release bundle is unpacked once into `~/.tapwing/ios-native-driver/<key>/`
 //! (an atomic marker makes warm runs free). [`IosNativeLaneHandle`] starts the
@@ -27,6 +29,7 @@ pub mod ops;
 mod orphans;
 mod session;
 pub mod tapwing_driver;
+mod xcode_compat;
 
 use std::collections::HashSet;
 use std::fs;
@@ -445,7 +448,10 @@ fn wait_for_runner(
 /// Unpacks (if needed), launches the runner and waits for HTTP readiness. The
 /// returned client owns the runner process (dropping it stops the runner).
 fn start_session(udid: &str, cancel: &AtomicBool) -> Result<IosNativeClient> {
-    let xctestrun = tapwing_driver::locate(cancel)?.xctestrun;
+    let driver = tapwing_driver::locate(cancel)?;
+    // One advisory line per process if the runner was built with another major Xcode.
+    xcode_compat::warn_once(driver.source.path(), cancel);
+    let xctestrun = driver.xctestrun;
     let driver_label = "the Tapwing iOS driver";
     if cancel.load(Ordering::Relaxed) || crate::interrupt::is_interrupted() {
         bail!("cancelled");
