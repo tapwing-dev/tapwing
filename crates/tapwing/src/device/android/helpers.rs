@@ -1,10 +1,16 @@
 //! Pure shell builders, validators, media planning, and output parsers for
 //! Android host commands.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
+
+use crate::process::run_with_timeout;
+
+/// Deadline of `adb start-server` and of `adb devices` (which starts the
+/// server too): the daemon needs a few seconds to come up and scan USB.
+pub(in crate::device) const ADB_SERVER_START_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Polls `child` until it exits or `timeout` passes.
 pub(in crate::device) fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Option<std::process::ExitStatus> {
@@ -195,11 +201,13 @@ pub(super) fn media_scan_script(remote_paths: &[String]) -> String {
     script
 }
 
-pub(in crate::device) fn run(bin: &str, args: &[&str]) -> Result<String> {
-    let out = Command::new(bin).args(args).output().with_context(|| format!("running {bin}"))?;
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+/// Runs a host tool for at most `timeout` (see [`run_with_timeout`]) and
+/// returns its stdout; a non-zero exit is an error carrying both streams.
+pub(in crate::device) fn run(bin: &str, args: &[&str], timeout: Duration) -> Result<String> {
+    let out = run_with_timeout(Command::new(bin).args(args), timeout)?;
+    let stdout = out.stdout_lossy();
     if !out.status.success() {
-        bail!("{bin} {} failed: {}{}", args.join(" "), stdout, String::from_utf8_lossy(&out.stderr));
+        bail!("{bin} {} failed: {}{}", args.join(" "), stdout, out.stderr_lossy());
     }
     Ok(stdout)
 }

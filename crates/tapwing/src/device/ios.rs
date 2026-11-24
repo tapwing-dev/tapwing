@@ -19,6 +19,35 @@ use std::time::{Duration, Instant};
 
 use super::LaunchMetrics;
 use super::android::{MIN_RECORDING, RECORDER_EXIT_TIMEOUT, wait_with_timeout};
+use crate::process::run_with_timeout;
+
+/// Deadline of a `simctl` query or setting (`list`, `get_app_container`,
+/// `privacy`, `ui`, `openurl`, `io screenshot`, ...). These answer in well
+/// under a second; the slack covers a CoreSimulator service that is still
+/// starting.
+const SIMCTL_TIMEOUT: Duration = Duration::from_secs(30);
+/// `simctl terminate`, also run from `Drop` guards, where a wedged simulator
+/// must not hold the exit for long.
+pub(crate) const SIMCTL_TERMINATE_TIMEOUT: Duration = Duration::from_secs(15);
+/// `simctl launch` returns once the app process exists, which is slow on a
+/// loaded CI host right after an install.
+const SIMCTL_LAUNCH_TIMEOUT: Duration = Duration::from_secs(60);
+/// `simctl install` / `uninstall` / `addmedia` copy whole app bundles or media files.
+const SIMCTL_INSTALL_TIMEOUT: Duration = Duration::from_secs(180);
+/// Copying an app bundle aside for `clearState` (`cp -R`, a clone on APFS).
+const APP_COPY_TIMEOUT: Duration = Duration::from_secs(120);
+/// Local preference readers (`plutil`, `defaults`).
+const HOST_TOOL_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The deadline of `xcrun simctl <args>`, by subcommand.
+fn simctl_timeout(args: &[&str]) -> Duration {
+    match args.first().copied() {
+        Some("install" | "uninstall" | "addmedia") => SIMCTL_INSTALL_TIMEOUT,
+        Some("launch") => SIMCTL_LAUNCH_TIMEOUT,
+        Some("terminate") => SIMCTL_TERMINATE_TIMEOUT,
+        _ => SIMCTL_TIMEOUT,
+    }
+}
 
 static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
@@ -41,7 +70,7 @@ pub struct SimInfo {
 
 /// Booted simulators (empty when Xcode / `xcrun` is unavailable).
 pub fn list_booted() -> Vec<SimInfo> {
-    match xcrun(&["simctl", "list", "devices", "booted", "-j"]) {
+    match simctl(&["list", "devices", "booted", "-j"]) {
         Ok(out) => parse_booted_json(&out),
         Err(_) => Vec::new(),
     }
@@ -314,9 +343,7 @@ impl IosSim {
     }
 
     fn simctl(&self, args: &[&str]) -> Result<String> {
-        let mut full = vec!["simctl"];
-        full.extend_from_slice(args);
-        xcrun(&full)
+        simctl(args)
     }
 
     /// The app's data container (cached until the app is reinstalled).
@@ -347,8 +374,10 @@ impl IosSim {
         let name = self.simctl(&["get_app_container", &self.udid, bundle, "app"]).ok().and_then(|app| {
             let plist = Path::new(app.trim()).join("Info.plist");
             ["CFBundleDisplayName", "CFBundleName"].iter().find_map(|key| {
-                let out = Command::new("plutil").args(["-extract", key, "raw", "-o", "-"]).arg(&plist).output().ok()?;
-                let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                let mut plutil = Command::new("plutil");
+                plutil.args(["-extract", key, "raw", "-o", "-"]).arg(&plist);
+                let out = run_with_timeout(&mut plutil, HOST_TOOL_TIMEOUT).ok()?;
+                let v = out.stdout_lossy().trim().to_string();
                 (out.status.success() && !v.is_empty()).then_some(v)
             })
         });
@@ -359,14 +388,13 @@ impl IosSim {
     /// `simctl terminate` (`stopApp`; also `killApp`, since iOS has no
     /// process death: `IOSDriver.killApp`). Not running is not an error.
     pub fn terminate(&self, bundle: &str) -> Result<()> {
-        let out = Command::new("xcrun")
-            .args(["simctl", "terminate", &self.udid, bundle])
-            .output()
-            .context("running xcrun simctl terminate")?;
+        let mut terminate = Command::new("xcrun");
+        terminate.args(["simctl", "terminate", &self.udid, bundle]);
+        let out = run_with_timeout(&mut terminate, SIMCTL_TERMINATE_TIMEOUT)?;
         if out.status.success() {
             return Ok(());
         }
-        let err = String::from_utf8_lossy(&out.stderr);
+        let err = out.stderr_lossy();
         // "found nothing to terminate" (not running) is fine, like Maestro.
         if err.contains("found nothing to terminate") || err.contains("not running") || err.contains("No such process")
         {
@@ -400,7 +428,8 @@ impl IosSim {
         let mut keep_copy = false;
         let result = (|| -> Result<()> {
             // `cp -c` clones on APFS (copy-on-write), making the copy ~free.
-            run("cp", &["-Rc", &app, path_str(&copy)?]).or_else(|_| run("cp", &["-R", &app, path_str(&copy)?]))?;
+            run("cp", &["-Rc", &app, path_str(&copy)?], APP_COPY_TIMEOUT)
+                .or_else(|_| run("cp", &["-R", &app, path_str(&copy)?], APP_COPY_TIMEOUT))?;
             self.simctl(&["uninstall", &self.udid, bundle])?;
             let install = ["install", self.udid.as_str(), path_str(&copy)?];
             install_with_one_retry(|| self.simctl(&install).map(|_| ())).map_err(|e| {
@@ -425,7 +454,7 @@ impl IosSim {
         permissions: &BTreeMap<String, String>,
     ) -> Result<(usize, Vec<String>)> {
         self.set_permissions_with(bundle, permissions, |udid, action, service, bundle| {
-            run("xcrun", &["simctl", "privacy", udid, action, service, bundle]).map(|_| ())
+            simctl(&["privacy", udid, action, service, bundle]).map(|_| ())
         })
     }
 
@@ -473,17 +502,17 @@ impl IosSim {
     {
         self.write_port_file(bundle, port)?;
         let cli_args = format_launch_arguments(launch_arguments);
-        let out = Command::new("xcrun")
+        let mut launch = Command::new("xcrun");
+        launch
             .args(["simctl", "launch", &self.udid, bundle])
             .args(&cli_args)
             // Unused by Flutter today (no environment on iOS), kept for
             // non-Flutter hosts and future engines.
-            .env("SIMCTL_CHILD_TAPWING_PORT", port.to_string())
-            .output()
-            .context("running xcrun simctl launch")?;
-        let text = String::from_utf8_lossy(&out.stdout);
+            .env("SIMCTL_CHILD_TAPWING_PORT", port.to_string());
+        let out = run_with_timeout(&mut launch, SIMCTL_LAUNCH_TIMEOUT)?;
+        let text = out.stdout_lossy();
         if !out.status.success() {
-            bail!("simctl launch {bundle} failed: {}{}", text, String::from_utf8_lossy(&out.stderr));
+            bail!("simctl launch {bundle} failed: {}{}", text, out.stderr_lossy());
         }
         parse_launch_pid(&text).ok_or_else(|| anyhow!("simctl launch printed no pid: `{}`", text.trim()))
     }
@@ -514,9 +543,7 @@ impl IosSim {
             clear_state,
             stop_app,
             permissions,
-            |udid, action, service, bundle| {
-                run("xcrun", &["simctl", "privacy", udid, action, service, bundle]).map(|_| ())
-            },
+            |udid, action, service, bundle| simctl(&["privacy", udid, action, service, bundle]).map(|_| ()),
         )?;
         let t2 = Instant::now();
         let pid = self.launch(bundle, launch_arguments, port)?;
@@ -706,19 +733,17 @@ impl IosSim {
     /// iOS shows no soft keyboard). Reads the per-device preference first and
     /// falls back to the global one; Simulator's default is connected.
     pub fn hardware_keyboard_connected(&self) -> bool {
-        let per_device = Command::new("sh")
-            .arg("-c")
-            .arg(format!(
-                "defaults export com.apple.iphonesimulator - 2>/dev/null | \
-                 plutil -extract 'DevicePreferences.{}.ConnectHardwareKeyboard' raw -o - - 2>/dev/null",
-                self.udid
-            ))
-            .output()
-            .ok()
-            .and_then(|o| parse_bool_pref(&String::from_utf8_lossy(&o.stdout)));
+        let mut export = Command::new("sh");
+        export.arg("-c").arg(format!(
+            "defaults export com.apple.iphonesimulator - 2>/dev/null | \
+             plutil -extract 'DevicePreferences.{}.ConnectHardwareKeyboard' raw -o - - 2>/dev/null",
+            self.udid
+        ));
+        let per_device =
+            run_with_timeout(&mut export, HOST_TOOL_TIMEOUT).ok().and_then(|o| parse_bool_pref(&o.stdout_lossy()));
         per_device
             .or_else(|| {
-                run("defaults", &["read", "com.apple.iphonesimulator", "ConnectHardwareKeyboard"])
+                run("defaults", &["read", "com.apple.iphonesimulator", "ConnectHardwareKeyboard"], HOST_TOOL_TIMEOUT)
                     .ok()
                     .and_then(|o| parse_bool_pref(&o))
             })
@@ -770,12 +795,15 @@ fn path_str(p: &Path) -> Result<&str> {
     p.to_str().ok_or_else(|| anyhow!("non-UTF-8 path {}", p.display()))
 }
 
-fn xcrun(args: &[&str]) -> Result<String> {
-    run("xcrun", args)
+/// `xcrun simctl <args>` bounded by [`simctl_timeout`]; returns stdout.
+fn simctl(args: &[&str]) -> Result<String> {
+    let mut full = vec!["simctl"];
+    full.extend_from_slice(args);
+    run("xcrun", &full, simctl_timeout(args))
 }
 
-fn run(bin: &str, args: &[&str]) -> Result<String> {
-    super::android::run(bin, args)
+fn run(bin: &str, args: &[&str], timeout: Duration) -> Result<String> {
+    super::android::run(bin, args, timeout)
 }
 
 #[cfg(test)]
@@ -807,6 +835,18 @@ mod tests {
         let hint = reinstall_failure_hint("dev.example.app", "UDID-1", Path::new("/tmp/k/dev.example.app.app"));
         assert!(hint.contains("kept at /tmp/k/dev.example.app.app"), "{hint}");
         assert!(hint.contains("xcrun simctl install UDID-1 '/tmp/k/dev.example.app.app'"), "{hint}");
+    }
+
+    #[test]
+    fn simctl_deadlines_follow_the_subcommand() {
+        assert_eq!(simctl_timeout(&["install", "UDID", "/a.app"]), SIMCTL_INSTALL_TIMEOUT);
+        assert_eq!(simctl_timeout(&["uninstall", "UDID", "dev.x"]), SIMCTL_INSTALL_TIMEOUT);
+        assert_eq!(simctl_timeout(&["addmedia", "UDID", "/a.mp4"]), SIMCTL_INSTALL_TIMEOUT);
+        assert_eq!(simctl_timeout(&["launch", "UDID", "dev.x"]), SIMCTL_LAUNCH_TIMEOUT);
+        assert_eq!(simctl_timeout(&["terminate", "UDID", "dev.x"]), SIMCTL_TERMINATE_TIMEOUT);
+        assert_eq!(simctl_timeout(&["list", "devices", "booted", "-j"]), SIMCTL_TIMEOUT);
+        assert_eq!(simctl_timeout(&["io", "UDID", "screenshot"]), SIMCTL_TIMEOUT);
+        assert_eq!(simctl_timeout(&[]), SIMCTL_TIMEOUT);
     }
 
     #[test]

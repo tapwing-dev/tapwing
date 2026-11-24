@@ -44,6 +44,7 @@ A few simulator details worth knowing:
 - **Isolated port per session.** `--port 0` (the default) picks a free host port for each run and removes `adb reverse` when done, so another app left running won't connect to the wrong session.
 - **Keeps the screen awake.** On Android, Tapwing enables stay-awake while plugged in (`stay_on_while_plugged_in`) and restores your previous setting on exit. A sleeping screen is woken up; a PIN-locked device fails immediately.
 - **Works without `launchApp`.** If a flow doesn't start with `launchApp`, Tapwing attaches to the app that is already running.
+- **Never waits forever on host tools.** Every `xcrun simctl`, `adb install` and `adb start-server` call has a deadline (15–60 s for queries, launches and `terminate`, 180 s for `simctl install`, 300 s for `adb install`). A wedged CoreSimulator service or adb daemon fails the step with an error such as ``` `xcrun simctl launch …` did not finish within 60 s and was killed ``` instead of hanging the run, and Ctrl-C stops a call in flight.
 - **Platform and app checks.** Connections from another platform are rejected (useful when an iOS Simulator is still running in the background while you test on Android). Passing `--app-id` to `tapwing hierarchy` pins it to that specific app's process.
 
 ## Troubleshooting

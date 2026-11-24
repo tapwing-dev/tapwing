@@ -392,12 +392,10 @@ impl Drop for RunnerGuard {
         let _ = self.child.wait();
         // Killing the host-side `xcodebuild` does not stop the runner app
         // inside the simulator; terminate it so the port is freed.
-        let _ = Command::new("xcrun")
-            .args(["simctl", "terminate", &self.udid, self.runner_bundle_id])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
+        // Bounded, so a wedged simulator cannot hold the exit.
+        let mut terminate = Command::new("xcrun");
+        terminate.args(["simctl", "terminate", &self.udid, self.runner_bundle_id]);
+        let _ = crate::process::run_with_timeout(&mut terminate, crate::device::ios::SIMCTL_TERMINATE_TIMEOUT);
         let _ = fs::remove_dir_all(&self.dir);
     }
 }

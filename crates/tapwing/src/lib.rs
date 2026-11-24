@@ -15,6 +15,7 @@ pub mod ios_native_lane;
 pub mod js;
 pub mod native_lane;
 pub mod orchestra;
+pub(crate) mod process;
 pub mod random;
 pub mod report;
 pub mod run;
