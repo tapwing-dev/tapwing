@@ -1,0 +1,151 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing", "android" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Input/Keyboard"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "textInput",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "مرحبا بالعالم"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "مرحبا بالعالم"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "你好世界"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "你好世界"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "こんにちは世界"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "こんにちは世界"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "안녕하세요"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "안녕하세요"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "Hello 👋 World 🌍"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Hello 👋 World 🌍"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "Mixed مرحبا 你好"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Mixed مرحبا 你好"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

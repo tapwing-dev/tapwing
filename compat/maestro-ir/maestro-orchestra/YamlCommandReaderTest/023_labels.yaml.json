@@ -1,0 +1,390 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "label" : "Tap on the important button",
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "foo",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "label" : "Tap on the important button twice",
+      "longPress" : false,
+      "optional" : false,
+      "repeat" : {
+        "delay" : 100,
+        "repeat" : 2
+      },
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "foo",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "label" : "Press and hold the important button",
+      "longPress" : true,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "foo",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "label" : "Tap on the middle of the screen",
+      "longPress" : false,
+      "optional" : false,
+      "point" : "50%,50%",
+      "retryIfNoChange" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "idRegex" : "bar",
+          "optional" : false
+        }
+      },
+      "label" : "Check that the important number is visible",
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "idRegex" : "bar2",
+          "optional" : false
+        }
+      },
+      "label" : "Check that the secret number is invisible",
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${5 == 5}"
+      },
+      "label" : "Check that five is still what we think it is",
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "label" : "Enter my secret password",
+      "optional" : false,
+      "text" : "correct horse battery staple"
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT_EMAIL_ADDRESS",
+      "label" : "Enter a random email address",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT_PERSON_NAME",
+      "label" : "Enter a random person's name",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "NUMBER",
+      "label" : "Enter a random number",
+      "length" : 5,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT",
+      "label" : "Enter a random string",
+      "length" : 20,
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "ENTER",
+      "label" : "Press the enter key",
+      "optional" : false
+    }
+  }, {
+    "backPressCommand" : {
+      "label" : "Go back to the previous screen",
+      "optional" : false
+    }
+  }, {
+    "clearKeychainCommand" : {
+      "label" : "Clear the keychain",
+      "optional" : false
+    }
+  }, {
+    "clearStateCommand" : {
+      "appId" : "com.example.app",
+      "label" : "Wipe the app state",
+      "optional" : false
+    }
+  }, {
+    "copyTextCommand" : {
+      "label" : "Copy the important text",
+      "optional" : false,
+      "selector" : {
+        "idRegex" : "foo",
+        "optional" : false
+      }
+    }
+  }, {
+    "eraseTextCommand" : {
+      "charactersToErase" : 5,
+      "label" : "Erase the last 5 characters",
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Some important text"
+        }
+      },
+      "label" : "Wait until the important text is visible",
+      "optional" : false,
+      "timeout" : "1000"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "label" : "Get the number 5",
+      "optional" : false,
+      "scriptString" : "return 5;"
+    }
+  }, {
+    "hideKeyboardCommand" : {
+      "label" : "Hide the keyboard",
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.some.other",
+      "clearState" : true,
+      "label" : "Launch some other app",
+      "optional" : false
+    }
+  }, {
+    "openLinkCommand" : {
+      "autoVerify" : false,
+      "browser" : false,
+      "label" : "Open the example website",
+      "link" : "https://www.example.com",
+      "optional" : false
+    }
+  }, {
+    "pasteTextCommand" : {
+      "label" : "Paste the important text",
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "assertConditionCommand" : {
+          "condition" : {
+            "scriptCondition" : "${5 == 5}"
+          },
+          "optional" : false
+        }
+      } ],
+      "label" : "Check that five is still what we think it is",
+      "optional" : false
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : { },
+      "label" : "Run some special calculations",
+      "optional" : false,
+      "script" : "const myNumber = 1 + 1;",
+      "scriptDir" : "<ROOT>/maestro-orchestra/YamlCommandReaderTest",
+      "sourceDescription" : "023_runScript_test.js"
+    }
+  }, {
+    "setOrientationCommand" : {
+      "label" : "Set the device orientation",
+      "optional" : false,
+      "orientation" : "LANDSCAPE_LEFT"
+    }
+  }, {
+    "scrollCommand" : {
+      "label" : "Scroll down",
+      "optional" : false
+    }
+  }, {
+    "scrollUntilVisible" : {
+      "centerElement" : false,
+      "direction" : "DOWN",
+      "label" : "Scroll to the bottom",
+      "optional" : false,
+      "originalSpeedValue" : "40",
+      "scrollDuration" : "40",
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Footer"
+      },
+      "timeout" : "20000",
+      "visibilityPercentage" : 100,
+      "visibilityPercentageNormalized" : 1.0
+    }
+  }, {
+    "setLocationCommand" : {
+      "label" : "Set Location to Test Laboratory",
+      "latitude" : "12.5266",
+      "longitude" : "78.2150",
+      "optional" : false
+    }
+  }, {
+    "startRecordingCommand" : {
+      "label" : "Start recording a video",
+      "optional" : false,
+      "path" : "recording.mp4"
+    }
+  }, {
+    "stopAppCommand" : {
+      "appId" : "com.some.other",
+      "label" : "Stop that other app from running",
+      "optional" : false
+    }
+  }, {
+    "stopRecordingCommand" : {
+      "label" : "Stop recording the video",
+      "optional" : false
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "label" : "Snap this for later evaluation",
+      "optional" : false,
+      "path" : "baz"
+    }
+  }, {
+    "travelCommand" : {
+      "label" : "Run around the north pole",
+      "optional" : false,
+      "points" : [ {
+        "latitude" : "0.0",
+        "longitude" : "0.0"
+      }, {
+        "latitude" : "0.1",
+        "longitude" : "0.0"
+      }, {
+        "latitude" : "0.1",
+        "longitude" : "0.1"
+      }, {
+        "latitude" : "0.0",
+        "longitude" : "0.1"
+      } ],
+      "speedMPS" : 2000.0
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "label" : "Wait for the thing to stop spinning",
+      "optional" : false,
+      "timeout" : "4000"
+    }
+  }, {
+    "swipeCommand" : {
+      "direction" : "DOWN",
+      "duration" : 400,
+      "label" : "Swipe down a bit",
+      "optional" : false
+    }
+  }, {
+    "addMediaCommand" : {
+      "label" : "Add a picture to the device",
+      "mediaPaths" : [ "<ROOT>/maestro-orchestra/YamlCommandReaderTest/023_image.png" ],
+      "optional" : false
+    }
+  }, {
+    "setAirplaneModeCommand" : {
+      "label" : "Turn on airplane mode for testing",
+      "optional" : false,
+      "value" : "Enable"
+    }
+  }, {
+    "toggleAirplaneModeCommand" : {
+      "label" : "Toggle airplane mode for testing",
+      "optional" : false
+    }
+  }, {
+    "setDarkModeCommand" : {
+      "label" : "Turn on dark mode for testing",
+      "optional" : false,
+      "value" : "Enable"
+    }
+  }, {
+    "toggleDarkModeCommand" : {
+      "label" : "Toggle dark mode for testing",
+      "optional" : false
+    }
+  }, {
+    "assertDarkModeCommand" : {
+      "label" : "Assert dark mode is enabled",
+      "optional" : false
+    }
+  }, {
+    "assertLightModeCommand" : {
+      "label" : "Assert dark mode is disabled",
+      "optional" : false
+    }
+  }, {
+    "repeatCommand" : {
+      "commands" : [ {
+        "tapOnElement" : {
+          "label" : "Tap on the important button",
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "idRegex" : "foo",
+            "optional" : false
+          },
+          "waitUntilVisible" : false
+        }
+      }, {
+        "tapOnElement" : {
+          "label" : "Tap on the other important button",
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "idRegex" : "bar",
+            "optional" : false
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Some important text"
+        }
+      },
+      "label" : "Tap the 2 buttons until the text goes away",
+      "optional" : false
+    }
+  } ]
+}

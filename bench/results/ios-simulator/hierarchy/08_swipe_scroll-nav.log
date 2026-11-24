@@ -1,0 +1,9 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 166 ms
+
+▶ 08_swipe_scroll
+  ✓  2111.0 ms  launchApp
+  ✓   616.0 ms  tapOn "F2 Playground"
+  ✓     1.7 ms  assertVisible id: nav_selectors_taps
+  ✓   541.0 ms  tapOn id: nav_swipe_scroll
+  ✓     1.5 ms  assertVisible "Swipe left to dismiss A"
+PASSED 08_swipe_scroll in 3273 ms

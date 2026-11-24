@@ -1,0 +1,36 @@
+appId: dev.tapwing.sampleApp
+name: F4 iOS device commands
+---
+# Host-side device commands (iOS Simulator): simctl-driven.
+- launchApp:
+    clearState: true
+- assertVisible: "Welcome back"
+
+# Dark mode: set / toggle / assert.
+- setDarkMode: enabled
+- assertDarkMode
+- toggleDarkMode
+- assertLightMode
+- setDarkMode: disabled
+- assertLightMode
+
+# Location.
+- setLocation:
+    latitude: 50.0755
+    longitude: 14.4378
+- travel:
+    points:
+      - 50.0755, 14.4378
+      - 50.0880, 14.4208
+      - 50.0910, 14.4004
+    speed: 2000
+
+# Photos library.
+- addMedia:
+    - ref_visual_badge_ios.png
+
+# Screen recording (`simctl io recordVideo`, stopped with SIGINT).
+- startRecording: f4_ios_recording
+- tapOn:
+    id: "playground_button"
+- stopRecording

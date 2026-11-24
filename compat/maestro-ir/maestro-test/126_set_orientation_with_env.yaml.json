@@ -1,0 +1,43 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "orientation_landscape_left" : "LANDSCAPE_LEFT",
+        "orientation_landscape_right" : "LANDSCAPE_RIGHT",
+        "orientation_portrait" : "PORTRAIT",
+        "orientation_upside_down" : "UPSIDE_DOWN"
+      },
+      "optional" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "${orientation_portrait}"
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "${orientation_landscape_left}"
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "${orientation_landscape_right}"
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "${orientation_upside_down}"
+    }
+  } ]
+}

@@ -1,0 +1,24 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "failing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "assertScreenshotCommand" : {
+      "optional" : false,
+      "path" : "./screenshots/assertScreenshotSizeMismatch.png",
+      "thresholdPercentage" : "95"
+    }
+  } ]
+}

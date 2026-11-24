@@ -1,0 +1,57 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Input/Keyboard"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "textInput",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT_PERSON_NAME",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "idRegex" : "textInput",
+          "optional" : false,
+          "textRegex" : "[A-Z][a-z]+ [A-Z][A-Za-z']+"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

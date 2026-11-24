@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Invalid Command: inputRandom at <ROOT>/maestro-orchestra/YamlCommandReaderTest/028_inputRandomAnimal.yaml:3:14",
+    "type" : "SyntaxError"
+  }
+}

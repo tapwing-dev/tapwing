@@ -1,0 +1,217 @@
+{
+  "setupMs": 163.9205,
+  "flows": [
+    {
+      "flow": "F2 Screenshots and Light Mode",
+      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_screenshots_and_theme.yaml",
+      "status": "passed",
+      "totalMs": 3992.449459,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 1720.6394999999998,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "profile",
+              "pid": 13172,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"android_arm64\"",
+              "screen": [
+                0.0,
+                0.0
+              ],
+              "dpr": 1.0
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 13172,
+            "grantedPermissions": 0,
+            "phases": {
+              "stopClearMs": 34,
+              "permissionsMs": 56,
+              "amStartMs": 55,
+              "acceptMs": 493.01374999999996,
+              "rejectedConnections": 0,
+              "configureMs": 1007.0857499999998,
+              "waitIdleMs": 37.190458
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 531.811667,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                84,
+                1335,
+                1356,
+                1503
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 33999,
+              "actUs": 11181,
+              "settleUs": 477296
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1116 tap 720,1419"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: nav_screenshot_theme",
+          "status": "passed",
+          "ms": 496.882708,
+          "driver": {
+            "element": {
+              "id": 21,
+              "accessibilityText": "Screenshot & Theme\ntakeScreenshot, assertScreenshot, dark/light mode",
+              "resource-id": "nav_screenshot_theme",
+              "bounds": [
+                56,
+                1153,
+                1384,
+                1405
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 10002,
+              "actUs": 2380,
+              "settleUs": 481525
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1621 tap 720,1279"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 3,
+          "command": "assertVisible",
+          "description": "assertVisible \"Theme: light\"",
+          "status": "passed",
+          "ms": 2.097083,
+          "driver": {
+            "element": {
+              "id": 30,
+              "accessibilityText": "Theme: light",
+              "bounds": [
+                580,
+                1500,
+                860,
+                1570
+              ]
+            }
+          }
+        },
+        {
+          "index": 4,
+          "command": "assertLightMode",
+          "description": "assertLightMode",
+          "status": "passed",
+          "ms": 28.356291,
+          "driver": {
+            "darkMode": false,
+            "brightness": "light"
+          }
+        },
+        {
+          "index": 5,
+          "command": "assertScreenshot",
+          "description": "assertScreenshot",
+          "status": "passed",
+          "ms": 284.677208,
+          "driver": {
+            "expected": "/Users/me/tapwing/examples/sample_app/.maestro/ref_visual_badge.png",
+            "matchPercent": 100.0
+          }
+        },
+        {
+          "index": 6,
+          "command": "takeScreenshot",
+          "description": "takeScreenshot",
+          "status": "passed",
+          "ms": 235.727667,
+          "driver": {
+            "path": "bench/results/f2-differential/tapwing-f2_screenshots_and_theme-artifacts/screenshots/f2_artifact_badge.png"
+          }
+        },
+        {
+          "index": 7,
+          "command": "assertScreenshot",
+          "description": "assertScreenshot",
+          "status": "passed",
+          "ms": 223.57691699999998,
+          "driver": {
+            "expected": "bench/results/f2-differential/tapwing-f2_screenshots_and_theme-artifacts/screenshots/f2_artifact_badge.png",
+            "matchPercent": 100.0
+          }
+        },
+        {
+          "index": 8,
+          "command": "assertScreenshot",
+          "description": "assertScreenshot",
+          "status": "warned",
+          "ms": 238.564,
+          "error": "Comparison error: threshold 95% not met, current: 0.0000% (diff written to bench/results/f2-differential/tapwing-f2_screenshots_and_theme-artifacts/screenshot-diffs/ref_mismatch_badge_diff.png)"
+        },
+        {
+          "index": 9,
+          "command": "assertScreenshot",
+          "description": "assertScreenshot",
+          "status": "warned",
+          "ms": 218.63395799999998,
+          "error": "Screenshot size mismatch: expected 700x308, actual 1440x3120. Screenshots must have the same dimensions to compare."
+        }
+      ]
+    }
+  ]
+}

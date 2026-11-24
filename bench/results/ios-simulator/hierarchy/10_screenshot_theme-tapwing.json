@@ -1,0 +1,114 @@
+{
+  "screen": [
+    402.0,
+    874.0
+  ],
+  "root": {
+    "id": -1,
+    "accessibilityText": "Sample App",
+    "bounds": [
+      0,
+      0,
+      402,
+      874
+    ],
+    "children": [
+      {
+        "id": 0,
+        "bounds": [
+          0,
+          0,
+          402,
+          874
+        ],
+        "children": [
+          {
+            "id": 1,
+            "bounds": [
+              0,
+              0,
+              402,
+              874
+            ],
+            "children": [
+              {
+                "id": 28,
+                "bounds": [
+                  0,
+                  0,
+                  402,
+                  874
+                ],
+                "children": [
+                  {
+                    "id": 29,
+                    "bounds": [
+                      0,
+                      0,
+                      402,
+                      874
+                    ],
+                    "children": [
+                      {
+                        "id": 32,
+                        "bounds": [
+                          0,
+                          0,
+                          402,
+                          118
+                        ],
+                        "children": [
+                          {
+                            "id": 33,
+                            "accessibilityText": "Back",
+                            "bounds": [
+                              4,
+                              66,
+                              52,
+                              114
+                            ]
+                          },
+                          {
+                            "id": 34,
+                            "accessibilityText": "Screenshot & Theme",
+                            "bounds": [
+                              104,
+                              76,
+                              297,
+                              104
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": 30,
+                        "accessibilityText": "Theme: dark",
+                        "bounds": [
+                          158,
+                          430,
+                          243,
+                          450
+                        ]
+                      },
+                      {
+                        "id": 31,
+                        "accessibilityText": "Visual badge\nTAPWING F2",
+                        "resource-id": "visual_badge",
+                        "bounds": [
+                          101,
+                          474,
+                          301,
+                          562
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

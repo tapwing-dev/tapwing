@@ -1,0 +1,34 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.android.chrome",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "android_device_configuration" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Chrome"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "optional" : false,
+          "textRegex" : "Chrome notifications make things easier"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

@@ -1,0 +1,227 @@
+{
+  "000_individual_file" : {
+    "flowsToRun" : [ "000_individual_file/flow.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : true
+  },
+  "001_simple" : {
+    "flowsToRun" : [ "001_simple/flowA.yaml", "001_simple/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "001_multiple_files" : {
+    "flowsToRun" : [ "001_simple/flowA.yaml", "001_simple/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "002_subflows" : {
+    "flowsToRun" : [ "002_subflows/flowA.yaml", "002_subflows/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "002_multiple_folders" : {
+    "flowsToRun" : [ "001_simple/flowA.yaml", "001_simple/flowB.yaml", "002_subflows/flowA.yaml", "002_subflows/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "002_files_and_folders" : {
+    "flowsToRun" : [ "000_individual_file/flow.yaml", "001_simple/flowA.yaml", "001_simple/flowB.yaml", "002_subflows/flowA.yaml", "002_subflows/flowB.yaml", "003_include_tags/flowC.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "003_include_tags" : {
+    "flowsToRun" : [ "003_include_tags/flowA.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "004_exclude_tags" : {
+    "flowsToRun" : [ "004_exclude_tags/flowA.yaml", "004_exclude_tags/flowC.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "005_custom_include_pattern" : {
+    "flowsToRun" : [ "005_custom_include_pattern/featureA/flowA.yaml", "005_custom_include_pattern/featureB/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "006_include_subfolders" : {
+    "flowsToRun" : [ "006_include_subfolders/featureA/flowA.yaml", "006_include_subfolders/featureB/flowB.yaml", "006_include_subfolders/featureC/subfolder/flowC.yaml", "006_include_subfolders/flowD.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "007_empty_config" : {
+    "flowsToRun" : [ "007_empty_config/flowA.yaml", "007_empty_config/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "008_literal_pattern" : {
+    "flowsToRun" : [ "008_literal_pattern/featureA/flowA.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "009_custom_config_fields" : {
+    "flowsToRun" : [ "009_custom_config_fields/flowA.yaml", "009_custom_config_fields/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "010_global_include_tags" : {
+    "flowsToRun" : [ "010_global_include_tags/flowA.yaml", "010_global_include_tags/flowA_subflow.yaml", "010_global_include_tags/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "011_global_exclude_tags" : {
+    "flowsToRun" : [ "011_global_exclude_tags/flowB.yaml", "011_global_exclude_tags/flowC.yaml", "011_global_exclude_tags/flowE.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "013_execution_order" : {
+    "flowsToRun" : [ "013_execution_order/flowA.yaml" ],
+    "sequence" : [ "013_execution_order/flowB.yaml", "013_execution_order/flowCWithCustomName.yaml", "013_execution_order/flowD.yaml" ],
+    "continueOnFailure" : true
+  },
+  "014_config_not_null" : {
+    "flowsToRun" : [ "014_config_not_null/flowA.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "015_workspace_cloud_configs" : {
+    "flowsToRun" : [ ],
+    "sequence" : [ "015_workspace_cloud_configs/flowA.yaml", "015_workspace_cloud_configs/flowB.yaml" ],
+    "continueOnFailure" : true
+  },
+  "016_normalized_media_paths" : {
+    "flowsToRun" : [ "016_normalized_media_paths/flows/main.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "017_normalized_media_paths_subflow" : {
+    "flowsToRun" : [ "017_normalized_media_paths_subflow/tests/core/test.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "018_additional_config_files" : {
+    "flowsToRun" : [ "018_additional_config_files/flowA.yaml", "018_additional_config_files/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "019_negation_exclude_single_file" : {
+    "flowsToRun" : [ "019_negation_exclude_single_file/flowA.yaml", "019_negation_exclude_single_file/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "020_negation_exclude_directory" : {
+    "flowsToRun" : [ "020_negation_exclude_directory/featureA/flowA.yaml", "020_negation_exclude_directory/featureB/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "021_negation_with_specific_positive" : {
+    "flowsToRun" : [ "021_negation_with_specific_positive/featureA/flowA.yaml", "021_negation_with_specific_positive/featureB/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "x01_cli_and_config_include_tags" : {
+    "flowsToRun" : [ "010_global_include_tags/flowA.yaml", "010_global_include_tags/flowA_subflow.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "x02_single_file_ignores_tags" : {
+    "flowsToRun" : [ "003_include_tags/flowB.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : true
+  },
+  "x03_explicit_config_file_is_not_a_flow" : {
+    "flowsToRun" : [ "005_custom_include_pattern/flowD.yaml" ],
+    "sequence" : [ ],
+    "continueOnFailure" : false
+  },
+  "x04_include_tags_no_match" : {
+    "error" : {
+      "type" : "ValidationError",
+      "message" : "Include / Exclude tags did not match any Flows:\n\nInclude Tags:\n- nope\n\nExclude Tags:\n"
+    }
+  },
+  "e000_flow_path_does_not_exist" : {
+    "error" : {
+      "type" : "ValidationError",
+      "message" : "Flow path does not exist: <ROOT>/e000_flow_path_does_not_exist/workspace"
+    }
+  },
+  "e001_directory_does_not_contain_flow_files" : {
+    "error" : {
+      "type" : "ValidationError",
+      "message" : "Flow directories do not contain any Flow files: <ROOT>/e001_directory_does_not_contain_flow_files/workspace"
+    }
+  },
+  "e002_top_level_directory_does_not_contain_flow_files" : {
+    "error" : {
+      "type" : "ValidationError",
+      "message" : "Top-level directories do not contain any Flows: <ROOT>/e002_top_level_directory_does_not_contain_flow_files/workspace\nTo configure Maestro to run Flows in subdirectories, check out the following resources:\n  * https://maestro.mobile.dev/cli/test-suites-and-reports#inclusion-patterns\n  * https://blog.mobile.dev/maestro-best-practices-structuring-your-test-suite-54ec390c5c82"
+    }
+  },
+  "e003_flow_inclusion_pattern_does_not_match_any_flow_files" : {
+    "error" : {
+      "type" : "ValidationError",
+      "message" : "Flow inclusion pattern(s) did not match any Flow files:\n- FlowA.yaml\n- FlowB.yaml"
+    }
+  },
+  "e004_tags_config_does_not_match_any_flow_files" : {
+    "error" : {
+      "type" : "ValidationError",
+      "message" : "Include / Exclude tags did not match any Flows:\n\nInclude Tags:\n- parameterInclude\n- configInclude\n\nExclude Tags:\n- parameterExclude\n- configExclude"
+    }
+  },
+  "e005_single_flow_does_not_exist" : {
+    "error" : {
+      "type" : "ValidationError",
+      "message" : "Flow path does not exist: <ROOT>/e005_single_flow_does_not_exist/workspace/Flow.yaml"
+    }
+  },
+  "e006_single_flow_invalid_string_command" : {
+    "error" : {
+      "type" : "SyntaxError",
+      "message" : "Invalid Command: invalidCommand at <ROOT>/e006_single_flow_invalid_string_command/workspace/Flow.yaml:3:3"
+    }
+  },
+  "e007_single_flow_malformatted_command" : {
+    "error" : {
+      "type" : "SyntaxError",
+      "message" : "Unknown Property: invalidOption at <ROOT>/e007_single_flow_malformatted_command/workspace/Flow.yaml:4:24"
+    }
+  },
+  "e008_subflow_invalid_string_command" : {
+    "error" : {
+      "type" : "SyntaxError",
+      "message" : "Invalid Command: invalidCommand at <ROOT>/e008_subflow_invalid_string_command/workspace/subflow/SubFlow.yaml:3:3"
+    }
+  },
+  "e009_nested_subflow_invalid_string_command" : {
+    "error" : {
+      "type" : "SyntaxError",
+      "message" : "Invalid Command: invalidCommand at <ROOT>/e009_nested_subflow_invalid_string_command/workspace/subflow/SubFlowB.yaml:3:3"
+    }
+  },
+  "e010_missing_config_section" : {
+    "error" : {
+      "type" : "SyntaxError",
+      "message" : "Config Section Required at <ROOT>/e010_missing_config_section/workspace/Flow.yaml:1:1"
+    }
+  },
+  "e012_invalid_subflow_path" : {
+    "error" : {
+      "type" : "SyntaxError",
+      "message" : "Invalid File Path at <ROOT>/e012_invalid_subflow_path/workspace/Flow.yaml:3:3"
+    }
+  },
+  "e013_invalid_media_file" : {
+    "error" : {
+      "type" : "SyntaxError",
+      "message" : "Media File Not Found at <ROOT>/e013_invalid_media_file/workspace/Flow.yaml:3:3"
+    }
+  },
+  "e024_only_negation_patterns" : {
+    "error" : {
+      "type" : "ValidationError",
+      "message" : "Flow inclusion patterns contain only negation patterns, so no Flows would match:\n- !ignored.yaml\n\nAdd a positive pattern to select the Flows to run. For example, to run all Flows except the negated ones:\n\nflows:\n  - \"*\"\n  - \"!ignored.yaml\""
+    }
+  }
+}

@@ -1,0 +1,28 @@
+Running on Pixel_6_Pro
+ > Flow Login and browse
+Launch app "dev.tapwing.sample_app" with clear state... COMPLETED
+Assert that "Welcome back" is visible... COMPLETED
+Tap on "Log in"... COMPLETED
+Assert that "Email is required" is visible... COMPLETED
+Tap on "Email"... COMPLETED
+Input text jan@example.com... COMPLETED
+Tap on id: password_input... COMPLETED
+Input text secret123... COMPLETED
+Hide Keyboard... COMPLETED
+Tap on id: login_button... COMPLETED
+Assert that "Products" is visible... COMPLETED
+Assert that "Product 1.*" is visible... COMPLETED
+Scrolling DOWN until "Product 40.*" is visible with speed 40, visibility percentage 100%, timeout 20000 ms, with centering disabled... COMPLETED
+Tap on "Product 40.*"... COMPLETED
+Assert that "Details of Product 40" is visible... COMPLETED
+Tap on id: favorite_switch... COMPLETED
+Assert that "Favorite" is visible... COMPLETED
+Press back... COMPLETED
+Assert that "Products" is visible... COMPLETED
+Tap on "Add product"... COMPLETED
+Assert that "New product" is visible... COMPLETED
+Tap on "Name"... COMPLETED
+Input text Tapwing... COMPLETED
+Tap on "Add"... COMPLETED
+Assert that "Added Tapwing" is visible... COMPLETED
+Assert that "New product" is not visible... COMPLETED

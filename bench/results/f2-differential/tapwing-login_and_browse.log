@@ -1,0 +1,31 @@
+device emulator-5554 · setup 310 ms
+
+▶ Login and browse
+  ✓  2276.2 ms  launchApp (clearState)
+  ✓     8.3 ms  assertVisible "Welcome back"
+  ✓    87.4 ms  tapOn "Log in"
+  ✓     2.2 ms  assertVisible "Email is required"
+  ✓   274.3 ms  tapOn "Email"
+  ✓    80.0 ms  inputText "jan@example.com"
+  ✓   165.1 ms  tapOn id: password_input
+  ✓    65.8 ms  inputText "secret123"
+  ✓   111.5 ms  hideKeyboard
+  ✓   230.1 ms  tapOn id: login_button
+  ✓   404.4 ms  assertVisible "Products"
+  ✓     4.6 ms  assertVisible "Product 1.*"
+  ✓  1857.2 ms  scrollUntilVisible "Product 40.*"
+  ✓   477.6 ms  tapOn "Product 40.*"
+  ✓     2.1 ms  assertVisible "Details of Product 40"
+  ✓    59.8 ms  tapOn id: favorite_switch
+  ✓     2.5 ms  assertVisible "Favorite"
+  ✓   494.7 ms  back
+  ✓     2.7 ms  assertVisible "Products"
+  ✓   177.0 ms  tapOn "Add product"
+  ✓     2.5 ms  assertVisible "New product"
+  ✓   277.0 ms  tapOn "Name"
+  ✓    46.3 ms  inputText "Tapwing"
+  ✓   331.9 ms  tapOn "Add"
+  ✓     1.9 ms  assertVisible "Added Tapwing"
+  ✓     1.8 ms  assertNotVisible "New product"
+PASSED Login and browse in 7497 ms
+settle check (v2): 0 violation(s)

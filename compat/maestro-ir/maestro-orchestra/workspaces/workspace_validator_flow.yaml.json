@@ -1,0 +1,18 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "${APP_ID}",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "${APP_ID}",
+      "optional" : false
+    }
+  } ]
+}

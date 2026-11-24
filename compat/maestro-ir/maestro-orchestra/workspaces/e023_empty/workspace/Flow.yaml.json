@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Config Section Required at <ROOT>/maestro-orchestra/workspaces/e023_empty/workspace/Flow.yaml:1:1",
+    "type" : "SyntaxError"
+  }
+}

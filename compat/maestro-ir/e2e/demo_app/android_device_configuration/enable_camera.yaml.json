@@ -1,0 +1,40 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.android.camera2",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "android_device_configuration" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.android.camera2",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : true,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "confirm_button",
+        "optional" : true
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Shutter"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

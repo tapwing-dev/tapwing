@@ -1,0 +1,64 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.android.settings",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.android.settings",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "com.android.settings:id/search_action_bar",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "Lorem ipsum dolor sit amet"
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "com.google.android.settings.intelligence:id/open_search_view_edit_text",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "com.google.android.settings.intelligence:id/open_search_view_edit_text",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  } ]
+}

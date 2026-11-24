@@ -1,0 +1,85 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Location Test"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "setLocationCommand" : {
+      "latitude" : "48.857807",
+      "longitude" : "2.295188",
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Latitude: 48.857807"
+        }
+      },
+      "optional" : false,
+      "timeout" : "15000"
+    }
+  }, {
+    "travelCommand" : {
+      "optional" : false,
+      "points" : [ {
+        "latitude" : "48.857807",
+        "longitude" : "2.295188"
+      }, {
+        "latitude" : "46.2276",
+        "longitude" : "5.99"
+      }, {
+        "latitude" : "43.723",
+        "longitude" : "10.3966"
+      }, {
+        "latitude" : "41.8902",
+        "longitude" : "12.4922"
+      } ],
+      "speedMPS" : 1000.0
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Latitude: 41.890200"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Longitude: 12.492200"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

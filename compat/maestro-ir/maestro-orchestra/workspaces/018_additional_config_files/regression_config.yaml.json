@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Config Field Required at <ROOT>/maestro-orchestra/workspaces/018_additional_config_files/regression_config.yaml:6:1",
+    "type" : "SyntaxError"
+  }
+}

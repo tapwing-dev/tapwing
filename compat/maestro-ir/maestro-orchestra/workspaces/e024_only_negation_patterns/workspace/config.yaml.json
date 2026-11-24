@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Commands Section Required at <ROOT>/maestro-orchestra/workspaces/e024_only_negation_patterns/workspace/config.yaml:4:1",
+    "type" : "SyntaxError"
+  }
+}

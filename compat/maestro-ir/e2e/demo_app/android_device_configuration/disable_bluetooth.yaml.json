@@ -1,0 +1,62 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.android.settings",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "android_device_configuration" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.android.settings",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Connected devices"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Connection preferences"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Bluetooth"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "optional" : false,
+          "textRegex" : "Device name"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

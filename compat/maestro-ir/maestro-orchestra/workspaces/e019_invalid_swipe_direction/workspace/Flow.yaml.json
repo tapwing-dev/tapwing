@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Parsing Failed at <ROOT>/maestro-orchestra/workspaces/e019_invalid_swipe_direction/workspace/Flow.yaml:5:1",
+    "type" : "SyntaxError"
+  }
+}

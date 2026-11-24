@@ -1,0 +1,65 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "http://127.0.0.1:7357/textarea.html",
+        "ext" : { },
+        "name" : "Textarea contents should appear in the hierarchy",
+        "properties" : { },
+        "tags" : [ "passing", "web" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "http://127.0.0.1:7357/textarea.html",
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Nothing typed yet"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "notes",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "Potato"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Potato"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "optional" : false,
+          "textRegex" : "Nothing typed yet"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

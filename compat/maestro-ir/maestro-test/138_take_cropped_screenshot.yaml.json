@@ -1,0 +1,22 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "cropOn" : {
+        "idRegex" : "element_id",
+        "optional" : false
+      },
+      "optional" : false,
+      "path" : "138_take_cropped_screenshot_with_filename"
+    }
+  } ]
+}

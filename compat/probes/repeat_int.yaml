@@ -1,0 +1,6 @@
+appId: a
+---
+- repeat:
+    times: 3
+    commands:
+      - back

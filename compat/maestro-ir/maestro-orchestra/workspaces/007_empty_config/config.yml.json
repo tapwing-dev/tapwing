@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Config Section Required at <ROOT>/maestro-orchestra/workspaces/007_empty_config/config.yml:1:1",
+    "type" : "SyntaxError"
+  }
+}

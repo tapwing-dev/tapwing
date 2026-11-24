@@ -1,0 +1,22 @@
+{
+  "maestro": {
+    "readyMs": 705,
+    "hierarchyP50Ms": 60.139334000000005,
+    "hierarchyMaxMs": 353.094292,
+    "bytes": 42441
+  },
+  "tapwing": {
+    "readyMs": 428,
+    "hierarchyP50Ms": 10.101458000000001,
+    "hierarchyMaxMs": 513.405625,
+    "bytes": 42441
+  },
+  "maestro2": {
+    "readyMs": 533,
+    "hierarchyP50Ms": 61.387625,
+    "hierarchyMaxMs": 384.24362499999995,
+    "bytes": 42441
+  },
+  "verdict": "identical",
+  "maestroStable": true
+}

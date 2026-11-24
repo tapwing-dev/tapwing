@@ -1,0 +1,1778 @@
+//! UI commands over the native lane: Tapwing's Android driver (UiAutomator)
+//! behind gRPC, with Maestro's own waiting model (poll the hierarchy until the
+//! selector matches or the timeout elapses, settle by comparing consecutive
+//! hierarchies).
+
+use std::time::{Duration, Instant};
+
+use anyhow::Result;
+use serde_json::{Value, json};
+
+use super::apk::Adb;
+use super::client::NativeDriverClient;
+use super::hierarchy::Hierarchy;
+use crate::backend::{MaestroError, ScrollUntilVisibleRequest, SwipeRequest, TapElementRequest, TapPointRequest};
+use crate::fake_driver::{Bounds, TreeNode, calculate_element_relative_point, describe_sel, is_element_not_found};
+use crate::flow::ir::{Direction, ElementSelector};
+
+/// `AndroidDriver.longPress`: a 3 s in-place swipe.
+const LONG_PRESS_MS: u64 = 3000;
+/// `ScreenshotUtils.waitForAppToSettle`: up to 10 comparisons 200 ms apart.
+const SETTLE_ATTEMPTS: u32 = 10;
+const SETTLE_INTERVAL: Duration = Duration::from_millis(200);
+/// Pause between hierarchy polls while waiting for an element.
+const POLL_INTERVAL: Duration = Duration::from_millis(50);
+/// `Maestro.waitUntilVisible`: a covered tap target is awaited for at most 10 s.
+const WAIT_UNTIL_VISIBLE: Duration = Duration::from_secs(10);
+/// `AndroidDriver.backPress` waits 300 ms for the navigation to start.
+const BACK_PAUSE: Duration = Duration::from_millis(300);
+
+/// Default timeout for `waitForAnimationToEnd` on the native lane (5 000 ms).
+pub const DEFAULT_ANIMATION_TIMEOUT_MS: u64 = 5000;
+/// Interval between consecutive screenshot captures in `wait_for_animation_to_end`.
+const ANIMATION_POLL_INTERVAL: Duration = Duration::from_millis(150);
+/// Pixel similarity threshold (99.5%, matching Maestro's `SCREENSHOT_DIFF_THRESHOLD = 0.005`).
+const STATIC_SCREEN_MATCH_PERCENT: f64 = 99.5;
+
+/// Result of [`NativeOps::perform_tap`].
+struct TapOutcome {
+    /// The settled hierarchy differs from the one before the tap.
+    changed: bool,
+    /// The hierarchy the screen settled on after the tap.
+    after: Hierarchy,
+}
+
+/// The first lookup after a `launchApp` whose app did not show up yet
+/// (see [`NativeOps::arm_cold_start`]).
+#[derive(Clone, Debug)]
+pub struct ColdStart {
+    /// Package of the launched app.
+    pub app_id: String,
+    /// The one extra lookup window granted when the app never showed up.
+    pub extra: Duration,
+    /// Console prefix for the `warning:` line (`[shard N] ` when sharded).
+    pub log_prefix: String,
+}
+
+/// Native-lane command executor, borrowed per call from the warmed-up session.
+pub struct NativeOps<'a> {
+    client: &'a mut NativeDriverClient,
+    adb: &'a Adb,
+    /// Armed for the next element lookup only.
+    cold_start: Option<ColdStart>,
+    /// Extra windows granted by [`Self::poll_find`] (0 or 1 per arming).
+    cold_start_retries: u32,
+}
+
+impl<'a> NativeOps<'a> {
+    pub fn new(client: &'a mut NativeDriverClient, adb: &'a Adb) -> Self {
+        Self { client, adb, cold_start: None, cold_start_retries: 0 }
+    }
+
+    /// Bounded cold-start retry for the next element lookup. On a loaded
+    /// emulator a freshly cleared Flutter app can take longer than the whole
+    /// lookup budget to put anything into the UiAutomator tree. If the
+    /// lookup times out and **no** hierarchy it read showed content from
+    /// `app_id` (the app was never on screen, so the miss says nothing about
+    /// the flow), the lookup gets one more window of `extra`. A lookup that
+    /// saw the app at any time fails exactly as before. Lookups only read
+    /// the hierarchy, so nothing is repeated on the device; the hierarchies
+    /// the lookup fetches anyway are inspected, so it costs no extra RPC.
+    pub fn arm_cold_start(&mut self, cold: ColdStart) {
+        self.cold_start = Some(cold);
+    }
+
+    /// Extra lookup windows granted since this executor was created.
+    pub fn cold_start_retries(&self) -> u32 {
+        self.cold_start_retries
+    }
+
+    /// Test seam: the arming the next lookup would use.
+    #[cfg(test)]
+    pub(crate) fn armed_cold_start(&self) -> Option<&ColdStart> {
+        self.cold_start.as_ref()
+    }
+
+    /// Test seam: counts a granted window as [`Self::poll_find`] does.
+    #[cfg(test)]
+    pub(crate) fn note_cold_start_retry(&mut self) {
+        self.cold_start_retries += 1;
+    }
+
+    pub fn hierarchy(&mut self) -> Result<Hierarchy> {
+        let screen = self.client.screen_size()?;
+        let xml = self.client.view_hierarchy()?;
+        Hierarchy::parse(&xml, screen.width as i32, screen.height as i32)
+    }
+
+    /// Single lookup; nodes without bounds cannot be tapped and count as missing.
+    fn find_once(&mut self, sel: &ElementSelector) -> Result<(Option<TreeNode>, Hierarchy)> {
+        let h = self.hierarchy()?;
+        let found = h.find(sel)?.filter(|n| n.bounds.is_some());
+        Ok((found, h))
+    }
+
+    fn not_found(sel: &ElementSelector, h: &Hierarchy) -> anyhow::Error {
+        let seen = h.visible_texts(12).iter().map(|t| format!("\"{t}\"")).collect::<Vec<_>>().join(", ");
+        MaestroError::element_not_found(format!("Element not found: {}\n      on screen: {seen}", describe_sel(sel)))
+            .into()
+    }
+
+    /// `Maestro.findElementWithTimeout`: poll until found, at least one attempt
+    /// (plus, when armed, the bounded cold-start window of [`Self::arm_cold_start`]).
+    fn poll_find(&mut self, sel: &ElementSelector, timeout_ms: u64) -> Result<(TreeNode, Hierarchy)> {
+        let started = Instant::now();
+        let mut deadline = started + Duration::from_millis(timeout_ms);
+        let mut cold = self.cold_start.take();
+        loop {
+            let (found, h) = self.find_once(sel)?;
+            if let Some(node) = found {
+                return Ok((node, h));
+            }
+            if cold.as_ref().is_some_and(|c| h.shows_package(&c.app_id)) {
+                // The app is on screen: the miss is a real one.
+                cold = None;
+            }
+            if Instant::now() >= deadline {
+                if let Some(c) = cold.take() {
+                    eprintln!(
+                        "{}warning: {} showed nothing on screen during the first {} ms lookup after launchApp \
+                         (cold start); looking for {} once more for up to {} ms",
+                        c.log_prefix,
+                        c.app_id,
+                        started.elapsed().as_millis(),
+                        describe_sel(sel),
+                        c.extra.as_millis()
+                    );
+                    self.cold_start_retries += 1;
+                    deadline = Instant::now() + c.extra;
+                    continue;
+                }
+                return Err(Self::not_found(sel, &h));
+            }
+            crate::interrupt::sleep(POLL_INTERVAL.min(deadline.saturating_duration_since(Instant::now())))?;
+        }
+    }
+
+    /// `ScreenshotUtils.waitForAppToSettle` (hierarchy based): returns once two
+    /// consecutive hierarchies are identical, or the budget runs out.
+    pub fn settle(&mut self, initial: Option<Hierarchy>, timeout_ms: Option<i32>) -> Result<Hierarchy> {
+        if matches!(timeout_ms, Some(ms) if ms <= 0) {
+            return match initial {
+                Some(h) => Ok(h),
+                None => self.hierarchy(),
+            };
+        }
+        let mut latest = match initial {
+            Some(h) => h,
+            None => self.hierarchy()?,
+        };
+        match timeout_ms {
+            Some(ms) => {
+                let end = Instant::now() + Duration::from_millis(ms as u64);
+                loop {
+                    let remaining = end.saturating_duration_since(Instant::now());
+                    if !remaining.is_zero() {
+                        crate::interrupt::sleep(POLL_INTERVAL.min(remaining))?;
+                    }
+                    let after = self.hierarchy()?;
+                    if after.signature() == latest.signature() {
+                        return Ok(after);
+                    }
+                    latest = after;
+                    if Instant::now() >= end {
+                        return Ok(latest);
+                    }
+                }
+            }
+            None => {
+                for attempt in 0..SETTLE_ATTEMPTS {
+                    let after = self.hierarchy()?;
+                    if after.signature() == latest.signature() {
+                        return Ok(after);
+                    }
+                    latest = after;
+                    if attempt + 1 < SETTLE_ATTEMPTS {
+                        crate::interrupt::sleep(SETTLE_INTERVAL)?;
+                    }
+                }
+                Ok(latest)
+            }
+        }
+    }
+
+    fn tap_xy(&mut self, x: i32, y: i32, long_press: bool) -> Result<()> {
+        let (x, y) = (x.max(0), y.max(0));
+        if long_press {
+            self.adb.shell(&format!(
+                "cmd input swipe {x} {y} {x} {y} {LONG_PRESS_MS} 2>/dev/null || input swipe {x} {y} {x} {y} {LONG_PRESS_MS}"
+            ))?;
+        } else {
+            self.client.tap(x as u32, y as u32)?;
+        }
+        Ok(())
+    }
+
+    /// `hierarchyBasedTap`: tap (optionally repeated), settle, and when
+    /// `retry_if_no_change` and nothing changed, tap once more. Reports whether the
+    /// screen changed against `before` and the hierarchy it settled on.
+    fn perform_tap(
+        &mut self,
+        (x, y): (i32, i32),
+        long_press: bool,
+        repeat: Option<&crate::flow::ir::TapRepeat>,
+        retry_if_no_change: bool,
+        before: Option<Hierarchy>,
+        settle_ms: Option<i32>,
+    ) -> Result<TapOutcome> {
+        let before = if retry_if_no_change {
+            Some(match before {
+                Some(h) => h,
+                None => self.hierarchy()?,
+            })
+        } else {
+            before
+        };
+        let attempts = if retry_if_no_change { 2 } else { 1 };
+        let mut outcome = None;
+        for _ in 0..attempts {
+            match repeat {
+                Some(r) if !long_press => {
+                    let count = r.repeat.max(1);
+                    for i in 0..count {
+                        let t = Instant::now();
+                        self.tap_xy(x, y, false)?;
+                        if i + 1 < count {
+                            let spent = t.elapsed().as_millis().min(i64::MAX as u128) as i64;
+                            crate::interrupt::sleep(
+                                Duration::from_millis(r.delay.saturating_sub(spent).max(0) as u64),
+                            )?;
+                        }
+                    }
+                }
+                _ => self.tap_xy(x, y, long_press)?,
+            }
+            let after = self.settle(None, settle_ms)?;
+            let changed = before.as_ref().is_none_or(|b| after.signature() != b.signature());
+            outcome = Some(TapOutcome { changed, after });
+            if !retry_if_no_change || changed {
+                break;
+            }
+        }
+        outcome.ok_or_else(|| anyhow::anyhow!("no tap attempt executed"))
+    }
+
+    /// `Maestro.waitUntilVisible`: poll until `sel` matches a node that is topmost
+    /// at its centre (nothing drawn over it), for at most 10 s; Maestro taps anyway
+    /// when the wait runs out, so the last hierarchy is returned either way.
+    fn wait_until_visible(&mut self, sel: &ElementSelector, fallback: &Hierarchy) -> Result<Hierarchy> {
+        let deadline = Instant::now() + WAIT_UNTIL_VISIBLE;
+        let mut latest = fallback.clone();
+        loop {
+            if let Some(node) = latest.find(sel)?.filter(|n| n.bounds.is_some())
+                && latest.is_visible(&node)
+            {
+                return Ok(latest);
+            }
+            if Instant::now() >= deadline {
+                return Ok(latest);
+            }
+            crate::interrupt::sleep(SETTLE_INTERVAL.min(deadline.saturating_duration_since(Instant::now())))?;
+            latest = self.hierarchy()?;
+        }
+    }
+
+    pub fn tap_on_element(&mut self, req: &TapElementRequest) -> Result<Value> {
+        let (node, hier) = self.poll_find(&req.selector, req.timeout_ms)?;
+        // Aim at the settled hierarchy: animating dialogs move their buttons.
+        let settled = self.settle(Some(hier), req.wait_to_settle_timeout_ms)?;
+        let node = settled.find(&req.selector)?.filter(|n| n.bounds.is_some()).unwrap_or(node);
+        let bounds = node.bounds.unwrap_or(Bounds::new(0, 0, 0, 0));
+        let point = match &req.relative_point {
+            Some(rel) => calculate_element_relative_point(bounds, rel)?,
+            None => bounds.center(),
+        };
+        let covered_before_tap =
+            req.wait_until_visible && req.relative_point.is_none() && settled.is_covered_by_other(&node);
+        let before_sig = covered_before_tap.then(|| node.structure_signature());
+        let outcome = self.perform_tap(
+            point,
+            req.long_press,
+            req.repeat.as_ref(),
+            req.retry_if_no_change,
+            Some(settled),
+            req.wait_to_settle_timeout_ms,
+        )?;
+        let mut point = point;
+        // `Maestro.tap`: when the screen did not react and something is drawn over the
+        // target (a transient overlay), wait until it is uncovered and tap again.
+        // Also re-tap when an external overlay covered the target at the moment of the
+        // first tap (`covered_before_tap`) and vanished during post-tap `settle()`
+        // (making `outcome.changed == true` even though the target itself was untouched).
+        if req.wait_until_visible && req.relative_point.is_none() {
+            let covered = outcome.after.find(&req.selector)?.filter(|n| n.bounds.is_some());
+            if let Some(covered) = covered
+                && ((!outcome.changed && !outcome.after.is_visible(&covered))
+                    || before_sig.as_deref().is_some_and(|sig| covered.structure_signature() == sig))
+            {
+                let uncovered = self.wait_until_visible(&req.selector, &outcome.after)?;
+                let target = uncovered.find(&req.selector)?.filter(|n| n.bounds.is_some()).unwrap_or(covered);
+                point = target.bounds.map_or(point, |b| b.center());
+                self.perform_tap(
+                    point,
+                    req.long_press,
+                    req.repeat.as_ref(),
+                    false,
+                    Some(uncovered),
+                    req.wait_to_settle_timeout_ms,
+                )?;
+            }
+        }
+        Ok(json!({ "x": point.0, "y": point.1, "lane": "native" }))
+    }
+
+    pub fn tap_on_point(&mut self, req: &TapPointRequest) -> Result<Value> {
+        let screen = self.client.screen_size()?;
+        let point = crate::backend::resolve_screen_point(&req.point, screen.width as i32, screen.height as i32)?;
+        self.perform_tap(
+            point,
+            req.long_press,
+            req.repeat.as_ref(),
+            req.retry_if_no_change,
+            None,
+            req.wait_to_settle_timeout_ms,
+        )?;
+        Ok(json!({ "x": point.0, "y": point.1, "lane": "native" }))
+    }
+
+    pub fn assert_visible(&mut self, sel: &ElementSelector, timeout_ms: u64) -> Result<Value> {
+        let (node, _) = self.poll_find(sel, timeout_ms)?;
+        Ok(json!({ "text": node.text, "id": node.id, "lane": "native" }))
+    }
+
+    /// Passes once the selector no longer matches; fails when it still does at the timeout.
+    pub fn assert_not_visible(&mut self, sel: &ElementSelector, timeout_ms: u64) -> Result<Value> {
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        loop {
+            let (found, _) = self.find_once(sel)?;
+            if found.is_none() {
+                return Ok(json!({ "lane": "native" }));
+            }
+            if Instant::now() >= deadline {
+                return Err(MaestroError::assertion(format!(
+                    "Assertion is false: {} is not visible",
+                    describe_sel(sel)
+                ))
+                .into());
+            }
+            crate::interrupt::sleep(POLL_INTERVAL.min(deadline.saturating_duration_since(Instant::now())))?;
+        }
+    }
+
+    /// Element bounds in screen pixels (driver units on Android).
+    pub fn find_element_bounds(&mut self, sel: &ElementSelector, timeout_ms: u64) -> Result<[i64; 4]> {
+        let (node, _) = self.poll_find(sel, timeout_ms)?;
+        let b = node.bounds.unwrap_or(Bounds::new(0, 0, 0, 0));
+        Ok([i64::from(b.left), i64::from(b.top), i64::from(b.right), i64::from(b.bottom)])
+    }
+
+    pub fn copy_text_from(&mut self, sel: &ElementSelector, timeout_ms: u64) -> Result<(String, Value)> {
+        let (node, _) = self.poll_find(sel, timeout_ms)?;
+        let text = node
+            .resolved_copy_text()
+            .ok_or_else(|| MaestroError::unable_to_copy("Element does not contain text to copy"))?;
+        Ok((text.clone(), json!({ "text": text, "lane": "native" })))
+    }
+
+    /// The driver types any text itself (ASCII key by key, Unicode without an IME switch).
+    pub fn input_text(&mut self, text: &str) -> Result<Value> {
+        self.client.input_text(text)?;
+        Ok(json!({ "lane": "native" }))
+    }
+
+    /// Screenshot-based `waitForAnimationToEnd` matching Maestro's
+    /// `ScreenshotUtils.waitUntilScreenIsStatic`: captures consecutive PNG frames
+    /// via `self.client.screenshot()`, sleeps `150 ms` between checks, and
+    /// compares pixel similarity against a 99.5% threshold until two consecutive
+    /// frames match or `timeout_ms` (default 5 000 ms) elapses. Falls back to
+    /// hierarchy `settle` only when `screenshot()` returns an error (e.g. `FLAG_SECURE`).
+    pub fn wait_for_animation_to_end(&mut self, timeout_ms: Option<u64>) -> Result<Value> {
+        let budget = timeout_ms.unwrap_or(DEFAULT_ANIMATION_TIMEOUT_MS);
+        let fallback_settle = |this: &mut Self, rem_ms: u64| -> Result<Value> {
+            this.settle(None, Some(rem_ms.min(i32::MAX as u64) as i32))?;
+            Ok(json!({ "lane": "native" }))
+        };
+
+        let mut prev_bytes = match self.client.screenshot() {
+            Ok(b) => b,
+            Err(e) if crate::interrupt::is_interrupted_error(&e) => return Err(e),
+            Err(_) => return fallback_settle(self, budget),
+        };
+        let Ok(mut prev_img) = image::load_from_memory(&prev_bytes).map(image::DynamicImage::into_rgba8) else {
+            return fallback_settle(self, budget);
+        };
+
+        let deadline = Instant::now() + Duration::from_millis(budget);
+        loop {
+            let rem = deadline.saturating_duration_since(Instant::now());
+            if !rem.is_zero() {
+                crate::interrupt::sleep(ANIMATION_POLL_INTERVAL.min(rem))?;
+            }
+            let rem_after_sleep = deadline.saturating_duration_since(Instant::now()).as_millis() as u64;
+            let curr_bytes = match self.client.screenshot() {
+                Ok(b) => b,
+                Err(e) if crate::interrupt::is_interrupted_error(&e) => return Err(e),
+                Err(_) => return fallback_settle(self, rem_after_sleep),
+            };
+            if curr_bytes == prev_bytes {
+                return Ok(json!({ "lane": "native" }));
+            }
+            let Ok(curr_img) = image::load_from_memory(&curr_bytes).map(image::DynamicImage::into_rgba8) else {
+                return fallback_settle(self, rem_after_sleep);
+            };
+            if prev_img.dimensions() == curr_img.dimensions() {
+                let similarity = crate::screenshot::match_percentage(
+                    &prev_img,
+                    &curr_img,
+                    crate::screenshot::DEFAULT_PIXEL_TOLERANCE,
+                );
+                if similarity >= STATIC_SCREEN_MATCH_PERCENT {
+                    return Ok(json!({ "lane": "native" }));
+                }
+            }
+            if Instant::now() >= deadline {
+                return Ok(json!({ "lane": "native" }));
+            }
+            prev_bytes = curr_bytes;
+            prev_img = curr_img;
+        }
+    }
+
+    pub fn erase_text(&mut self, characters: i32) -> Result<Value> {
+        self.client.erase_all_text(characters.max(0) as u32)?;
+        Ok(json!({ "lane": "native" }))
+    }
+
+    pub fn back_press(&mut self) -> Result<Value> {
+        self.adb.shell("cmd input keyevent 4 2>/dev/null || input keyevent 4")?;
+        std::thread::sleep(BACK_PAUSE);
+        Ok(json!({ "lane": "native" }))
+    }
+
+    /// `AndroidDriver.hideKeyboard`: Back (which dismisses an open IME first),
+    /// then settle. Like Maestro, it navigates back when no keyboard is shown.
+    pub fn hide_keyboard(&mut self) -> Result<Value> {
+        self.adb.shell("cmd input keyevent 4 2>/dev/null || input keyevent 4")?;
+        std::thread::sleep(BACK_PAUSE);
+        self.settle(None, None)?;
+        Ok(json!({ "lane": "native" }))
+    }
+
+    fn raw_swipe(&mut self, start: (i32, i32), end: (i32, i32), duration_ms: i64) -> Result<()> {
+        let (sx, sy, ex, ey) = (start.0.max(0), start.1.max(0), end.0.max(0), end.1.max(0));
+        let dur = duration_ms.max(1);
+        self.adb.shell(&format!(
+            "cmd input swipe {sx} {sy} {ex} {ey} {dur} 2>/dev/null || input swipe {sx} {sy} {ex} {ey} {dur}"
+        ))?;
+        Ok(())
+    }
+
+    /// Screen-wide swipe with `AndroidDriver.swipe(direction)` start/end ratios.
+    fn swipe_direction(&mut self, dir: Direction, duration_ms: i64) -> Result<()> {
+        let s = self.client.screen_size()?;
+        let (w, h) = (s.width as f32, s.height as f32);
+        let p = |fx: f32, fy: f32| ((w * fx) as i32, (h * fy) as i32);
+        let (start, end) = match dir {
+            Direction::Up => (p(0.5, 0.5), p(0.5, 0.1)),
+            Direction::Down => (p(0.5, 0.2), p(0.5, 0.9)),
+            Direction::Right => (p(0.1, 0.5), p(0.9, 0.5)),
+            Direction::Left => (p(0.9, 0.5), p(0.1, 0.5)),
+        };
+        self.raw_swipe(start, end, duration_ms)
+    }
+
+    /// `AndroidDriver.swipe(point, direction)`: to 10% / 90% of the screen along the axis.
+    fn swipe_from_point(&mut self, from: (i32, i32), dir: Direction, duration_ms: i64) -> Result<()> {
+        let s = self.client.screen_size()?;
+        let (w, h) = (s.width as f32, s.height as f32);
+        let end = match dir {
+            Direction::Up => (from.0, (h * 0.1) as i32),
+            Direction::Down => (from.0, (h * 0.9) as i32),
+            Direction::Right => ((w * 0.9) as i32, from.1),
+            Direction::Left => ((w * 0.1) as i32, from.1),
+        };
+        self.raw_swipe(from, end, duration_ms)
+    }
+
+    pub fn scroll(&mut self) -> Result<Value> {
+        self.swipe_direction(Direction::Up, 400)?;
+        self.settle(None, None)?;
+        Ok(json!({ "lane": "native" }))
+    }
+
+    pub fn swipe(&mut self, req: &SwipeRequest) -> Result<Value> {
+        let screen = self.client.screen_size()?;
+        let (w, h) = (screen.width as i32, screen.height as i32);
+        if let (Some(sel), Some(dir)) = (&req.element_selector, req.direction) {
+            let (node, _) = self.poll_find(sel, req.timeout_ms)?;
+            let bounds = node.bounds.unwrap_or(Bounds::new(0, 0, 0, 0));
+            let from = match &req.relative_point {
+                Some(rel) => calculate_element_relative_point(bounds, rel)?,
+                None => bounds.center(),
+            };
+            self.swipe_from_point(from, dir, req.duration_ms)?;
+        } else if let (Some(sr), Some(er)) = (&req.start_relative, &req.end_relative) {
+            let start = crate::backend::resolve_screen_point(sr, w, h)?;
+            let end = crate::backend::resolve_screen_point(er, w, h)?;
+            self.raw_swipe(start, end, req.duration_ms)?;
+        } else if let Some(dir) = req.direction {
+            self.swipe_direction(dir, req.duration_ms)?;
+        } else if let (Some(s), Some(e)) = (&req.start_point, &req.end_point) {
+            self.raw_swipe((s.x, s.y), (e.x, e.y), req.duration_ms)?;
+        } else {
+            return Err(MaestroError::invalid_command("Illegal arguments for swiping").into());
+        }
+        self.settle(None, req.wait_to_settle_timeout_ms)?;
+        Ok(json!({ "lane": "native" }))
+    }
+
+    /// `Orchestra.scrollUntilVisible`: look (500 ms), then swipe from the centre.
+    pub fn scroll_until_visible(&mut self, req: &ScrollUntilVisibleRequest) -> Result<Value> {
+        let swipe_dir = match req.direction {
+            Direction::Down => Direction::Up,
+            Direction::Up => Direction::Down,
+            Direction::Right => Direction::Left,
+            Direction::Left => Direction::Right,
+        };
+        let screen = self.client.screen_size()?;
+        let (w, h) = (screen.width as i32, screen.height as i32);
+        let threshold = f64::from(req.visibility_percentage) / 100.0;
+        let deadline = Instant::now() + Duration::from_millis(req.timeout_ms);
+        let (mut retry_center, max_retry_center) = (0, 4);
+        loop {
+            let poll_ms = 500_u64.min(deadline.saturating_duration_since(Instant::now()).as_millis() as u64);
+            match self.poll_find(&req.selector, poll_ms) {
+                Ok((node, _)) => {
+                    let b = node.bounds.unwrap_or(Bounds::new(0, 0, 0, 0));
+                    let visibility = b.visible_percentage(w, h);
+                    if req.center_element && visibility > 0.1 && retry_center <= max_retry_center {
+                        if b.is_near_screen_center(swipe_dir, w, h) {
+                            return Ok(json!({ "lane": "native" }));
+                        }
+                        retry_center += 1;
+                    } else if visibility >= threshold {
+                        return Ok(json!({ "lane": "native" }));
+                    }
+                }
+                Err(e) if is_element_not_found(&e) => {}
+                Err(e) => return Err(e),
+            }
+            if Instant::now() >= deadline {
+                break;
+            }
+            self.swipe_from_point((w / 2, h / 2), swipe_dir, req.duration_ms as i64)?;
+            self.settle(None, req.wait_to_settle_timeout_ms)?;
+        }
+        Err(MaestroError::element_not_found(format!(
+            "Could not find a visible element matching selector: {}",
+            describe_sel(&req.selector)
+        ))
+        .into())
+    }
+
+    /// PNG of the current screen through the driver (uncompressed capture).
+    pub fn screenshot(&mut self) -> Result<Vec<u8>> {
+        self.client.screenshot()
+    }
+
+    /// Sets mock GPS location on physical Android devices; the driver grants itself
+    /// `android:mock_location` and enables mock providers once per session.
+    pub fn set_location(&mut self, latitude: f64, longitude: f64) -> Result<()> {
+        if !self.client.mock_location_enabled() {
+            self.client.enable_mock_location_providers()?;
+        }
+        self.client.set_location(latitude, longitude)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use tonic::{Request, Response, Status, Streaming};
+
+    use super::*;
+    use crate::backend::{MaestroErrorKind, TapPointRequest};
+    use crate::native_lane::client::pb::{
+        self,
+        maestro_driver_server::{MaestroDriver, MaestroDriverServer},
+    };
+
+    const DIALOG: &str = r#"<hierarchy rotation="0">
+  <node text="" bounds="[0,0][1080,2400]" enabled="true">
+    <node text="Allow Sample App to access this device's location?" bounds="[160,950][920,1100]" enabled="true"/>
+    <node text="While using the app" clickable="true" enabled="true" bounds="[160,1150][920,1250]"/>
+    <node text="Don&apos;t allow" clickable="true" enabled="true" bounds="[160,1370][920,1470]"/>
+  </node>
+</hierarchy>"#;
+
+    const APP: &str = r#"<hierarchy rotation="0">
+  <node text="Permission: granted" content-desc="" enabled="true" bounds="[100,300][900,400]"/>
+  <node text="Request Location Permission" clickable="true" enabled="true" bounds="[100,500][900,600]"/>
+</hierarchy>"#;
+
+    #[derive(Default)]
+    struct FakeState {
+        xml: String,
+        taps: Vec<(u32, u32)>,
+        typed: Vec<String>,
+        erased: Vec<u32>,
+        /// Tapping inside this rectangle switches the screen to `APP`.
+        dismiss_on: Option<(u32, u32, u32, u32)>,
+        hierarchy_calls: usize,
+        /// Once `hierarchy_calls` reaches `.0`, the screen switches to the XML in `.1`.
+        swap_xml_at_call: Option<(usize, String)>,
+        screenshots: Vec<std::result::Result<Vec<u8>, String>>,
+        screenshot_calls: usize,
+        mock_location_enabled_calls: usize,
+        mock_location_disabled_calls: usize,
+        locations: Vec<(f64, f64)>,
+        /// Optional hook invoked after a mutation RPC (`tap`/`inputText`/`eraseAllText`)
+        /// has been recorded in state, before the response is returned.
+        on_mutation: Option<Box<dyn FnMut() + Send>>,
+    }
+
+    struct FakeDriver(Arc<Mutex<FakeState>>);
+
+    #[tonic::async_trait]
+    impl MaestroDriver for FakeDriver {
+        async fn device_info(&self, _: Request<pb::DeviceInfoRequest>) -> Result<Response<pb::DeviceInfo>, Status> {
+            Ok(Response::new(pb::DeviceInfo { width_pixels: 1080, height_pixels: 2400 }))
+        }
+        async fn view_hierarchy(
+            &self,
+            _: Request<pb::ViewHierarchyRequest>,
+        ) -> Result<Response<pb::ViewHierarchyResponse>, Status> {
+            let mut s = self.0.lock().unwrap();
+            s.hierarchy_calls += 1;
+            if let Some((at, xml)) = s.swap_xml_at_call.clone()
+                && s.hierarchy_calls >= at
+            {
+                s.xml = xml;
+            }
+            Ok(Response::new(pb::ViewHierarchyResponse { hierarchy: s.xml.clone() }))
+        }
+        async fn screenshot(
+            &self,
+            _: Request<pb::ScreenshotRequest>,
+        ) -> Result<Response<pb::ScreenshotResponse>, Status> {
+            let mut s = self.0.lock().unwrap();
+            let idx = s.screenshot_calls;
+            s.screenshot_calls += 1;
+            if s.screenshots.is_empty() {
+                return Ok(Response::new(pb::ScreenshotResponse { bytes: vec![0x89, b'P', b'N', b'G'] }));
+            }
+            let entry = s.screenshots.get(idx).unwrap_or_else(|| s.screenshots.last().unwrap());
+            match entry {
+                Ok(bytes) => Ok(Response::new(pb::ScreenshotResponse { bytes: bytes.clone() })),
+                Err(msg) => Err(Status::internal(msg.clone())),
+            }
+        }
+        async fn tap(&self, r: Request<pb::TapRequest>) -> Result<Response<pb::TapResponse>, Status> {
+            let t = r.into_inner();
+            let mut s = self.0.lock().unwrap();
+            s.taps.push((t.x, t.y));
+            if let Some((l, tp, rt, b)) = s.dismiss_on
+                && (l..=rt).contains(&t.x)
+                && (tp..=b).contains(&t.y)
+            {
+                s.xml = APP.to_string();
+            }
+            if let Some(cb) = s.on_mutation.as_mut() {
+                cb();
+            }
+            Ok(Response::new(pb::TapResponse {}))
+        }
+        async fn input_text(
+            &self,
+            r: Request<pb::InputTextRequest>,
+        ) -> Result<Response<pb::InputTextResponse>, Status> {
+            let mut s = self.0.lock().unwrap();
+            s.typed.push(r.into_inner().text);
+            if let Some(cb) = s.on_mutation.as_mut() {
+                cb();
+            }
+            Ok(Response::new(pb::InputTextResponse {}))
+        }
+        async fn erase_all_text(
+            &self,
+            r: Request<pb::EraseAllTextRequest>,
+        ) -> Result<Response<pb::EraseAllTextResponse>, Status> {
+            let mut s = self.0.lock().unwrap();
+            s.erased.push(r.into_inner().characters_to_erase);
+            if let Some(cb) = s.on_mutation.as_mut() {
+                cb();
+            }
+            Ok(Response::new(pb::EraseAllTextResponse {}))
+        }
+        async fn set_location(
+            &self,
+            r: Request<pb::SetLocationRequest>,
+        ) -> Result<Response<pb::SetLocationResponse>, Status> {
+            let r = r.into_inner();
+            self.0.lock().unwrap().locations.push((r.latitude, r.longitude));
+            Ok(Response::new(pb::SetLocationResponse {}))
+        }
+        async fn is_window_updating(
+            &self,
+            _: Request<pb::CheckWindowUpdatingRequest>,
+        ) -> Result<Response<pb::CheckWindowUpdatingResponse>, Status> {
+            Ok(Response::new(pb::CheckWindowUpdatingResponse { is_window_updating: false }))
+        }
+        async fn launch_app(
+            &self,
+            _: Request<pb::LaunchAppRequest>,
+        ) -> Result<Response<pb::LaunchAppResponse>, Status> {
+            Ok(Response::new(pb::LaunchAppResponse {}))
+        }
+        async fn add_media(
+            &self,
+            _: Request<Streaming<pb::AddMediaRequest>>,
+        ) -> Result<Response<pb::AddMediaResponse>, Status> {
+            Ok(Response::new(pb::AddMediaResponse {}))
+        }
+        async fn enable_mock_location_providers(
+            &self,
+            _: Request<pb::EmptyRequest>,
+        ) -> Result<Response<pb::EmptyResponse>, Status> {
+            self.0.lock().unwrap().mock_location_enabled_calls += 1;
+            Ok(Response::new(pb::EmptyResponse {}))
+        }
+        async fn disable_location_updates(
+            &self,
+            _: Request<pb::EmptyRequest>,
+        ) -> Result<Response<pb::EmptyResponse>, Status> {
+            self.0.lock().unwrap().mock_location_disabled_calls += 1;
+            Ok(Response::new(pb::EmptyResponse {}))
+        }
+    }
+
+    /// A fake driver serving on a free loopback port until stopped or dropped.
+    struct Served {
+        port: u16,
+        thread: Option<std::thread::JoinHandle<()>>,
+        stop: Option<tokio::sync::oneshot::Sender<()>>,
+    }
+
+    impl Served {
+        /// Stops the server and waits until its port is closed.
+        fn stop(&mut self) {
+            if let Some(stop) = self.stop.take() {
+                let _ = stop.send(());
+            }
+            if let Some(t) = self.thread.take() {
+                let _ = t.join();
+            }
+        }
+    }
+
+    impl Drop for Served {
+        fn drop(&mut self) {
+            self.stop();
+        }
+    }
+
+    fn serve(state: Arc<Mutex<FakeState>>) -> Served {
+        let (port_tx, port_rx) = std::sync::mpsc::channel::<u16>();
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let svc = MaestroDriverServer::new(FakeDriver(state));
+        let server = std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+            rt.block_on(async move {
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                let port = listener.local_addr().unwrap().port();
+                let incoming = tonic::transport::server::TcpIncoming::from(listener);
+                let _ = port_tx.send(port);
+                let _ = tonic::transport::Server::builder()
+                    .add_service(svc)
+                    .serve_with_incoming_shutdown(incoming, async {
+                        let _ = stopped.await;
+                    })
+                    .await;
+            });
+        });
+        let port = port_rx.recv_timeout(Duration::from_secs(5)).expect("fake driver bound");
+        Served { port, thread: Some(server), stop: Some(stop) }
+    }
+
+    /// A client for the fake driver on `port`, once it answers.
+    fn connect_ready(port: u16) -> NativeDriverClient {
+        let mut client = NativeDriverClient::connect(port).unwrap();
+        let mut up = false;
+        for _ in 0..100 {
+            if client.device_info_with_timeout(Duration::from_millis(200)).is_ok() {
+                up = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(up, "fake driver did not start");
+        client
+    }
+
+    struct Fixture {
+        state: Arc<Mutex<FakeState>>,
+        client: NativeDriverClient,
+        adb: Adb,
+        _served: Served,
+    }
+
+    fn fixture(xml: &str) -> Fixture {
+        let state = Arc::new(Mutex::new(FakeState { xml: xml.to_string(), ..Default::default() }));
+        let served = serve(state.clone());
+        let client = connect_ready(served.port);
+        Fixture { state, client, adb: Adb::new("unused-in-these-tests"), _served: served }
+    }
+
+    fn text(t: &str) -> ElementSelector {
+        ElementSelector { text_regex: Some(t.into()), ..Default::default() }
+    }
+
+    fn tap_req(sel: ElementSelector, timeout_ms: u64) -> TapElementRequest {
+        TapElementRequest {
+            selector: sel,
+            timeout_ms,
+            optional: false,
+            long_press: false,
+            repeat: None,
+            relative_point: None,
+            retry_if_no_change: false,
+            wait_until_visible: false,
+            wait_to_settle_timeout_ms: None,
+            app_id: None,
+        }
+    }
+
+    #[test]
+    fn taps_the_system_dialog_button_then_sees_the_app() {
+        let mut f = fixture(DIALOG);
+        f.state.lock().unwrap().dismiss_on = Some((160, 1150, 920, 1250));
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+
+        ops.assert_visible(&text("While using the app"), 1000).unwrap();
+        let res = ops.tap_on_element(&tap_req(text("While using the app"), 1000)).unwrap();
+        assert_eq!((res["x"].as_i64(), res["y"].as_i64()), (Some(540), Some(1200)));
+        assert_eq!(res["lane"], "native");
+
+        // The dialog is gone, the app screen is visible again.
+        ops.assert_not_visible(&text("While using the app"), 500).unwrap();
+        ops.assert_visible(&text("Permission: granted"), 500).unwrap();
+        assert_eq!(f.state.lock().unwrap().taps, vec![(540, 1200)]);
+    }
+
+    /// Launcher still in front: the cold app put nothing into the tree yet.
+    const LAUNCHER: &str = r#"<hierarchy rotation="0">
+  <node text="" package="com.android.launcher3" enabled="true" bounds="[0,0][1080,2400]">
+    <node text="Phone" package="com.android.launcher3" enabled="true" bounds="[100,2000][300,2200]"/>
+  </node>
+</hierarchy>"#;
+
+    /// The app's window exists, but its `FlutterView` has no semantics yet.
+    const BARE_FLUTTER: &str = r#"<hierarchy rotation="0">
+  <node text="" resource-id="" content-desc="" class="android.widget.FrameLayout" package="com.example.app" enabled="true" bounds="[0,0][1080,2400]">
+    <node text="" resource-id="" content-desc="" class="android.view.View" package="com.example.app" enabled="true" bounds="[0,0][1080,2400]"/>
+  </node>
+</hierarchy>"#;
+
+    /// The app is drawn, with its first screen.
+    const APP_READY: &str = r#"<hierarchy rotation="0">
+  <node text="" package="com.example.app" enabled="true" bounds="[0,0][1080,2400]">
+    <node text="Playground" resource-id="playground_button" package="com.example.app" clickable="true" enabled="true" bounds="[100,500][900,600]"/>
+  </node>
+</hierarchy>"#;
+
+    fn id(i: &str) -> ElementSelector {
+        ElementSelector { id_regex: Some(i.into()), ..Default::default() }
+    }
+
+    fn cold(extra_ms: u64) -> ColdStart {
+        ColdStart {
+            app_id: "com.example.app".into(),
+            extra: Duration::from_millis(extra_ms),
+            log_prefix: String::new(),
+        }
+    }
+
+    #[test]
+    fn a_cold_app_that_shows_up_late_gets_one_extra_window_and_the_tap_lands() {
+        for initial in [LAUNCHER, BARE_FLUTTER] {
+            let mut f = fixture(initial);
+            // Each window polls every 50 ms: the 150 ms lookup is long over
+            // when the app shows up at the 8th hierarchy read.
+            f.state.lock().unwrap().swap_xml_at_call = Some((8, APP_READY.to_string()));
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            ops.arm_cold_start(cold(3000));
+            let t = Instant::now();
+            let res = ops.tap_on_element(&tap_req(id("playground_button"), 150)).unwrap();
+            assert_eq!((res["x"].as_i64(), res["y"].as_i64()), (Some(500), Some(550)));
+            assert!(t.elapsed() < Duration::from_millis(1500), "{:?}", t.elapsed());
+            assert_eq!(ops.cold_start_retries(), 1);
+            assert_eq!(f.state.lock().unwrap().taps, vec![(500, 550)], "tapped once");
+        }
+    }
+
+    #[test]
+    fn an_armed_lookup_on_a_healthy_launch_costs_no_extra_rpc() {
+        let mut f = fixture(APP_READY);
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        ops.arm_cold_start(cold(3000));
+        ops.assert_visible(&id("playground_button"), 17_000).unwrap();
+        assert_eq!(ops.cold_start_retries(), 0);
+        assert_eq!(f.state.lock().unwrap().hierarchy_calls, 1, "the found-at-once lookup reads one hierarchy");
+    }
+
+    #[test]
+    fn a_real_miss_on_a_drawn_app_fails_without_the_extra_window() {
+        let mut f = fixture(APP_READY);
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        ops.arm_cold_start(cold(5000));
+        let t = Instant::now();
+        let err = ops.assert_visible(&id("missing_button"), 200).unwrap_err();
+        assert!(t.elapsed() < Duration::from_millis(1000), "{:?}", t.elapsed());
+        assert!(is_element_not_found(&err));
+        assert_eq!(ops.cold_start_retries(), 0);
+    }
+
+    #[test]
+    fn an_app_that_never_shows_up_fails_after_exactly_one_extra_window_with_the_same_error() {
+        let plain = {
+            let mut f = fixture(LAUNCHER);
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            ops.assert_visible(&id("playground_button"), 200).unwrap_err().to_string()
+        };
+        let mut f = fixture(LAUNCHER);
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        ops.arm_cold_start(cold(300));
+        let t = Instant::now();
+        let err = ops.tap_on_element(&tap_req(id("playground_button"), 200)).unwrap_err();
+        let waited = t.elapsed();
+        assert!(waited >= Duration::from_millis(500) && waited < Duration::from_millis(800), "{waited:?}");
+        assert!(is_element_not_found(&err));
+        assert_eq!(err.to_string(), plain, "same message as without the retry");
+        assert_eq!(ops.cold_start_retries(), 1);
+        assert!(f.state.lock().unwrap().taps.is_empty());
+        // The arming is spent: the next lookup has the plain budget.
+        let t = Instant::now();
+        ops.assert_visible(&id("playground_button"), 200).unwrap_err();
+        assert!(t.elapsed() < Duration::from_millis(450), "{:?}", t.elapsed());
+        assert_eq!(ops.cold_start_retries(), 1);
+    }
+
+    #[test]
+    fn cold_start_retry_does_not_fire_if_app_appeared_before_timeout() {
+        // Starts on launcher (app absent), app appears at call 2 (without target),
+        // then disappears again at call 3 — because the app was seen during the
+        // initial window, the miss is real and must not trigger the extra window.
+        let mut f = fixture(LAUNCHER);
+        f.state.lock().unwrap().swap_xml_at_call = Some((2, APP_READY.to_string()));
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        ops.arm_cold_start(cold(5000));
+        let t = Instant::now();
+        let err = ops.assert_visible(&id("missing_button"), 200).unwrap_err();
+        assert!(t.elapsed() < Duration::from_millis(1000), "{:?}", t.elapsed());
+        assert!(is_element_not_found(&err));
+        assert_eq!(ops.cold_start_retries(), 0);
+    }
+
+    #[test]
+    fn missing_element_reports_what_is_on_screen() {
+        let mut f = fixture(DIALOG);
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        let t = Instant::now();
+        let err = ops.assert_visible(&text("Allow all the time"), 200).unwrap_err();
+        assert!(t.elapsed() >= Duration::from_millis(150), "polled until the timeout");
+        let me = err.downcast_ref::<MaestroError>().expect("MaestroError");
+        assert_eq!(me.kind, MaestroErrorKind::ElementNotFound);
+        assert!(me.message.contains("Allow all the time"), "{}", me.message);
+        assert!(me.message.contains("\"While using the app\""), "{}", me.message);
+        let err = ops.tap_on_element(&tap_req(text("Nope"), 0)).unwrap_err();
+        assert!(is_element_not_found(&err));
+        assert!(f.state.lock().unwrap().taps.is_empty());
+    }
+
+    #[test]
+    fn assert_not_visible_fails_while_the_element_stays() {
+        let mut f = fixture(DIALOG);
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        let err = ops.assert_not_visible(&text("While using the app"), 100).unwrap_err();
+        assert_eq!(err.downcast_ref::<MaestroError>().unwrap().kind, MaestroErrorKind::AssertionFailure);
+        ops.assert_not_visible(&text("Something else"), 100).unwrap();
+    }
+
+    #[test]
+    fn point_taps_text_input_erase_and_copy() {
+        let mut f = fixture(APP);
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        let res = ops
+            .tap_on_point(&TapPointRequest {
+                point: "50%, 25%".into(),
+                long_press: false,
+                repeat: None,
+                retry_if_no_change: false,
+                wait_to_settle_timeout_ms: None,
+            })
+            .unwrap();
+        assert_eq!((res["x"].as_i64(), res["y"].as_i64()), (Some(540), Some(600)));
+        let bad = TapPointRequest {
+            point: "101%, 5%".into(),
+            long_press: false,
+            repeat: None,
+            retry_if_no_change: false,
+            wait_to_settle_timeout_ms: None,
+        };
+        assert!(ops.tap_on_point(&bad).is_err());
+
+        ops.input_text("hello 42").unwrap();
+        ops.erase_text(50).unwrap();
+
+        let (copied, _) = ops.copy_text_from(&text("Permission: .*"), 500).unwrap();
+        assert_eq!(copied, "Permission: granted");
+        let bounds = ops.find_element_bounds(&text("Request Location Permission"), 500).unwrap();
+        assert_eq!(bounds, [100, 500, 900, 600]);
+
+        let s = f.state.lock().unwrap();
+        assert_eq!(s.typed, vec!["hello 42".to_string()]);
+        assert_eq!(s.erased, vec![50]);
+        assert_eq!(s.taps, vec![(540, 600)]);
+    }
+
+    #[test]
+    fn input_text_goes_through_the_rpc_without_an_ime_switch() {
+        let mut f = fixture(APP);
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        // `adb` points at a device that does not exist: any IME shell command would fail.
+        ops.input_text("Příliš žluťoučký kůň 🚀").unwrap();
+        ops.input_text("ascii").unwrap();
+        assert_eq!(f.state.lock().unwrap().typed, vec!["Příliš žluťoučký kůň 🚀".to_string(), "ascii".to_string()]);
+    }
+
+    fn png_bytes(w: u32, h: u32, rgba: [u8; 4]) -> Vec<u8> {
+        let img = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(w, h, image::Rgba(rgba)));
+        crate::screenshot::encode_png(&img).unwrap()
+    }
+
+    #[test]
+    fn wait_for_animation_to_end_handles_static_changing_and_error_fallback() {
+        let red = png_bytes(20, 20, [220, 30, 30, 255]);
+        let green = png_bytes(20, 20, [30, 220, 30, 255]);
+        let blue = png_bytes(20, 20, [30, 30, 220, 255]);
+
+        // 1. Static screen -> returns fast after 2 screenshot captures, 0 hierarchy dumps.
+        {
+            let mut f = fixture(APP);
+            f.state.lock().unwrap().screenshots = vec![Ok(red.clone()), Ok(red.clone())];
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            let res = ops.wait_for_animation_to_end(Some(2000)).unwrap();
+            assert_eq!(res["lane"], "native");
+            let s = f.state.lock().unwrap();
+            assert_eq!(s.screenshot_calls, 2);
+            assert_eq!(s.hierarchy_calls, 0);
+        }
+
+        // 2. Changing screen -> polls until two consecutive frames match (red -> green -> blue -> blue).
+        {
+            let mut f = fixture(APP);
+            f.state.lock().unwrap().screenshots =
+                vec![Ok(red.clone()), Ok(green.clone()), Ok(blue.clone()), Ok(blue.clone())];
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            let res = ops.wait_for_animation_to_end(Some(3000)).unwrap();
+            assert_eq!(res["lane"], "native");
+            let s = f.state.lock().unwrap();
+            assert_eq!(s.screenshot_calls, 4);
+            assert_eq!(s.hierarchy_calls, 0);
+        }
+
+        // 3. Screenshot failure (e.g. FLAG_SECURE) -> falls back to hierarchy settle.
+        {
+            let mut f = fixture(APP);
+            f.state.lock().unwrap().screenshots = vec![Err("FLAG_SECURE".into())];
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            let res = ops.wait_for_animation_to_end(Some(500)).unwrap();
+            assert_eq!(res["lane"], "native");
+            let s = f.state.lock().unwrap();
+            assert_eq!(s.screenshot_calls, 1);
+            assert!(s.hierarchy_calls >= 2, "expected hierarchy settle fallback, got {}", s.hierarchy_calls);
+        }
+    }
+
+    const COVERED_TARGET: &str = r#"<hierarchy rotation="0">
+  <node text="Covered target" clickable="true" enabled="true" bounds="[100,500][900,600]"/>
+  <node text="Temporary cover" enabled="true" bounds="[100,500][900,600]"/>
+</hierarchy>"#;
+
+    const UNCOVERED_TARGET: &str = r#"<hierarchy rotation="0">
+  <node text="Covered target" clickable="true" enabled="true" bounds="[100,500][900,600]"/>
+</hierarchy>"#;
+
+    #[test]
+    fn wait_until_visible_waits_out_an_overlay_and_taps_again() {
+        // 1. The overlay stays through the first tap's settle and disappears during wait_until_visible.
+        let mut f = fixture(COVERED_TARGET);
+        f.state.lock().unwrap().swap_xml_at_call = Some((6, UNCOVERED_TARGET.to_string()));
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        let mut req = tap_req(text("Covered target"), 500);
+        req.wait_until_visible = true;
+        ops.tap_on_element(&req).unwrap();
+        let s = f.state.lock().unwrap();
+        // First tap hit the overlay (screen unchanged, target covered), second one the button.
+        assert_eq!(s.taps, vec![(500, 550), (500, 550)]);
+        assert_eq!(s.xml, UNCOVERED_TARGET, "the second tap came after the overlay went away");
+        drop(s);
+
+        // 2. Race: the overlay is still covering the target at the moment of the first tap
+        //    (after call 2), then vanishes *during* perform_tap's post-tap settle (at call 3
+        //    or 4), making `outcome.changed == true` and `outcome.after.is_visible == true`
+        //    even though the first tap hit the overlay. Must still re-tap the uncovered target.
+        for swap_call in [3, 4] {
+            let mut f = fixture(COVERED_TARGET);
+            f.state.lock().unwrap().swap_xml_at_call = Some((swap_call, UNCOVERED_TARGET.to_string()));
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            let mut req = tap_req(text("Covered target"), 500);
+            req.wait_until_visible = true;
+            ops.tap_on_element(&req).unwrap();
+            let s = f.state.lock().unwrap();
+            assert_eq!(s.taps, vec![(500, 550), (500, 550)], "swap_call={swap_call} missed re-tap");
+        }
+    }
+
+    #[test]
+    fn wait_until_visible_does_not_retap_a_visible_target_or_without_the_flag() {
+        let mut f = fixture(UNCOVERED_TARGET);
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        let mut req = tap_req(text("Covered target"), 500);
+        req.wait_until_visible = true;
+        ops.tap_on_element(&req).unwrap();
+        assert_eq!(f.state.lock().unwrap().taps.len(), 1, "visible target: a static screen is not a reason to retap");
+
+        let mut f = fixture(COVERED_TARGET);
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        ops.tap_on_element(&tap_req(text("Covered target"), 500)).unwrap();
+        assert_eq!(f.state.lock().unwrap().taps.len(), 1, "without waitUntilVisible the tap is not repeated");
+    }
+
+    #[test]
+    fn retry_if_no_change_taps_again_only_when_the_screen_is_static() {
+        let mut f = fixture(APP);
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        let mut req = tap_req(text("Request Location Permission"), 500);
+        req.retry_if_no_change = true;
+        ops.tap_on_element(&req).unwrap();
+        // Nothing changed after the first tap, so it was repeated once.
+        assert_eq!(f.state.lock().unwrap().taps.len(), 2);
+
+        let mut f = fixture(DIALOG);
+        f.state.lock().unwrap().dismiss_on = Some((160, 1150, 920, 1250));
+        let mut ops = NativeOps::new(&mut f.client, &f.adb);
+        let mut req = tap_req(text("While using the app"), 500);
+        req.retry_if_no_change = true;
+        ops.tap_on_element(&req).unwrap();
+        assert_eq!(f.state.lock().unwrap().taps.len(), 1, "the screen changed, no retry");
+    }
+
+    // --- reconnect after a transport drop --------------------------------
+
+    /// A port nothing listens on.
+    fn dead_port() -> u16 {
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+    }
+
+    /// Accepts connections and closes them at once, like an `adb forward` whose
+    /// device end is gone: the TCP connect succeeds, the HTTP/2 handshake does not.
+    fn accept_and_close() -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            while let Ok((stream, _)) = listener.accept() {
+                drop(stream);
+            }
+        });
+        port
+    }
+
+    /// A replacement driver for a restart, with its own state; counts the restarts.
+    struct Replacement {
+        state: Arc<Mutex<FakeState>>,
+        restarts: Arc<Mutex<u32>>,
+        served: Arc<Mutex<Vec<Served>>>,
+    }
+
+    impl Replacement {
+        fn new(xml: &str) -> Self {
+            let state = Arc::new(Mutex::new(FakeState { xml: xml.to_string(), ..Default::default() }));
+            Self { state, restarts: Arc::new(Mutex::new(0)), served: Arc::new(Mutex::new(Vec::new())) }
+        }
+
+        fn restart_fn(&self) -> crate::native_lane::client::RestartFn {
+            let (state, restarts, served) = (self.state.clone(), self.restarts.clone(), self.served.clone());
+            Box::new(move || {
+                *restarts.lock().unwrap() += 1;
+                let s = serve(state.clone());
+                let client = connect_ready(s.port);
+                served.lock().unwrap().push(s);
+                Ok(client)
+            })
+        }
+
+        fn restarts(&self) -> u32 {
+            *self.restarts.lock().unwrap()
+        }
+    }
+
+    #[test]
+    fn refused_connection_restarts_the_session_and_repeats_a_tap() {
+        let replacement = Replacement::new(APP);
+        let mut client = NativeDriverClient::connect(dead_port()).unwrap();
+        client.set_restart(replacement.restart_fn());
+
+        // The tap never left the host, so it is safe to send again after the restart.
+        client.tap(10, 20).unwrap();
+        assert_eq!(replacement.restarts(), 1);
+        assert_eq!(replacement.state.lock().unwrap().taps, vec![(10, 20)]);
+        assert_eq!(client.restarts(), 1);
+        let notices = client.take_restart_notices();
+        assert_eq!(notices.len(), 1, "{notices:?}");
+        assert!(notices[0].contains("restarted it (restart 1/3)") && notices[0].contains("`tap`"), "{notices:?}");
+        assert!(client.take_restart_notices().is_empty(), "notices are reported once");
+
+        // The new session serves every later call without another restart.
+        client.tap(30, 40).unwrap();
+        assert_eq!(replacement.restarts(), 1);
+        assert_eq!(replacement.state.lock().unwrap().taps, vec![(10, 20), (30, 40)]);
+    }
+
+    #[test]
+    fn a_broken_connection_repeats_reads_but_not_input() {
+        let replacement = Replacement::new(APP);
+        let mut client = NativeDriverClient::connect(accept_and_close()).unwrap();
+        client.set_restart(replacement.restart_fn());
+
+        // Reads are always safe to repeat.
+        let xml = client.view_hierarchy().unwrap();
+        assert!(xml.contains("Request Location Permission"), "{xml}");
+        assert_eq!(replacement.restarts(), 1);
+
+        // Input whose request may have been applied is restarted but not repeated.
+        let mut client = NativeDriverClient::connect(accept_and_close()).unwrap();
+        let second = Replacement::new(APP);
+        client.set_restart(second.restart_fn());
+        let err = format!("{:#}", client.input_text("hello").unwrap_err());
+        assert!(err.contains("not repeated") && err.contains("`inputText`"), "{err}");
+        assert!(second.state.lock().unwrap().typed.is_empty(), "the text must not be typed twice");
+        assert_eq!(second.restarts(), 1);
+        // The driver is healthy again for the next step.
+        client.input_text("hello").unwrap();
+        assert_eq!(second.state.lock().unwrap().typed, vec!["hello".to_string()]);
+        assert_eq!(second.restarts(), 1);
+    }
+
+    #[test]
+    fn a_server_that_goes_away_mid_run_is_replaced() {
+        let state = Arc::new(Mutex::new(FakeState { xml: APP.to_string(), ..Default::default() }));
+        let mut first = serve(state);
+        let mut client = connect_ready(first.port);
+        let replacement = Replacement::new(DIALOG);
+        client.set_restart(replacement.restart_fn());
+        assert!(client.view_hierarchy().unwrap().contains("Permission: granted"));
+
+        first.stop();
+        let xml = client.view_hierarchy().unwrap();
+        assert!(xml.contains("While using the app"), "served by the replacement: {xml}");
+        assert_eq!(replacement.restarts(), 1);
+    }
+
+    #[test]
+    fn a_restart_resets_per_session_state() {
+        let replacement = Replacement::new(APP);
+        let first = Arc::new(Mutex::new(FakeState { xml: APP.to_string(), ..Default::default() }));
+        let mut served = serve(first);
+        let mut client = connect_ready(served.port);
+        client.set_restart(replacement.restart_fn());
+        client.enable_mock_location_providers().unwrap();
+        assert!(client.mock_location_enabled());
+        assert_eq!(client.screen_size().unwrap().width, 1080);
+
+        served.stop();
+        client.view_hierarchy().unwrap();
+        assert_eq!(client.restarts(), 1);
+        assert!(!client.mock_location_enabled(), "the new instrumentation has no mock providers yet");
+    }
+
+    #[test]
+    fn answers_and_timeouts_never_restart() {
+        let state = Arc::new(Mutex::new(FakeState {
+            xml: APP.to_string(),
+            screenshots: vec![Err("capture failed".into())],
+            ..Default::default()
+        }));
+        let served = serve(state);
+        let mut client = connect_ready(served.port);
+        let replacement = Replacement::new(APP);
+        client.set_restart(replacement.restart_fn());
+
+        let err = format!("{:#}", client.screenshot().unwrap_err());
+        assert!(err.contains("capture failed"), "{err}");
+        assert_eq!(replacement.restarts(), 0, "the driver answered, so the transport is fine");
+        assert_eq!(client.restarts(), 0);
+    }
+
+    #[test]
+    fn a_failed_restart_keeps_the_error_and_is_not_attempted_again() {
+        let calls = Arc::new(Mutex::new(0u32));
+        let seen = calls.clone();
+        let mut client = NativeDriverClient::connect(dead_port()).unwrap();
+        client.set_restart(Box::new(move || {
+            *seen.lock().unwrap() += 1;
+            Err(anyhow::anyhow!("device offline"))
+        }));
+
+        let err = format!("{:#}", client.view_hierarchy().unwrap_err());
+        assert!(err.contains("could not be restarted") && err.contains("device offline"), "{err}");
+        assert!(err.contains("viewHierarchy") && err.contains("tcp connect error"), "keeps the original error: {err}");
+        assert_eq!(*calls.lock().unwrap(), 1);
+
+        // The lane is down: later calls fail fast on the transport error, with no new restart.
+        let err = format!("{:#}", client.view_hierarchy().unwrap_err());
+        assert!(err.contains("tcp connect error") && !err.contains("restarted"), "{err}");
+        assert_eq!(*calls.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn restarts_are_capped_per_session() {
+        let calls = Arc::new(Mutex::new(0u32));
+        let seen = calls.clone();
+        let mut client = NativeDriverClient::connect(dead_port()).unwrap();
+        // Every "restarted" driver is dead again.
+        client.set_restart(Box::new(move || {
+            *seen.lock().unwrap() += 1;
+            NativeDriverClient::connect(dead_port())
+        }));
+
+        let mut last = String::new();
+        for _ in 0..6 {
+            last = format!("{:#}", client.view_hierarchy().unwrap_err());
+            if last.contains("giving up") {
+                break;
+            }
+        }
+        assert!(last.contains("giving up"), "{last}");
+        assert_eq!(*calls.lock().unwrap(), crate::native_lane::client::MAX_RESTARTS);
+    }
+
+    #[test]
+    fn the_dead_session_is_torn_down_before_the_replacement_starts() {
+        struct Guard(Arc<Mutex<Vec<&'static str>>>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.lock().unwrap().push("old session stopped");
+            }
+        }
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let replacement = Replacement::new(APP);
+        let mut restart = replacement.restart_fn();
+        let order = log.clone();
+        let mut client = NativeDriverClient::connect(dead_port()).unwrap();
+        client.set_keepalive(Box::new(Guard(log.clone())));
+        client.set_restart(Box::new(move || {
+            order.lock().unwrap().push("replacement started");
+            restart()
+        }));
+
+        client.view_hierarchy().unwrap();
+        // `force-stop` of the old instrumentation would kill the new one if it ran after the start.
+        assert_eq!(*log.lock().unwrap(), vec!["old session stopped", "replacement started"]);
+    }
+
+    /// Loopback TCP proxy in front of a real `Served` driver whose active socket can be
+    /// torn down mid-RPC (after the server received the request, or mid-response body).
+    struct KillableProxy {
+        port: u16,
+        /// When set, server->client copying stops and closes both sockets once `Some(n)`
+        /// bytes have been forwarded since `arm_response_cut` was called (0 = cut immediately).
+        cut_after: Arc<Mutex<Option<usize>>>,
+        active_client: Arc<Mutex<Option<std::net::TcpStream>>>,
+        active_upstream: Arc<Mutex<Option<std::net::TcpStream>>>,
+    }
+
+    impl KillableProxy {
+        fn start(upstream_port: u16) -> Self {
+            use std::io::{Read, Write};
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let cut_after: Arc<Mutex<Option<usize>>> = Arc::new(Mutex::new(None));
+            let active_client: Arc<Mutex<Option<std::net::TcpStream>>> = Arc::new(Mutex::new(None));
+            let active_upstream: Arc<Mutex<Option<std::net::TcpStream>>> = Arc::new(Mutex::new(None));
+
+            let cut = cut_after.clone();
+            let ac = active_client.clone();
+            let au = active_upstream.clone();
+            std::thread::spawn(move || {
+                while let Ok((client, _)) = listener.accept() {
+                    let Ok(upstream) = std::net::TcpStream::connect(("127.0.0.1", upstream_port)) else {
+                        break;
+                    };
+                    let _ = client.set_nodelay(true);
+                    let _ = upstream.set_nodelay(true);
+                    *ac.lock().unwrap() = client.try_clone().ok();
+                    *au.lock().unwrap() = upstream.try_clone().ok();
+
+                    let (mut c_r, mut c_w) = (client.try_clone().unwrap(), client);
+                    let (mut u_r, mut u_w) = (upstream.try_clone().unwrap(), upstream);
+
+                    std::thread::spawn(move || {
+                        let mut buf = [0u8; 4096];
+                        while let Ok(n) = c_r.read(&mut buf) {
+                            if n == 0 || u_w.write_all(&buf[..n]).is_err() {
+                                break;
+                            }
+                        }
+                        let _ = u_w.shutdown(std::net::Shutdown::Both);
+                    });
+
+                    let cut_s2c = cut.clone();
+                    std::thread::spawn(move || {
+                        let mut buf = [0u8; 4096];
+                        let mut forwarded = 0usize;
+                        while let Ok(n) = u_r.read(&mut buf) {
+                            if n == 0 {
+                                break;
+                            }
+                            let limit = *cut_s2c.lock().unwrap();
+                            if let Some(max_bytes) = limit {
+                                let allow = max_bytes.saturating_sub(forwarded).min(n);
+                                if allow > 0 {
+                                    let _ = c_w.write_all(&buf[..allow]);
+                                    forwarded += allow;
+                                }
+                                if forwarded >= max_bytes {
+                                    let _ = c_w.shutdown(std::net::Shutdown::Both);
+                                    let _ = u_r.shutdown(std::net::Shutdown::Both);
+                                    return;
+                                }
+                            } else if c_w.write_all(&buf[..n]).is_err() {
+                                break;
+                            }
+                        }
+                        let _ = c_w.shutdown(std::net::Shutdown::Both);
+                    });
+                }
+            });
+
+            Self { port, cut_after, active_client, active_upstream }
+        }
+
+        fn kill_now(&self) {
+            *self.cut_after.lock().unwrap() = Some(0);
+            if let Some(s) = self.active_client.lock().unwrap().take() {
+                let _ = s.shutdown(std::net::Shutdown::Both);
+            }
+            if let Some(s) = self.active_upstream.lock().unwrap().take() {
+                let _ = s.shutdown(std::net::Shutdown::Both);
+            }
+        }
+
+        fn cut_response_after_bytes(&self, max_bytes: usize) {
+            *self.cut_after.lock().unwrap() = Some(max_bytes);
+        }
+    }
+
+    #[test]
+    fn broken_after_request_sent_restarts_but_never_repeats_tap_input_or_erase() {
+        // For each non-idempotent input RPC, drop the TCP connection AFTER the server has
+        // fully received and applied the request (while sending the response back).
+        for kind in ["tap", "inputText", "eraseAllText"] {
+            let state = Arc::new(Mutex::new(FakeState { xml: APP.to_string(), ..Default::default() }));
+            let _served = serve(state.clone());
+            let proxy = Arc::new(KillableProxy::start(_served.port));
+            let mut client = connect_ready(proxy.port);
+            let replacement = Replacement::new(APP);
+            client.set_restart(replacement.restart_fn());
+
+            let kill_proxy = proxy.clone();
+            state.lock().unwrap().on_mutation = Some(Box::new(move || {
+                kill_proxy.kill_now();
+            }));
+
+            let err = match kind {
+                "tap" => format!("{:#}", client.tap(100, 200).unwrap_err()),
+                "inputText" => format!("{:#}", client.input_text("once").unwrap_err()),
+                "eraseAllText" => format!("{:#}", client.erase_all_text(5).unwrap_err()),
+                _ => unreachable!(),
+            };
+            assert!(err.contains("not repeated") && err.contains(kind), "{kind}: {err}");
+            assert_eq!(replacement.restarts(), 1, "{kind}: must restart once");
+
+            // Original server applied it; replacement must NOT have received a duplicate.
+            let orig = state.lock().unwrap();
+            let repl = replacement.state.lock().unwrap();
+            match kind {
+                "tap" => {
+                    assert_eq!(orig.taps, vec![(100, 200)]);
+                    assert!(repl.taps.is_empty(), "tap must not be repeated");
+                }
+                "inputText" => {
+                    assert_eq!(orig.typed, vec!["once".to_string()]);
+                    assert!(repl.typed.is_empty(), "inputText must not be repeated");
+                }
+                "eraseAllText" => {
+                    assert_eq!(orig.erased, vec![5]);
+                    assert!(repl.erased.is_empty(), "eraseAllText must not be repeated");
+                }
+                _ => unreachable!(),
+            }
+            drop(orig);
+            drop(repl);
+
+            // Replacement is healthy for subsequent commands.
+            assert!(client.view_hierarchy().unwrap().contains("Permission: granted"));
+            assert_eq!(replacement.restarts(), 1);
+        }
+    }
+
+    #[test]
+    fn mid_response_body_drop_restarts_the_driver() {
+        // Large XML ensures HTTP/2 sends the `200 OK` HEADERS frame and starts streaming DATA
+        // frames before the proxy severs the connection mid-body.
+        let huge_xml = format!("<hierarchy rotation=\"0\">{}</hierarchy>", "a".repeat(256 * 1024));
+        let state = Arc::new(Mutex::new(FakeState { xml: huge_xml, ..Default::default() }));
+        let _served = serve(state);
+        let proxy = KillableProxy::start(_served.port);
+        let mut client = connect_ready(proxy.port);
+        let replacement = Replacement::new(DIALOG);
+        client.set_restart(replacement.restart_fn());
+
+        // Forward enough bytes for the HTTP/2 response HEADERS frame + partial DATA, then cut.
+        proxy.cut_response_after_bytes(256);
+
+        let xml = client.view_hierarchy().expect("mid-body transport drop should restart and replay read");
+        assert!(xml.contains("While using the app"), "expected replacement hierarchy, got: {xml}");
+        assert_eq!(replacement.restarts(), 1);
+    }
+
+    #[test]
+    fn replacement_dying_on_replayed_call_errors_without_looping() {
+        let calls = Arc::new(Mutex::new(0u32));
+        let seen = calls.clone();
+        let mut client = NativeDriverClient::connect(dead_port()).unwrap();
+        client.set_restart(Box::new(move || {
+            *seen.lock().unwrap() += 1;
+            // Replacement is itself dead when the replayed call runs.
+            NativeDriverClient::connect(dead_port())
+        }));
+
+        let err = format!("{:#}", client.view_hierarchy().unwrap_err());
+        assert!(err.contains("restarted") && err.contains("failed again"), "{err}");
+        assert_eq!(*calls.lock().unwrap(), 1, "one RPC must restart at most once, never loop");
+        assert_eq!(client.restarts(), 1);
+        assert_eq!(client.take_restart_notices().len(), 1);
+    }
+
+    #[test]
+    fn notices_accumulate_across_consecutive_restarts() {
+        let s1 = Arc::new(Mutex::new(FakeState { xml: APP.to_string(), ..Default::default() }));
+        let mut first = serve(s1);
+        let mut client = connect_ready(first.port);
+
+        let servers: Arc<Mutex<Vec<Served>>> = Arc::new(Mutex::new(Vec::new()));
+        let servers_for_restart = servers.clone();
+        client.set_restart(Box::new(move || {
+            let st = Arc::new(Mutex::new(FakeState { xml: DIALOG.to_string(), ..Default::default() }));
+            let s = serve(st);
+            let c = connect_ready(s.port);
+            servers_for_restart.lock().unwrap().push(s);
+            Ok(c)
+        }));
+
+        // First drop -> restart 1/3 (do not drain notices yet).
+        first.stop();
+        client.view_hierarchy().unwrap();
+        assert_eq!(client.restarts(), 1);
+
+        // Second drop -> restart 2/3.
+        servers.lock().unwrap()[0].stop();
+        client.view_hierarchy().unwrap();
+        assert_eq!(client.restarts(), 2);
+
+        let notices = client.take_restart_notices();
+        assert_eq!(notices.len(), 2, "{notices:?}");
+        assert!(notices[0].contains("restart 1/3"), "{notices:?}");
+        assert!(notices[1].contains("restart 2/3"), "{notices:?}");
+        assert!(client.take_restart_notices().is_empty());
+    }
+
+    #[test]
+    fn restart_returning_client_with_recovery_already_set_keeps_outer_recovery() {
+        let outer_calls = Arc::new(Mutex::new(0u32));
+        let inner_calls = Arc::new(Mutex::new(0u32));
+        let servers: Arc<Mutex<Vec<Served>>> = Arc::new(Mutex::new(Vec::new()));
+
+        let oc = outer_calls.clone();
+        let ic = inner_calls.clone();
+        let sv = servers.clone();
+        let mut client = NativeDriverClient::connect(dead_port()).unwrap();
+        client.set_restart(Box::new(move || {
+            *oc.lock().unwrap() += 1;
+            let st = Arc::new(Mutex::new(FakeState { xml: APP.to_string(), ..Default::default() }));
+            let s = serve(st);
+            let mut fresh = connect_ready(s.port);
+            let ic2 = ic.clone();
+            fresh.set_restart(Box::new(move || {
+                *ic2.lock().unwrap() += 1;
+                Err(anyhow::anyhow!("inner recovery must be overwritten"))
+            }));
+            sv.lock().unwrap().push(s);
+            Ok(fresh)
+        }));
+
+        client.view_hierarchy().unwrap();
+        assert_eq!(*outer_calls.lock().unwrap(), 1);
+        assert_eq!(*inner_calls.lock().unwrap(), 0);
+
+        // Second drop must still invoke the outer recovery, not the overwritten inner one.
+        servers.lock().unwrap()[0].stop();
+        client.view_hierarchy().unwrap();
+        assert_eq!(*outer_calls.lock().unwrap(), 2);
+        assert_eq!(*inner_calls.lock().unwrap(), 0);
+    }
+
+    #[test]
+    fn panicking_restart_cleans_up_old_session_and_leaves_client_safe_without_retrying() {
+        struct DropFlag(Arc<Mutex<bool>>);
+        impl Drop for DropFlag {
+            fn drop(&mut self) {
+                *self.0.lock().unwrap() = true;
+            }
+        }
+
+        let dropped = Arc::new(Mutex::new(false));
+        let calls = Arc::new(Mutex::new(0u32));
+        let seen = calls.clone();
+        let mut client = NativeDriverClient::connect(dead_port()).unwrap();
+        client.set_keepalive(Box::new(DropFlag(dropped.clone())));
+        client.set_restart(Box::new(move || {
+            *seen.lock().unwrap() += 1;
+            panic!("boom during restart");
+        }));
+
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| client.view_hierarchy()));
+        assert!(panicked.is_err(), "expected restart panic to propagate");
+        assert!(*dropped.lock().unwrap(), "old session keepalive must be dropped before restart runs");
+        assert_eq!(*calls.lock().unwrap(), 1);
+
+        // Later calls must fail fast without re-running the panicking closure.
+        let err = format!("{:#}", client.view_hierarchy().unwrap_err());
+        assert!(err.contains("tcp connect error"), "{err}");
+        assert_eq!(*calls.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn set_location_re_enables_mock_providers_after_mid_call_restart() {
+        let first_state = Arc::new(Mutex::new(FakeState { xml: APP.to_string(), ..Default::default() }));
+        let mut first = serve(first_state.clone());
+        let mut client = connect_ready(first.port);
+        let replacement = Replacement::new(APP);
+        client.set_restart(replacement.restart_fn());
+        let adb = Adb::new("unused-in-these-tests");
+        let mut ops = NativeOps::new(&mut client, &adb);
+
+        ops.set_location(50.0, 14.0).unwrap();
+        assert_eq!(first_state.lock().unwrap().mock_location_enabled_calls, 1);
+        assert_eq!(first_state.lock().unwrap().locations, vec![(50.0, 14.0)]);
+
+        // Driver dies between two `setLocation` calls (e.g., mid-`travel`).
+        first.stop();
+        ops.set_location(50.1, 14.1).unwrap();
+        assert_eq!(replacement.restarts(), 1);
+
+        let repl = replacement.state.lock().unwrap();
+        assert_eq!(repl.locations, vec![(50.1, 14.1)]);
+        assert_eq!(
+            repl.mock_location_enabled_calls, 1,
+            "the restarted driver has no mock location providers until enableMockLocationProviders runs on it"
+        );
+        drop(repl);
+
+        // A follow-up `setLocation` on the restarted session must not redundantly re-enable mock providers.
+        ops.set_location(50.2, 14.2).unwrap();
+        let repl = replacement.state.lock().unwrap();
+        assert_eq!(repl.mock_location_enabled_calls, 1);
+        assert_eq!(repl.locations, vec![(50.1, 14.1), (50.2, 14.2)]);
+        assert_eq!(replacement.restarts(), 1);
+    }
+
+    // --- mock-location cleanup at teardown ---------------------------------
+
+    #[test]
+    fn dropping_the_client_removes_the_mock_providers_it_enabled() {
+        let state = Arc::new(Mutex::new(FakeState { xml: APP.to_string(), ..Default::default() }));
+        let served = serve(state.clone());
+        let mut client = connect_ready(served.port);
+        client.enable_mock_location_providers().unwrap();
+        client.set_location(50.0755, 14.4378).unwrap();
+        assert_eq!(state.lock().unwrap().mock_location_disabled_calls, 0, "kept while the session is in use");
+
+        drop(client);
+        assert_eq!(state.lock().unwrap().mock_location_disabled_calls, 1, "removed when the session ends");
+    }
+
+    #[test]
+    fn a_client_that_never_mocked_location_does_not_call_the_driver_on_drop() {
+        let state = Arc::new(Mutex::new(FakeState { xml: APP.to_string(), ..Default::default() }));
+        let served = serve(state.clone());
+        let mut client = connect_ready(served.port);
+        client.view_hierarchy().unwrap();
+        drop(client);
+        assert_eq!(state.lock().unwrap().mock_location_disabled_calls, 0);
+    }
+
+    #[test]
+    fn the_cleanup_runs_through_the_lane_handle_before_the_session_is_torn_down() {
+        struct Guard(Arc<Mutex<FakeState>>, Arc<Mutex<Option<usize>>>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                // Runs when the keepalive guards stop the instrumentation: the driver must have been told by now.
+                *self.1.lock().unwrap() = Some(self.0.lock().unwrap().mock_location_disabled_calls);
+            }
+        }
+        let state = Arc::new(Mutex::new(FakeState { xml: APP.to_string(), ..Default::default() }));
+        let served = serve(state.clone());
+        let mut client = connect_ready(served.port);
+        let seen = Arc::new(Mutex::new(None));
+        client.set_keepalive(Box::new(Guard(state.clone(), seen.clone())));
+        client.enable_mock_location_providers().unwrap();
+        drop(crate::native_lane::NativeLaneHandle::ready_for_test(client, Adb::new("unused-in-these-tests")));
+        assert_eq!(*seen.lock().unwrap(), Some(1), "disableLocationUpdates must reach the driver before it is stopped");
+    }
+
+    #[test]
+    fn a_restart_does_not_ask_the_dead_session_to_clean_up_but_the_new_one_does() {
+        let first = Arc::new(Mutex::new(FakeState { xml: APP.to_string(), ..Default::default() }));
+        let mut served = serve(first.clone());
+        let mut client = connect_ready(served.port);
+        let replacement = Replacement::new(APP);
+        client.set_restart(replacement.restart_fn());
+        client.enable_mock_location_providers().unwrap();
+
+        served.stop();
+        let t = Instant::now();
+        client.set_location(50.1, 14.1).unwrap();
+        assert!(t.elapsed() < Duration::from_secs(2), "the restart waited on the dead session: {:?}", t.elapsed());
+        assert_eq!(first.lock().unwrap().mock_location_disabled_calls, 0, "the dead session was not contacted");
+
+        drop(client);
+        assert_eq!(
+            replacement.state.lock().unwrap().mock_location_disabled_calls,
+            1,
+            "the providers re-enabled for the replayed setLocation are removed at the end"
+        );
+    }
+}

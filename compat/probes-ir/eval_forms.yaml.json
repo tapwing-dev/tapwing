@@ -1,0 +1,24 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.x = 1}"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "label" : "L",
+      "optional" : false,
+      "scriptString" : "${1}"
+    }
+  } ]
+}

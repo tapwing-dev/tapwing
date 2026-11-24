@@ -1,0 +1,20 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "openLinkCommand" : {
+      "autoVerify" : false,
+      "browser" : false,
+      "link" : "https://example.com",
+      "optional" : false
+    }
+  } ]
+}

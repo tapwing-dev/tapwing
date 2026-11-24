@@ -1,0 +1,41 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "onFlowComplete" : {
+          "commands" : [ {
+            "evalScriptCommand" : {
+              "optional" : false,
+              "scriptString" : "${ console.log('on complete'); }"
+            }
+          } ]
+        },
+        "onFlowStart" : {
+          "commands" : [ {
+            "evalScriptCommand" : {
+              "optional" : false,
+              "scriptString" : "${ console.log('on start'); }"
+            }
+          }, {
+            "assertConditionCommand" : {
+              "condition" : {
+                "scriptCondition" : "${1-1}"
+              },
+              "optional" : false
+            }
+          } ]
+        },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${ console.log('main flow'); }"
+    }
+  } ]
+}

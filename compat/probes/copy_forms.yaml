@@ -1,0 +1,7 @@
+appId: com.example
+---
+- copyTextFrom: x
+- copyTextFrom:
+    id: y
+    label: L
+    optional: true

@@ -1,0 +1,172 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "correct horse battery staple"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "correct horse battery staple"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "4"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "false"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "1683113805263"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "4.12"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "true"
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "323"
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "true"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "2 + 1"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "2"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "false == false"
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Hello"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "repeat" : {
+        "delay" : 100,
+        "repeat" : 2
+      },
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Hello"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : true,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Hello"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Hello"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "copyTextCommand" : {
+      "optional" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Hello"
+      }
+    }
+  }, {
+    "backPressCommand" : {
+      "optional" : false
+    }
+  }, {
+    "backPressCommand" : {
+      "optional" : false
+    }
+  }, {
+    "hideKeyboardCommand" : {
+      "optional" : false
+    }
+  }, {
+    "hideKeyboardCommand" : {
+      "optional" : false
+    }
+  }, {
+    "scrollCommand" : {
+      "optional" : false
+    }
+  }, {
+    "scrollCommand" : {
+      "optional" : false
+    }
+  }, {
+    "clearKeychainCommand" : {
+      "optional" : false
+    }
+  }, {
+    "clearKeychainCommand" : {
+      "optional" : false
+    }
+  }, {
+    "pasteTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "pasteTextCommand" : {
+      "optional" : false
+    }
+  } ]
+}

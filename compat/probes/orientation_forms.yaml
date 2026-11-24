@@ -1,0 +1,6 @@
+appId: com.example
+---
+- setOrientation:
+    orientation: upside_down
+    label: L
+    optional: "true"

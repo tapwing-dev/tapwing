@@ -1,0 +1,839 @@
+{
+  "setupMs": 166.679125,
+  "flows": [
+    {
+      "flow": "Login and browse",
+      "path": "/Users/me/tapwing/examples/sample_app/.maestro/login_and_browse.yaml",
+      "status": "passed",
+      "totalMs": 6968.836125,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 1621.1214169999998,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "profile",
+              "pid": 30047,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"android_arm64\"",
+              "screen": [
+                0.0,
+                0.0
+              ],
+              "dpr": 1.0
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 30047,
+            "grantedPermissions": 0,
+            "phases": {
+              "stopClearMs": 41,
+              "permissionsMs": 37,
+              "amStartMs": 57,
+              "acceptMs": 512.12025,
+              "rejectedConnections": 0,
+              "configureMs": 893.792917,
+              "waitIdleMs": 32.100834
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "assertVisible",
+          "description": "assertVisible \"Welcome back\"",
+          "status": "passed",
+          "ms": 13.313167,
+          "driver": {
+            "element": {
+              "id": 4,
+              "accessibilityText": "Welcome back",
+              "bounds": [
+                84,
+                397,
+                1356,
+                523
+              ]
+            }
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn \"Log in\"",
+          "status": "passed",
+          "ms": 147.713167,
+          "driver": {
+            "element": {
+              "id": 8,
+              "accessibilityText": "Log in",
+              "bounds": [
+                84,
+                1125,
+                1356,
+                1293
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 63403,
+              "actUs": 7106,
+              "settleUs": 71476
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1047 tap 720,1209"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 3,
+          "command": "assertVisible",
+          "description": "assertVisible \"Email is required\"",
+          "status": "passed",
+          "ms": 1.867791,
+          "driver": {
+            "element": {
+              "id": 11,
+              "accessibilityText": "Email is required",
+              "bounds": [
+                84,
+                1083,
+                1356,
+                1153
+              ]
+            }
+          }
+        },
+        {
+          "index": 4,
+          "command": "tapOn",
+          "description": "tapOn \"Email\"",
+          "status": "passed",
+          "ms": 273.5275,
+          "driver": {
+            "element": {
+              "id": 5,
+              "text": "",
+              "hintText": "Email",
+              "resource-id": "email_input",
+              "bounds": [
+                84,
+                607,
+                1356,
+                803
+              ],
+              "clickable": true,
+              "textField": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 36922,
+              "actUs": 7943,
+              "settleUs": 225137
+            },
+            "ime": {
+              "clientId": 1,
+              "keyboard": true,
+              "log": [
+                "1172 tap 720,705",
+                "1174 out TextInput.setClient client=1 text=\"\"",
+                "1174 out TextInput.setEditableSizeAndTransform",
+                "1175 out TextInput.setMarkedTextRect",
+                "1175 out TextInput.setStyle",
+                "1175 out TextInput.setEditingState text=\"\"",
+                "1175 out TextInput.show",
+                "1175 out TextInput.requestAutofill",
+                "1201 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 5,
+          "command": "inputText",
+          "description": "inputText \"jan@example.com\"",
+          "status": "passed",
+          "ms": 86.535334,
+          "driver": {
+            "settle": "stable",
+            "ime": {
+              "usedClient": 1,
+              "clientId": 1,
+              "keyboard": true,
+              "log": [
+                "1411 in  TextInputClient.updateEditingState client=1 text=\"j\"",
+                "1414 in  TextInputClient.updateEditingState client=1 text=\"ja\"",
+                "1415 in  TextInputClient.updateEditingState client=1 text=\"jan\"",
+                "1417 in  TextInputClient.updateEditingState client=1 text=\"jan@\"",
+                "1421 in  TextInputClient.updateEditingState client=1 text=\"jan@e\"",
+                "1437 out TextInput.setMarkedTextRect",
+                "1438 out TextInput.setCaretRect",
+                "1438 in  TextInputClient.updateEditingState client=1 text=\"jan@ex\"",
+                "1441 in  TextInputClient.updateEditingState client=1 text=\"jan@exa\"",
+                "1443 in  TextInputClient.updateEditingState client=1 text=\"jan@exam\"",
+                "1447 in  TextInputClient.updateEditingState client=1 text=\"jan@examp\"",
+                "1447 in  TextInputClient.updateEditingState client=1 text=\"jan@exampl\"",
+                "1448 in  TextInputClient.updateEditingState client=1 text=\"jan@example\"",
+                "1449 in  TextInputClient.updateEditingState client=1 text=\"jan@example.\"",
+                "1451 in  TextInputClient.updateEditingState client=1 text=\"jan@example.c\"",
+                "1452 in  TextInputClient.updateEditingState client=1 text=\"jan@example.co\"",
+                "1452 in  TextInputClient.updateEditingState client=1 text=\"jan@example.com\"",
+                "1459 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 6,
+          "command": "tapOn",
+          "description": "tapOn id: password_input",
+          "status": "passed",
+          "ms": 225.21466700000002,
+          "driver": {
+            "element": {
+              "id": 6,
+              "text": "",
+              "hintText": "Password",
+              "resource-id": "password_input",
+              "bounds": [
+                84,
+                845,
+                1356,
+                1041
+              ],
+              "clickable": true,
+              "textField": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 38910,
+              "actUs": 3416,
+              "settleUs": 180145
+            },
+            "ime": {
+              "clientId": 2,
+              "keyboard": true,
+              "log": [
+                "1540 tap 720,943",
+                "1542 out TextInput.clearClient",
+                "1542 out TextInput.setClient client=2 text=\"\"",
+                "1542 out TextInput.setEditableSizeAndTransform",
+                "1542 out TextInput.setMarkedTextRect",
+                "1542 out TextInput.setStyle",
+                "1542 out TextInput.setEditingState text=\"\"",
+                "1542 out TextInput.show",
+                "1542 out TextInput.requestAutofill",
+                "1560 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 5,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 7,
+          "command": "inputText",
+          "description": "inputText \"secret123\"",
+          "status": "passed",
+          "ms": 17.027542,
+          "driver": {
+            "settle": "idle",
+            "ime": {
+              "usedClient": 2,
+              "clientId": 2,
+              "keyboard": true,
+              "log": [
+                "1730 in  TextInputClient.updateEditingState client=2 text=\"s\"",
+                "1731 in  TextInputClient.updateEditingState client=2 text=\"se\"",
+                "1732 in  TextInputClient.updateEditingState client=2 text=\"sec\"",
+                "1733 in  TextInputClient.updateEditingState client=2 text=\"secr\"",
+                "1734 in  TextInputClient.updateEditingState client=2 text=\"secre\"",
+                "1735 in  TextInputClient.updateEditingState client=2 text=\"secret\"",
+                "1736 in  TextInputClient.updateEditingState client=2 text=\"secret1\"",
+                "1737 in  TextInputClient.updateEditingState client=2 text=\"secret12\"",
+                "1738 in  TextInputClient.updateEditingState client=2 text=\"secret123\"",
+                "1743 out TextInput.setMarkedTextRect",
+                "1743 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 8,
+          "command": "hideKeyboard",
+          "description": "hideKeyboard",
+          "status": "passed",
+          "ms": 112.148375,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 9,
+          "command": "tapOn",
+          "description": "tapOn id: login_button",
+          "status": "passed",
+          "ms": 226.343667,
+          "driver": {
+            "element": {
+              "id": 7,
+              "resource-id": "login_button",
+              "bounds": [
+                84,
+                1237,
+                1356,
+                1405
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 643,
+              "actUs": 1669,
+              "settleUs": 218975
+            },
+            "ime": {
+              "clientId": 2,
+              "keyboard": false,
+              "log": [
+                "1869 tap 720,1321"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 2,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 10,
+          "command": "assertVisible",
+          "description": "assertVisible \"Products\"",
+          "status": "passed",
+          "ms": 416.171167,
+          "driver": {
+            "element": {
+              "id": 32,
+              "accessibilityText": "Products",
+              "bounds": [
+                412,
+                194,
+                721,
+                292
+              ]
+            }
+          }
+        },
+        {
+          "index": 11,
+          "command": "assertVisible",
+          "description": "assertVisible \"Product 1.*\"",
+          "status": "passed",
+          "ms": 7.461958,
+          "driver": {
+            "element": {
+              "id": 15,
+              "accessibilityText": "Product 1\n€ 3.00",
+              "bounds": [
+                356,
+                341,
+                1796,
+                593
+              ],
+              "clickable": true
+            }
+          }
+        },
+        {
+          "index": 12,
+          "command": "scrollUntilVisible",
+          "description": "scrollUntilVisible \"Product 40.*\"",
+          "status": "passed",
+          "ms": 1873.408542,
+          "driver": {
+            "element": {
+              "id": 59,
+              "accessibilityText": "Product 40\n€ 120.00",
+              "bounds": [
+                0,
+                2755,
+                1440,
+                3007
+              ],
+              "clickable": true
+            },
+            "swipes": 5
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 13,
+          "command": "tapOn",
+          "description": "tapOn \"Product 40.*\"",
+          "status": "passed",
+          "ms": 479.62375000000003,
+          "driver": {
+            "element": {
+              "id": 59,
+              "accessibilityText": "Product 40\n€ 120.00",
+              "bounds": [
+                0,
+                2755,
+                1440,
+                3007
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 429,
+              "actUs": 1820,
+              "settleUs": 474358
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "4396 tap 720,2881"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 14,
+          "command": "assertVisible",
+          "description": "assertVisible \"Details of Product 40\"",
+          "status": "passed",
+          "ms": 5.245459,
+          "driver": {
+            "element": {
+              "id": 67,
+              "accessibilityText": "Details of Product 40",
+              "bounds": [
+                56,
+                397,
+                1384,
+                467
+              ]
+            }
+          }
+        },
+        {
+          "index": 15,
+          "command": "tapOn",
+          "description": "tapOn id: favorite_switch",
+          "status": "passed",
+          "ms": 59.398375,
+          "driver": {
+            "element": {
+              "id": 70,
+              "resource-id": "favorite_switch",
+              "bounds": [
+                56,
+                523,
+                1384,
+                719
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 4600,
+              "actUs": 2613,
+              "settleUs": 49359
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "4888 tap 720,621"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 2,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 16,
+          "command": "assertVisible",
+          "description": "assertVisible \"Favorite\"",
+          "status": "passed",
+          "ms": 2.4802090000000003,
+          "driver": {
+            "element": {
+              "id": 71,
+              "accessibilityText": "Favorite",
+              "bounds": [
+                56,
+                523,
+                1384,
+                719
+              ],
+              "clickable": true,
+              "checked": true
+            }
+          }
+        },
+        {
+          "index": 17,
+          "command": "back",
+          "description": "back",
+          "status": "passed",
+          "ms": 493.80575,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 18,
+          "command": "assertVisible",
+          "description": "assertVisible \"Products\"",
+          "status": "passed",
+          "ms": 2.5024159999999998,
+          "driver": {
+            "element": {
+              "id": 32,
+              "accessibilityText": "Products",
+              "bounds": [
+                56,
+                194,
+                365,
+                292
+              ]
+            }
+          }
+        },
+        {
+          "index": 19,
+          "command": "tapOn",
+          "description": "tapOn \"Add product\"",
+          "status": "passed",
+          "ms": 194.963084,
+          "driver": {
+            "element": {
+              "id": 33,
+              "accessibilityText": "Add product",
+              "bounds": [
+                1188,
+                2784,
+                1384,
+                2980
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 482,
+              "actUs": 1965,
+              "settleUs": 189914
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "5448 tap 1286,2882"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 20,
+          "command": "assertVisible",
+          "description": "assertVisible \"New product\"",
+          "status": "passed",
+          "ms": 3.058208,
+          "driver": {
+            "element": {
+              "id": 83,
+              "accessibilityText": "New product",
+              "bounds": [
+                314,
+                1283,
+                1126,
+                1395
+              ]
+            }
+          }
+        },
+        {
+          "index": 21,
+          "command": "tapOn",
+          "description": "tapOn \"Name\"",
+          "status": "passed",
+          "ms": 260.89275,
+          "driver": {
+            "element": {
+              "id": 85,
+              "text": "",
+              "hintText": "Name",
+              "bounds": [
+                314,
+                1451,
+                1126,
+                1647
+              ],
+              "clickable": true,
+              "textField": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 40967,
+              "actUs": 2939,
+              "settleUs": 214481
+            },
+            "ime": {
+              "clientId": 3,
+              "keyboard": true,
+              "log": [
+                "5689 tap 720,1549",
+                "5691 out TextInput.setClient client=3 text=\"\"",
+                "5691 out TextInput.setEditableSizeAndTransform",
+                "5691 out TextInput.setMarkedTextRect",
+                "5691 out TextInput.setStyle",
+                "5691 out TextInput.setEditingState text=\"\"",
+                "5691 out TextInput.show",
+                "5691 out TextInput.requestAutofill",
+                "5708 out TextInput.setCaretRect",
+                "5776 out TextInput.setEditableSizeAndTransform",
+                "5789 out TextInput.setEditableSizeAndTransform",
+                "5791 out TextInput.setMarkedTextRect",
+                "5791 out TextInput.setCaretRect",
+                "5806 out TextInput.setEditableSizeAndTransform",
+                "5807 out TextInput.setMarkedTextRect",
+                "5808 out TextInput.setCaretRect",
+                "5822 out TextInput.setEditableSizeAndTransform",
+                "5823 out TextInput.setMarkedTextRect",
+                "5823 out TextInput.setCaretRect",
+                "5839 out TextInput.setEditableSizeAndTransform",
+                "5840 out TextInput.setMarkedTextRect",
+                "5840 out TextInput.setCaretRect",
+                "5855 out TextInput.setEditableSizeAndTransform",
+                "5855 out TextInput.setMarkedTextRect",
+                "5856 out TextInput.setCaretRect",
+                "5871 out TextInput.setEditableSizeAndTransform",
+                "5872 out TextInput.setMarkedTextRect",
+                "5872 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 22,
+          "command": "inputText",
+          "description": "inputText \"Tapwing\"",
+          "status": "passed",
+          "ms": 47.1145,
+          "driver": {
+            "settle": "stable",
+            "ime": {
+              "usedClient": 3,
+              "clientId": 3,
+              "keyboard": true,
+              "log": [
+                "5912 in  TextInputClient.updateEditingState client=3 text=\"K\"",
+                "5913 in  TextInputClient.updateEditingState client=3 text=\"Ko\"",
+                "5914 in  TextInputClient.updateEditingState client=3 text=\"Kol\"",
+                "5914 in  TextInputClient.updateEditingState client=3 text=\"Koli\"",
+                "5915 in  TextInputClient.updateEditingState client=3 text=\"Tapwi\"",
+                "5917 in  TextInputClient.updateEditingState client=3 text=\"Tapwir\"",
+                "5918 in  TextInputClient.updateEditingState client=3 text=\"Tapwing\"",
+                "5925 out TextInput.setMarkedTextRect",
+                "5925 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 23,
+          "command": "tapOn",
+          "description": "tapOn \"Add\"",
+          "status": "passed",
+          "ms": 331.89375,
+          "driver": {
+            "element": {
+              "id": 87,
+              "accessibilityText": "Add",
+              "bounds": [
+                869,
+                1731,
+                1126,
+                1899
+              ],
+              "clickable": true
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 44685,
+              "actUs": 2129,
+              "settleUs": 281985
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "6007 tap 998,1815",
+                "6008 out TextInput.clearClient",
+                "6008 out TextInput.hide"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 24,
+          "command": "assertVisible",
+          "description": "assertVisible \"Added Tapwing\"",
+          "status": "passed",
+          "ms": 2.5357499999999997,
+          "driver": {
+            "element": {
+              "id": 88,
+              "accessibilityText": "Added Tapwing",
+              "bounds": [
+                0,
+                2868,
+                1440,
+                3120
+              ],
+              "scrollable": true
+            }
+          }
+        },
+        {
+          "index": 25,
+          "command": "assertNotVisible",
+          "description": "assertNotVisible \"New product\"",
+          "status": "passed",
+          "ms": 2.318292,
+          "driver": true
+        }
+      ]
+    }
+  ]
+}

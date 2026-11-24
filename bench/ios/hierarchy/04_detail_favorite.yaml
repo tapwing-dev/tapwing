@@ -1,0 +1,17 @@
+appId: dev.tapwing.sampleApp
+---
+- launchApp
+- tapOn: "Email"
+- inputText: "jan@example.com"
+- tapOn:
+    id: "password_input"
+- inputText: "secret123"
+- tapOn:
+    id: "login_button"
+- assertVisible: "Products"
+- tapOn: "Product 2.*"
+- tapOn:
+    id: "favorite_switch"
+- assertVisible:
+    text: "Favorite"
+    checked: true

@@ -1,0 +1,76 @@
+appId: dev.tapwing.sample_app
+name: F2 Text Clipboard and Keys
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- tapOn:
+    id: "nav_text_keys"
+- copyTextFrom:
+    id: "copy_source"
+- tapOn:
+    id: "secret_field"
+- back
+- assertVisible: "Text & Keys"
+- tapOn:
+    id: "secret_field"
+- pressKey: Back
+- assertVisible: "Text & Keys"
+- tapOn:
+    id: "field_one"
+- pasteText
+- assertVisible: "Tapwing-Copy-99"
+- pressKey: Backspace
+- assertVisible: "Tapwing-Copy-9"
+- pressKey: Enter
+- assertVisible: "Submitted: Tapwing-Copy-9"
+- tapOn:
+    id: "field_one"
+- eraseText: 30
+- setClipboard: "From-Host-Clipboard"
+- pasteText
+- assertVisible: "From-Host-Clipboard"
+- pressKey: Tab
+- inputText: "TabTarget"
+- assertVisible:
+    text: "TabTarget"
+    childOf:
+      id: "field_two"
+- eraseText: 20
+- inputRandomText:
+    length: 6
+- assertVisible:
+    text: ".{6}"
+    childOf:
+      id: "field_two"
+- eraseText: 20
+- inputRandomNumber:
+    length: 5
+- assertVisible:
+    text: "[0-9]{5}"
+    childOf:
+      id: "field_two"
+- eraseText: 20
+- inputRandomEmail
+- assertVisible:
+    text: ".+@.+\\..+"
+    childOf:
+      id: "field_two"
+- eraseText: 40
+- inputRandomPersonName
+- eraseText: 40
+- inputRandomCityName
+- eraseText: 30
+- inputRandomCountryName
+- eraseText: 30
+- inputRandomColorName
+- tapOn: "Open Key Dialog"
+- assertVisible: "Key Dialog"
+- pressKey: Escape
+- assertNotVisible: "Key Dialog"
+- tapOn: "Open Key Dialog"
+- assertVisible: "Key Dialog"
+- pressKey: Back
+- assertNotVisible: "Key Dialog"
+- pressKey: Volume Up

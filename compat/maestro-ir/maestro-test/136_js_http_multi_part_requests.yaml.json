@@ -1,0 +1,21 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "xyz.blueskyweb.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : { },
+      "optional" : false,
+      "script" : "const response = http.post('https://eu.httpbin.org/anything', {\n    multipartForm: {\n        imagefile: {\n            filePath: \"../media/abc.png\",\n        },\n        name: \"logo\"\n    }\n})\n\nconsole.log(JSON.stringify(response.body, null, 2));\n",
+      "scriptDir" : "<ROOT>/maestro-test/script",
+      "sourceDescription" : "./script/multipart_request_file_script.js"
+    }
+  } ]
+}

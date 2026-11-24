@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Media File Not Found at <ROOT>/e2e/demo_app/issues/issue1821.yaml:6:3",
+    "type" : "SyntaxError"
+  }
+}

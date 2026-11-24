@@ -1,0 +1,39 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.other.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "retryCommand" : {
+      "commands" : [ {
+        "scrollCommand" : {
+          "optional" : false
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Button"
+          },
+          "waitToSettleTimeoutMs" : 40,
+          "waitUntilVisible" : false
+        }
+      }, {
+        "scrollCommand" : {
+          "optional" : false
+        }
+      } ],
+      "maxRetries" : "3",
+      "optional" : false
+    }
+  } ]
+}

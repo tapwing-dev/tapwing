@@ -1,0 +1,16 @@
+appId: dev.tapwing.sampleApp
+name: hideKeyboard with a focused field (iOS)
+---
+# Screen center (Maestro's micro-swipe origin) is empty on "Text & Keys", so
+# only the app's tap-outside handling decides whether the field unfocuses.
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- tapOn:
+    id: "nav_text_keys"
+- tapOn:
+    id: "field_one"
+- inputText: "Tapwing"
+- hideKeyboard
+- assertVisible: "Text & Keys"

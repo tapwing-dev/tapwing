@@ -1,0 +1,40 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "assertWithAICommand" : {
+      "assertion" : "looks good",
+      "optional" : true
+    }
+  }, {
+    "assertWithAICommand" : {
+      "assertion" : "ok",
+      "optional" : false
+    }
+  }, {
+    "extractTextWithAICommand" : {
+      "optional" : true,
+      "outputVariable" : "aiOutput",
+      "query" : "price"
+    }
+  }, {
+    "extractTextWithAICommand" : {
+      "optional" : true,
+      "outputVariable" : "out",
+      "query" : "q"
+    }
+  }, {
+    "assertNoDefectsWithAICommand" : {
+      "label" : "L",
+      "optional" : true
+    }
+  } ]
+}

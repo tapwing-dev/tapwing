@@ -1,0 +1,9 @@
+type= 49 id='email_input'                    label='Email'                  y=194..250  focus=False
+type= 49 id='password_input'                 label='Password'               y=262..318  focus=False
+type=  1 id='SystemInputAssistantView'       label=''                       y=874..918 OFFSCREEN focus=False
+type=  1 id=''                               label='Typing Predictions'     y=874..884 OFFSCREEN focus=False
+type=  1 id='UIKeyboardLayoutStar Preview'   label=''                       y=918..1144 OFFSCREEN focus=False
+type=  9 id='shift'                          label='shift'                  y=1033..1087 OFFSCREEN focus=False
+type= 20 id='delete'                         label='delete'                 y=1033..1087 OFFSCREEN focus=False
+type= 20 id='space'                          label='space'                  y=1087..1141 OFFSCREEN focus=False
+type=  9 id='Done'                           label='done'                   y=1087..1141 OFFSCREEN focus=False

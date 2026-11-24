@@ -1,0 +1,75 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "evalScriptCommand" : {
+          "optional" : false,
+          "scriptString" : "${output.test = 'bar'}"
+        }
+      }, {
+        "assertConditionCommand" : {
+          "condition" : {
+            "scriptCondition" : "${output.test == 'bar'}"
+          },
+          "optional" : false
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "idRegex" : "fabAddIcon",
+            "optional" : false
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "1"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "THIS_THING" : "six"
+          },
+          "optional" : false
+        }
+      }, {
+        "assertConditionCommand" : {
+          "condition" : {
+            "scriptCondition" : "${THIS_THING == \"six\"}"
+          },
+          "optional" : false
+        }
+      } ],
+      "optional" : false
+    }
+  } ]
+}

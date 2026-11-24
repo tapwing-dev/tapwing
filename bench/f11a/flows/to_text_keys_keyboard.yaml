@@ -1,0 +1,13 @@
+# Leaves the Text & Keys screen with field one focused, text in it and the soft keyboard up.
+appId: dev.tapwing.sample_app
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- tapOn:
+    id: "nav_text_keys"
+- tapOn:
+    id: "field_one"
+- inputText: "Příliš žluťoučký kůň"
+- waitForAnimationToEnd

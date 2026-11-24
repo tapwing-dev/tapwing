@@ -1,0 +1,59 @@
+appId: dev.tapwing.sample_app
+name: F4 Android device commands
+---
+# Host-side device commands (Android): adb-driven, no in-app driver needed.
+- launchApp:
+    clearState: true
+- assertVisible: "Welcome back"
+
+# Dark mode: set / toggle / assert.
+- setDarkMode: enabled
+- assertDarkMode
+- toggleDarkMode
+- assertLightMode
+- setDarkMode: disabled
+- assertLightMode
+
+# Orientation, restored afterwards so later flows start in portrait.
+- setOrientation: LANDSCAPE_LEFT
+- setOrientation: portrait
+- assertVisible: "Welcome back"
+
+# Location (emulator: `adb emu geo fix`; physical devices need the native lane).
+- setLocation:
+    latitude: 50.0755
+    longitude: 14.4378
+- travel:
+    points:
+      - 50.0755, 14.4378
+      - 50.0880, 14.4208
+      - 50.0910, 14.4004
+    speed: 2000
+
+# Permissions: `all` first, explicit entries override it.
+- setPermissions:
+    permissions:
+      all: deny
+      camera: allow
+      location: allow
+- launchApp:
+    stopApp: false
+
+# Airplane mode round trip.
+- setAirplaneMode: enabled
+- setAirplaneMode: disabled
+- toggleAirplaneMode
+- toggleAirplaneMode
+
+# Media library and deep link.
+- addMedia:
+    - ref_visual_badge.png
+- openLink: https://example.com/?a=1&b=2
+- launchApp:
+    stopApp: false
+
+# Screen recording (file lands in the test output directory).
+- startRecording: f4_recording
+- tapOn:
+    id: "playground_button"
+- stopRecording

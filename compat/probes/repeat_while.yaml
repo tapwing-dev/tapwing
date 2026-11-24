@@ -1,0 +1,12 @@
+appId: com.example
+---
+- repeat:
+    while:
+      notVisible: done
+    commands:
+      - scroll
+- repeat:
+    times: ${n}
+    label: L
+    commands:
+      - back

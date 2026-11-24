@@ -1,0 +1,29 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "setAirplaneModeCommand" : {
+      "optional" : false,
+      "value" : "Enable"
+    }
+  }, {
+    "setAirplaneModeCommand" : {
+      "label" : "L",
+      "optional" : true,
+      "value" : "Disable"
+    }
+  }, {
+    "setDarkModeCommand" : {
+      "optional" : false,
+      "value" : "Disable"
+    }
+  } ]
+}

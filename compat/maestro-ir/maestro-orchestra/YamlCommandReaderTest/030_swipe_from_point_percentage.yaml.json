@@ -1,0 +1,24 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.test",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "swipeCommand" : {
+      "direction" : "LEFT",
+      "duration" : 400,
+      "elementSelector" : {
+        "optional" : false,
+        "textRegex" : "Card A"
+      },
+      "optional" : false,
+      "relativePoint" : "50%, 85%"
+    }
+  } ]
+}

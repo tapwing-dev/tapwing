@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Parsing Failed at <ROOT>/input_scalars.yaml:7:34",
+    "type" : "SyntaxError"
+  }
+}

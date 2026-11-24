@@ -1,0 +1,18 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "optional" : false,
+      "path" : "134_screenshots/filename"
+    }
+  } ]
+}

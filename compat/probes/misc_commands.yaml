@@ -1,0 +1,29 @@
+appId: com.example
+---
+- setLocation:
+    latitude: 43.7230
+    longitude: 10.3966
+- setClipboard: hi
+- setClipboard:
+    text: yo
+    label: L
+- startRecording: rec
+- startRecording:
+    path: rec2
+    optional: true
+- takeScreenshot: shot
+- takeScreenshot:
+    path: s2
+    cropOn:
+      id: x
+- assertScreenshot: base
+- assertScreenshot:
+    path: base2
+    thresholdPercentage: 90
+    cropOn: y
+- waitForAnimationToEnd:
+    timeout: 3000
+- pressKey: Remote Dpad Up
+- pressKey:
+    key: tv input hdmi 2
+    label: L

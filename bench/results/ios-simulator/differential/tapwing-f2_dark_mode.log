@@ -1,0 +1,14 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 181 ms
+
+▶ F2 Dark Mode (iOS)
+  ✓   150.7 ms  setDarkMode
+  ✓  3081.8 ms  launchApp (clearState)
+  ✓   585.7 ms  tapOn id: playground_button
+  ✓   541.7 ms  tapOn id: nav_screenshot_theme
+  ✓     3.2 ms  assertVisible "Theme: dark"
+  ✓   168.6 ms  assertDarkMode
+  ✓   260.1 ms  toggleDarkMode
+  ✓   194.2 ms  assertVisible "Theme: light"
+  ✓   166.9 ms  assertLightMode
+PASSED F2 Dark Mode (iOS) in 5163 ms
+settle check (v2): 0 violation(s)

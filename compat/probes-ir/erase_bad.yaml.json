@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Failed to parse file: <ROOT>/erase_bad.yaml\nList is empty.",
+    "type" : "SyntaxError"
+  }
+}

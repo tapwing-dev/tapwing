@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Media File Not Found at <ROOT>/maestro-orchestra/media/android/add_multiple_media.yaml:3:3",
+    "type" : "SyntaxError"
+  }
+}

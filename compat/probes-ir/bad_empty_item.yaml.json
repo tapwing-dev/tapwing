@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Parsing Failed at <ROOT>/bad_empty_item.yaml:3:5",
+    "type" : "SyntaxError"
+  }
+}

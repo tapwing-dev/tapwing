@@ -1,0 +1,23 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "Hello World"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "user@example.com"
+    }
+  } ]
+}

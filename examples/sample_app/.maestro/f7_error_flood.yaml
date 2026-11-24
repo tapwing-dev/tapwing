@@ -1,0 +1,26 @@
+# F7 error-flooding stress test (>= 1000 errors/s):
+#   1. Fires 2000 unique uncaught errors over ~1 s to overflow the driver's
+#      500-entry ring buffer and surface `dropped > 0`.
+#   2. Fires 2000 repeated identical uncaught errors over ~1 s to verify
+#      deduplication (`count > 1`) keeps the buffer bounded with 0 extra drops.
+#   3. Exercises a follow-up UI interaction to verify the driver stays responsive.
+#
+#   tapwing test .maestro/f7_error_flood.yaml
+appId: dev.tapwing.sample_app
+name: F7 Error Flood
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- scrollUntilVisible:
+    element:
+      id: "nav_app_health"
+- tapOn:
+    id: "nav_app_health"
+- tapOn: "Flood unique errors"
+- assertVisible: "Health: flooded 2000 unique.*"
+- tapOn: "Flood repeated errors"
+- assertVisible: "Health: flooded 2000 repeated.*"
+- tapOn: "Show overflow"
+- assertVisible: "Health: overflow shown"

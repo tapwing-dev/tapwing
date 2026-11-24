@@ -1,0 +1,23 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "swipeCommand" : {
+      "direction" : "RIGHT",
+      "duration" : 400,
+      "elementSelector" : {
+        "optional" : false,
+        "textRegex" : "swiping element"
+      },
+      "optional" : false
+    }
+  } ]
+}

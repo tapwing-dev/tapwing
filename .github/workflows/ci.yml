@@ -1,0 +1,61 @@
+name: CI
+
+# Orchestrates every test suite in the repository on each pull request and on
+# every push to `main`. Each layer lives in its own reusable workflow below;
+# `CI Gate` is the single required status check enforced on `main`.
+#
+# Nothing here boots an emulator or simulator, so runs stay deterministic and fast.
+# Device runs (`tapwing test` against a real app) are run manually, not in PR CI.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  rust:
+    name: Rust
+    uses: ./.github/workflows/ci-rust.yml
+
+  dart:
+    name: Dart & Sample App
+    uses: ./.github/workflows/ci-dart.yml
+
+  android-driver:
+    name: Android driver
+    uses: ./.github/workflows/ci-android-driver.yml
+
+  scripts:
+    name: Release scripts
+    uses: ./.github/workflows/ci-scripts.yml
+
+  # The single check the `main` branch ruleset requires. It fails when any job above failed, was
+  # cancelled or was skipped (a matrix leg that never ran must not pass silently), and always
+  # runs (`if: always()`) so that a failed dependency is reported instead of leaving the check pending.
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [rust, dart, android-driver, scripts]
+    steps:
+      - name: Verify every job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          failed=$(echo "$NEEDS" | jq -r 'to_entries[] | select(.value.result != "success") | "\(.key)=\(.value.result)"')
+          if [[ -n "$failed" ]]; then
+            echo
+            echo "CI Gate: these jobs did not succeed:" >&2
+            echo "$failed" | sed 's/^/  - /' >&2
+            exit 1
+          fi
+          echo
+          echo "CI Gate: all jobs succeeded."

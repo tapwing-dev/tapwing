@@ -1,0 +1,10 @@
+# Non-ASCII text into a web <input> in Chrome (native lane only). Needs the
+# page served on the device's 127.0.0.1:8099 (see bench/f11a/README.md).
+appId: com.android.chrome
+---
+- openLink: http://127.0.0.1:8099/
+- tapOn: "Query"
+- inputText: "Příliš žluťoučký kůň"
+- assertVisible: "Příliš žluťoučký kůň"
+- inputText: " 42"
+- assertVisible: "Příliš žluťoučký kůň 42"

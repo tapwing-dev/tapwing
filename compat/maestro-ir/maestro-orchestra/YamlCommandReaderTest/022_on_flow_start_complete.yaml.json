@@ -1,0 +1,32 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "onFlowComplete" : {
+          "commands" : [ {
+            "scrollCommand" : {
+              "optional" : false
+            }
+          } ]
+        },
+        "onFlowStart" : {
+          "commands" : [ {
+            "backPressCommand" : {
+              "optional" : false
+            }
+          } ]
+        },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.app",
+      "optional" : false
+    }
+  } ]
+}

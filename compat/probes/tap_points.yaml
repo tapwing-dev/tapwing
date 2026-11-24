@@ -1,0 +1,23 @@
+appId: com.example
+---
+- tapOn:
+    point: 50%,50%
+- tapOn:
+    text: x
+    point: 10%, 20%
+- tapOn:
+    point: 100, 200
+    repeat: 0
+- tapOn:
+    text: y
+    repeat: 3
+    delay: -5
+    waitToSettleTimeoutMs: 50000
+    retryTapIfNoChange: true
+    waitUntilVisible: true
+    optional: true
+    label: L
+- longPressOn: z
+- doubleTapOn:
+    id: q
+    delay: 250

@@ -1,0 +1,25 @@
+appId: com.example
+---
+- hide keyboard
+- launchApp
+- stopApp
+- killApp
+- clearState
+- clearKeychain
+- eraseText
+- inputRandomText
+- inputRandomNumber
+- inputRandomEmail
+- inputRandomPersonName
+- inputRandomCityName
+- inputRandomCountryName
+- inputRandomColorName
+- pasteText
+- scroll
+- waitForAnimationToEnd
+- stopRecording
+- toggleAirplaneMode
+- toggleDarkMode
+- assertDarkMode
+- assertLightMode
+- assertNoDefectsWithAI

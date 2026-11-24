@@ -1,0 +1,23 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.app",
+      "optional" : false
+    }
+  }, {
+    "addMediaCommand" : {
+      "mediaPaths" : [ "<ROOT>/maestro-orchestra/workspaces/016_normalized_media_paths/test-image.jpg" ],
+      "optional" : false
+    }
+  } ]
+}

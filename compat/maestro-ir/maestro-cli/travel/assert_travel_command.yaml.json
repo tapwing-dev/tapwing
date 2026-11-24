@@ -1,0 +1,73 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.google.android.apps.maps",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.google.android.apps.maps",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : true,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : true,
+        "textRegex" : "Skip"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "setLocationCommand" : {
+      "latitude" : "48.8578065",
+      "longitude" : "2.295188",
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : ".*Eiffel.*"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "travelCommand" : {
+      "optional" : false,
+      "points" : [ {
+        "latitude" : "48.8578065",
+        "longitude" : "2.295188"
+      }, {
+        "latitude" : "46.2276",
+        "longitude" : "5.99"
+      }, {
+        "latitude" : "43.723",
+        "longitude" : "10.3966"
+      }, {
+        "latitude" : "41.8902",
+        "longitude" : "12.4922"
+      } ],
+      "speedMPS" : 1000.0
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : ".*Colosseo.*"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

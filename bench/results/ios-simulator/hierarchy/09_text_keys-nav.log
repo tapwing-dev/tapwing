@@ -1,0 +1,9 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 169 ms
+
+▶ 09_text_keys
+  ✓  2166.7 ms  launchApp
+  ✓   602.1 ms  tapOn "F2 Playground"
+  ✓     1.7 ms  assertVisible id: nav_selectors_taps
+  ✓   541.4 ms  tapOn id: nav_text_keys
+  ✓     1.3 ms  assertVisible "Tapwing-Copy-99"
+PASSED 09_text_keys in 3314 ms

@@ -1,0 +1,28 @@
+Running on iPhone 18 Pro - iOS 27.2 - 47862A4D-744F-4125-8D9E-20D8B51AD7DF
+ > Flow F2 Selectors and Taps
+Launch app "dev.tapwing.sampleApp" with clear state... COMPLETED
+Tap on id: playground_button... COMPLETED
+Tap on id: nav_selectors_taps... COMPLETED
+Assert that "Traits Ready", Has traits: Has text is visible... COMPLETED
+Assert that id: square_box, Has traits: Is square is visible... COMPLETED
+Assert that id: long_text_field, Has traits: Has long text is visible... COMPLETED
+Assert that id: square_box, Has traits: Has long text is not visible... COMPLETED
+Tap on id: split_target at 20%, 50%... COMPLETED
+Assert that "Left hit" is visible... COMPLETED
+Tap on id: split_target at 80%, 50%... COMPLETED
+Assert that "Right hit" is visible... COMPLETED
+Tap on id: split_target at 20, 20... COMPLETED
+Assert that "Left hit" is visible... COMPLETED
+Double tap on "Double tap me"... COMPLETED
+Assert that "Double tapped" is visible... COMPLETED
+Long press on "Long press me"... COMPLETED
+Assert that "Long pressed" is visible... COMPLETED
+Tap on id: retry_button... COMPLETED
+Assert that "Retry succeeded" is visible... COMPLETED
+Tap on "Show covered target"... COMPLETED
+Tap on "Covered target"... COMPLETED
+Assert that "Covered tapped" is visible... COMPLETED
+Tap on "Start 8.5s task"... COMPLETED
+Assert that "Working 8.5s..." is visible... COMPLETED
+Assert that "Working 8.5s..." is not visible... COMPLETED
+Assert that (Optional) "Optional missing element" is visible... WARNED

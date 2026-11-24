@@ -1,0 +1,13 @@
+appId: com.example
+---
+- scrollUntilVisible:
+    element:
+      id: x
+    visibilityPercentage: 150
+    speed: 70
+    timeout: 5000
+    centerElement: true
+    waitToSettleTimeoutMs: 20
+- scrollUntilVisible:
+    element: y
+    visibilityPercentage: 50

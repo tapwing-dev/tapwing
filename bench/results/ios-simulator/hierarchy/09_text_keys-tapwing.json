@@ -1,0 +1,263 @@
+{
+  "screen": [
+    402.0,
+    874.0
+  ],
+  "root": {
+    "id": -1,
+    "accessibilityText": "Sample App",
+    "bounds": [
+      0,
+      0,
+      402,
+      874
+    ],
+    "children": [
+      {
+        "id": 0,
+        "bounds": [
+          0,
+          0,
+          402,
+          874
+        ],
+        "children": [
+          {
+            "id": 1,
+            "bounds": [
+              0,
+              0,
+              402,
+              874
+            ],
+            "children": [
+              {
+                "id": 28,
+                "bounds": [
+                  0,
+                  0,
+                  402,
+                  874
+                ],
+                "children": [
+                  {
+                    "id": 29,
+                    "bounds": [
+                      0,
+                      0,
+                      402,
+                      874
+                    ],
+                    "children": [
+                      {
+                        "id": 46,
+                        "bounds": [
+                          0,
+                          0,
+                          402,
+                          118
+                        ],
+                        "children": [
+                          {
+                            "id": 47,
+                            "accessibilityText": "Back",
+                            "bounds": [
+                              4,
+                              66,
+                              52,
+                              114
+                            ]
+                          },
+                          {
+                            "id": 48,
+                            "accessibilityText": "Text & Keys",
+                            "bounds": [
+                              148,
+                              76,
+                              253,
+                              104
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": 30,
+                        "bounds": [
+                          0,
+                          118,
+                          402,
+                          874
+                        ],
+                        "children": [
+                          {
+                            "id": 45,
+                            "bounds": [
+                              0,
+                              118,
+                              402,
+                              874
+                            ],
+                            "children": [
+                              {
+                                "id": 31,
+                                "bounds": [
+                                  16,
+                                  134,
+                                  386,
+                                  154
+                                ],
+                                "children": [
+                                  {
+                                    "id": 32,
+                                    "accessibilityText": "Tapwing-Copy-99",
+                                    "resource-id": "copy_source",
+                                    "bounds": [
+                                      16,
+                                      134,
+                                      386,
+                                      154
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 33,
+                                "bounds": [
+                                  16,
+                                  154,
+                                  386,
+                                  166
+                                ]
+                              },
+                              {
+                                "id": 34,
+                                "bounds": [
+                                  16,
+                                  166,
+                                  386,
+                                  222
+                                ],
+                                "children": [
+                                  {
+                                    "id": 35,
+                                    "accessibilityText": "Field One",
+                                    "resource-id": "field_one",
+                                    "bounds": [
+                                      16,
+                                      166,
+                                      386,
+                                      222
+                                    ],
+                                    "textField": true
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 36,
+                                "bounds": [
+                                  16,
+                                  222,
+                                  386,
+                                  234
+                                ]
+                              },
+                              {
+                                "id": 37,
+                                "bounds": [
+                                  16,
+                                  234,
+                                  386,
+                                  290
+                                ],
+                                "children": [
+                                  {
+                                    "id": 38,
+                                    "accessibilityText": "Field Two",
+                                    "resource-id": "field_two",
+                                    "bounds": [
+                                      16,
+                                      234,
+                                      386,
+                                      290
+                                    ],
+                                    "textField": true
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 39,
+                                "bounds": [
+                                  16,
+                                  290,
+                                  386,
+                                  302
+                                ]
+                              },
+                              {
+                                "id": 40,
+                                "bounds": [
+                                  16,
+                                  302,
+                                  386,
+                                  358
+                                ],
+                                "children": [
+                                  {
+                                    "id": 41,
+                                    "accessibilityText": "Secret",
+                                    "resource-id": "secret_field",
+                                    "bounds": [
+                                      16,
+                                      302,
+                                      386,
+                                      358
+                                    ],
+                                    "textField": true
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 42,
+                                "bounds": [
+                                  16,
+                                  358,
+                                  386,
+                                  374
+                                ]
+                              },
+                              {
+                                "id": 43,
+                                "bounds": [
+                                  16,
+                                  374,
+                                  386,
+                                  422
+                                ],
+                                "children": [
+                                  {
+                                    "id": 44,
+                                    "accessibilityText": "Open Key Dialog",
+                                    "bounds": [
+                                      16,
+                                      374,
+                                      386,
+                                      422
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

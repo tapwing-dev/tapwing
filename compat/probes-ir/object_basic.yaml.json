@@ -1,0 +1,47 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "backPressCommand" : {
+      "label" : "B",
+      "optional" : true
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT",
+      "length" : 5,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT_EMAIL_ADDRESS",
+      "label" : "E",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "stopAppCommand" : {
+      "appId" : "other",
+      "optional" : false
+    }
+  }, {
+    "clearStateCommand" : {
+      "appId" : "other.app",
+      "optional" : false
+    }
+  }, {
+    "killAppCommand" : {
+      "appId" : "com.example",
+      "label" : "K",
+      "optional" : false
+    }
+  } ]
+}

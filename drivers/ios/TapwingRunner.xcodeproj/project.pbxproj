@@ -1,0 +1,396 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B00000010000000000000001 /* AppMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000010000000000000001 /* AppMain.swift */; };
+		B00000020000000000000001 /* HttpFraming.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000001 /* HttpFraming.swift */; };
+		B00000020000000000000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000002 /* Models.swift */; };
+		B00000020000000000000003 /* OrientationMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000003 /* OrientationMath.swift */; };
+		B00000020000000000000004 /* RunnerTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000004 /* RunnerTest.swift */; };
+		B00000020000000000000005 /* HttpServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000005 /* HttpServer.swift */; };
+		B00000020000000000000006 /* Router.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000006 /* Router.swift */; };
+		B00000020000000000000007 /* HierarchyBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000007 /* HierarchyBuilder.swift */; };
+		B00000020000000000000008 /* ScreenSizeHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000008 /* ScreenSizeHelper.swift */; };
+		B00000020000000000000009 /* TextInputHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000009 /* TextInputHelper.swift */; };
+		B00000020000000000000010 /* Actions.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000010 /* Actions.swift */; };
+		B00000020000000000000011 /* ScreenProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000011 /* ScreenProbe.swift */; };
+		B00000020000000000000012 /* RunningApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000012 /* RunningApp.swift */; };
+		B00000020000000000000013 /* XCTestRuntimeBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000013 /* XCTestRuntimeBridge.m */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D00000010000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00000010000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = T00000010000000000000001;
+			remoteInfo = TapwingRunner;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		P00000010000000000000001 /* TapwingRunner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TapwingRunner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		P00000020000000000000001 /* TapwingRunnerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TapwingRunnerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F00000010000000000000001 /* AppMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMain.swift; sourceTree = "<group>"; };
+		F00000010000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F00000020000000000000001 /* HttpFraming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HttpFraming.swift; sourceTree = "<group>"; };
+		F00000020000000000000002 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		F00000020000000000000003 /* OrientationMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationMath.swift; sourceTree = "<group>"; };
+		F00000020000000000000004 /* RunnerTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTest.swift; sourceTree = "<group>"; };
+		F00000020000000000000005 /* HttpServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HttpServer.swift; sourceTree = "<group>"; };
+		F00000020000000000000006 /* Router.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Router.swift; sourceTree = "<group>"; };
+		F00000020000000000000007 /* HierarchyBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HierarchyBuilder.swift; sourceTree = "<group>"; };
+		F00000020000000000000008 /* ScreenSizeHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenSizeHelper.swift; sourceTree = "<group>"; };
+		F00000020000000000000009 /* TextInputHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputHelper.swift; sourceTree = "<group>"; };
+		F00000020000000000000010 /* Actions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Actions.swift; sourceTree = "<group>"; };
+		F00000020000000000000011 /* ScreenProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenProbe.swift; sourceTree = "<group>"; };
+		F00000020000000000000012 /* RunningApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunningApp.swift; sourceTree = "<group>"; };
+		F00000020000000000000013 /* XCTestRuntimeBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = XCTestRuntimeBridge.m; sourceTree = "<group>"; };
+		F00000020000000000000014 /* XCTestRuntimeBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = XCTestRuntimeBridge.h; sourceTree = "<group>"; };
+		F00000020000000000000015 /* TapwingRunnerUITests-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TapwingRunnerUITests-Bridging-Header.h"; sourceTree = "<group>"; };
+		F00000020000000000000016 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		FR0000010000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FR0000020000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		G00000010000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				G00000020000000000000001 /* Core */,
+				G00000030000000000000001 /* HostApp */,
+				G00000040000000000000001 /* UITests */,
+				G00000060000000000000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		G00000020000000000000001 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				F00000020000000000000001 /* HttpFraming.swift */,
+				F00000020000000000000002 /* Models.swift */,
+				F00000020000000000000003 /* OrientationMath.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		G00000030000000000000001 /* HostApp */ = {
+			isa = PBXGroup;
+			children = (
+				F00000010000000000000001 /* AppMain.swift */,
+				F00000010000000000000002 /* Info.plist */,
+			);
+			path = HostApp;
+			sourceTree = "<group>";
+		};
+		G00000040000000000000001 /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				F00000020000000000000004 /* RunnerTest.swift */,
+				F00000020000000000000005 /* HttpServer.swift */,
+				F00000020000000000000006 /* Router.swift */,
+				F00000020000000000000007 /* HierarchyBuilder.swift */,
+				F00000020000000000000008 /* ScreenSizeHelper.swift */,
+				F00000020000000000000009 /* TextInputHelper.swift */,
+				F00000020000000000000010 /* Actions.swift */,
+				F00000020000000000000011 /* ScreenProbe.swift */,
+				F00000020000000000000016 /* Info.plist */,
+				G00000050000000000000001 /* XCTestPrivate */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
+		G00000050000000000000001 /* XCTestPrivate */ = {
+			isa = PBXGroup;
+			children = (
+				F00000020000000000000012 /* RunningApp.swift */,
+				F00000020000000000000013 /* XCTestRuntimeBridge.m */,
+				F00000020000000000000014 /* XCTestRuntimeBridge.h */,
+				F00000020000000000000015 /* TapwingRunnerUITests-Bridging-Header.h */,
+			);
+			path = XCTestPrivate;
+			sourceTree = "<group>";
+		};
+		G00000060000000000000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				P00000010000000000000001 /* TapwingRunner.app */,
+				P00000020000000000000001 /* TapwingRunnerUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		T00000010000000000000001 /* TapwingRunner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C00000020000000000000001 /* Build configuration list for PBXNativeTarget "TapwingRunner" */;
+			buildPhases = (
+				SR0000010000000000000001 /* Sources */,
+				FR0000010000000000000001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TapwingRunner;
+			productName = TapwingRunner;
+			productReference = P00000010000000000000001 /* TapwingRunner.app */;
+			productType = "com.apple.product-type.application";
+		};
+		T00000020000000000000001 /* TapwingRunnerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C00000030000000000000001 /* Build configuration list for PBXNativeTarget "TapwingRunnerUITests" */;
+			buildPhases = (
+				SR0000020000000000000001 /* Sources */,
+				FR0000020000000000000001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D00000020000000000000001 /* PBXTargetDependency */,
+			);
+			name = TapwingRunnerUITests;
+			productName = TapwingRunnerUITests;
+			productReference = P00000020000000000000001 /* TapwingRunnerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A00000010000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					T00000010000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					T00000020000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = T00000010000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = C00000010000000000000001 /* Build configuration list for PBXProject "TapwingRunner" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = G00000010000000000000001;
+			productRefGroup = G00000060000000000000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				T00000010000000000000001 /* TapwingRunner */,
+				T00000020000000000000001 /* TapwingRunnerUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		SR0000010000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000010000000000000001 /* AppMain.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		SR0000020000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000020000000000000001 /* HttpFraming.swift in Sources */,
+				B00000020000000000000002 /* Models.swift in Sources */,
+				B00000020000000000000003 /* OrientationMath.swift in Sources */,
+				B00000020000000000000004 /* RunnerTest.swift in Sources */,
+				B00000020000000000000005 /* HttpServer.swift in Sources */,
+				B00000020000000000000006 /* Router.swift in Sources */,
+				B00000020000000000000007 /* HierarchyBuilder.swift in Sources */,
+				B00000020000000000000008 /* ScreenSizeHelper.swift in Sources */,
+				B00000020000000000000009 /* TextInputHelper.swift in Sources */,
+				B00000020000000000000010 /* Actions.swift in Sources */,
+				B00000020000000000000011 /* ScreenProbe.swift in Sources */,
+				B00000020000000000000012 /* RunningApp.swift in Sources */,
+				B00000020000000000000013 /* XCTestRuntimeBridge.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D00000020000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = T00000010000000000000001 /* TapwingRunner */;
+			targetProxy = D00000010000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		CF0000010000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_IDENTITY = "-";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = NO;
+				GCC_OPTIMIZATION_LEVEL = s;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = NO;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CF0000010000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_IDENTITY = "-";
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = NO;
+				GCC_OPTIMIZATION_LEVEL = s;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = NO;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		CF0000020000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HostApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.tapwing.ios-runner";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		CF0000020000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HostApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.tapwing.ios-runner";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		CF0000030000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = UITests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.tapwing.ios-runnerUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "UITests/XCTestPrivate/TapwingRunnerUITests-Bridging-Header.h";
+				TEST_TARGET_NAME = TapwingRunner;
+				USES_XCTRUNNER = YES;
+			};
+			name = Debug;
+		};
+		CF0000030000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = UITests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.tapwing.ios-runnerUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "UITests/XCTestPrivate/TapwingRunnerUITests-Bridging-Header.h";
+				TEST_TARGET_NAME = TapwingRunner;
+				USES_XCTRUNNER = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C00000010000000000000001 /* Build configuration list for PBXProject "TapwingRunner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF0000010000000000000001 /* Debug */,
+				CF0000010000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C00000020000000000000001 /* Build configuration list for PBXNativeTarget "TapwingRunner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF0000020000000000000001 /* Debug */,
+				CF0000020000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C00000030000000000000001 /* Build configuration list for PBXNativeTarget "TapwingRunnerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF0000030000000000000001 /* Debug */,
+				CF0000030000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A00000010000000000000001 /* Project object */;
+}

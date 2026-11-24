@@ -1,0 +1,45 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.other.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "repeatCommand" : {
+      "commands" : [ {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Button"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "condition" : {
+        "notVisible" : {
+          "optional" : false,
+          "textRegex" : "Value 3"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Value 3"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

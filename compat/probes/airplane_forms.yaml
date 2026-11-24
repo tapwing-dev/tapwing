@@ -1,0 +1,8 @@
+appId: com.example
+---
+- setAirplaneMode: enabled
+- setAirplaneMode:
+    value: disabled
+    label: L
+    optional: true
+- setDarkMode: disabled

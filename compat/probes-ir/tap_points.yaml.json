@@ -1,0 +1,86 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : false,
+      "optional" : false,
+      "point" : "50%,50%",
+      "retryIfNoChange" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "relativePoint" : "10%, 20%",
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "x"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : false,
+      "optional" : false,
+      "point" : "100, 200",
+      "repeat" : {
+        "delay" : 100,
+        "repeat" : 1
+      },
+      "retryIfNoChange" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "label" : "L",
+      "longPress" : false,
+      "optional" : true,
+      "repeat" : {
+        "delay" : 100,
+        "repeat" : 3
+      },
+      "retryIfNoChange" : true,
+      "selector" : {
+        "optional" : true,
+        "textRegex" : "y"
+      },
+      "waitToSettleTimeoutMs" : 30000,
+      "waitUntilVisible" : true
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : true,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "z"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "repeat" : {
+        "delay" : 250,
+        "repeat" : 2
+      },
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "q",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  } ]
+}

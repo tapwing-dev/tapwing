@@ -1,0 +1,8 @@
+appId: a
+---
+- inputText: 1.50
+- inputText: 007
+- inputText: true
+- inputText: 1e3
+- inputText: 12345678901234567890
+- inputText: 0x1F

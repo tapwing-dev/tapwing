@@ -1,0 +1,8 @@
+device emulator-5554 · setup 288 ms
+
+▶ Negative Assert Not Visible
+  ✓  2202.2 ms  launchApp (clearState)
+  ✓     3.6 ms  assertVisible "Welcome back"
+  ✗  1002.0 ms  extendedWaitUntil "Welcome back"
+      "Text matching regex: Welcome back" is visible
+FAILED Negative Assert Not Visible in 3208 ms

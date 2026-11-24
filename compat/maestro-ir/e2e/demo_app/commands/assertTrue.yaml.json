@@ -1,0 +1,46 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "THING" : "five"
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${\"test\" == \"test\"}"
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${12 < 20}"
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${THING == \"five\"}"
+      },
+      "optional" : false
+    }
+  } ]
+}

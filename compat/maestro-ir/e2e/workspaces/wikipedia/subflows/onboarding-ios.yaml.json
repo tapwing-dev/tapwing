@@ -1,0 +1,73 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "org.wikimedia.wikipedia",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "org.wikimedia.wikipedia",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Next"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "repeatCommand" : {
+      "commands" : [ {
+        "swipeCommand" : {
+          "direction" : "LEFT",
+          "duration" : 400,
+          "optional" : false
+        }
+      }, {
+        "waitForAnimationToEndCommand" : {
+          "optional" : false
+        }
+      } ],
+      "condition" : {
+        "notVisible" : {
+          "optional" : false,
+          "textRegex" : "Get started"
+        }
+      },
+      "optional" : false,
+      "times" : "5"
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Get started"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : true,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : true,
+        "textRegex" : "Non existent view"
+      },
+      "waitUntilVisible" : false
+    }
+  } ]
+}

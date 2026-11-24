@@ -1,0 +1,53 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "below" : {
+            "optional" : false,
+            "textRegex" : "b"
+          },
+          "childOf" : {
+            "idRegex" : "p",
+            "optional" : false
+          },
+          "containsChild" : {
+            "optional" : false,
+            "textRegex" : "d"
+          },
+          "containsDescendants" : [ {
+            "optional" : false,
+            "textRegex" : "e"
+          }, {
+            "enabled" : false,
+            "idRegex" : "f",
+            "optional" : false
+          } ],
+          "css" : ".x",
+          "optional" : false,
+          "rightOf" : {
+            "optional" : false,
+            "textRegex" : "c"
+          },
+          "size" : {
+            "height" : 50,
+            "tolerance" : 2,
+            "width" : 100
+          },
+          "textRegex" : "a"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

@@ -1,0 +1,39 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "onFlowComplete" : {
+          "commands" : [ {
+            "inputTextCommand" : {
+              "optional" : false,
+              "text" : "test2"
+            }
+          } ]
+        },
+        "onFlowStart" : {
+          "commands" : [ {
+            "inputTextCommand" : {
+              "optional" : false,
+              "text" : "test1"
+            }
+          } ]
+        },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "idRegex" : "element_id",
+          "optional" : false
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

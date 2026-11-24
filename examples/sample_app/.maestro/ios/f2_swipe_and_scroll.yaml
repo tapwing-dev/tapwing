@@ -1,0 +1,69 @@
+appId: dev.tapwing.sampleApp
+name: F2 Swipe and Scroll
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- tapOn:
+    id: "nav_swipe_scroll"
+- swipe:
+    from:
+      id: "dismiss_a"
+    direction: LEFT
+- assertVisible: "Dismiss A done"
+- swipe:
+    from:
+      id: "dismiss_b"
+      point: "20%, 50%"
+    direction: RIGHT
+- assertVisible: "Dismiss B done"
+- scroll
+- swipe:
+    direction: UP
+    duration: 300
+- swipe:
+    start: "50%, 75%"
+    end: "50%, 35%"
+    duration: 300
+- swipe:
+    start: "200, 600"
+    end: "200, 350"
+    duration: 300
+- scrollUntilVisible:
+    element: "VRow 35"
+    direction: DOWN
+    speed: 70
+    visibilityPercentage: 100
+    centerElement: true
+    waitToSettleTimeoutMs: 300
+- assertVisible: "VRow 35"
+- scrollUntilVisible:
+    element: "VRow 1"
+    direction: UP
+    speed: 80
+- assertVisible: "VRow 1"
+- tapOn: "Horizontal mode"
+- scrollUntilVisible:
+    element: "HCard 10"
+    direction: RIGHT
+    speed: 70
+    visibilityPercentage: 80
+    centerElement: true
+    waitToSettleTimeoutMs: 300
+- assertVisible: "HCard 10"
+- scrollUntilVisible:
+    element: "HCard 1"
+    direction: LEFT
+    speed: 70
+- assertVisible: "HCard 1"
+- tapOn: "PageView mode"
+- assertVisible: "Snap Page 1"
+- scrollUntilVisible:
+    element: "Snap Page 3"
+    direction: RIGHT
+    speed: 90
+- assertVisible: "Snap Page 3"
+- swipe:
+    direction: RIGHT
+- assertVisible: "Snap Page 2"

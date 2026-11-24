@@ -1,0 +1,14 @@
+target/
+build/
+.dart_tool/
+*.iml
+.idea/
+bench/apks/
+bench/maestro/
+bench/results/**/maestro-*/
+bench/*.json
+!bench/results/**/summary.md
+compat/harness/build/
+.tapwing/
+reviews/snapshots/
+dist/

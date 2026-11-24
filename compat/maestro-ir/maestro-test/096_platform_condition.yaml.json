@@ -1,0 +1,52 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "Hello iOS"
+        }
+      } ],
+      "condition" : {
+        "platform" : "IOS"
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "Hello ios"
+        }
+      } ],
+      "condition" : {
+        "platform" : "IOS"
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "Hello Android"
+        }
+      } ],
+      "condition" : {
+        "platform" : "ANDROID"
+      },
+      "optional" : false
+    }
+  } ]
+}

@@ -1,0 +1,23 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.app",
+      "optional" : false
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "optional" : false,
+      "path" : "${MAESTRO_FILENAME}_${MAESTRO_DEVICE_UDID}_shard${MAESTRO_SHARD_ID}_idx${MAESTRO_SHARD_INDEX}"
+    }
+  } ]
+}

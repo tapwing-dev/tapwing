@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Invalid Command at <ROOT>/bad_seq_item.yaml:3:4",
+    "type" : "SyntaxError"
+  }
+}

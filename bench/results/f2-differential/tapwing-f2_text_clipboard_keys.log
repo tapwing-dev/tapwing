@@ -1,0 +1,56 @@
+device emulator-5554 · setup 163 ms
+
+▶ F2 Text Clipboard and Keys
+  ✓  2413.4 ms  launchApp (clearState)
+  ✓   491.9 ms  tapOn id: playground_button
+  ✓   497.1 ms  tapOn id: nav_text_keys
+  ✓     2.8 ms  copyTextFrom
+  ✓   217.6 ms  tapOn id: secret_field
+  ✓   141.1 ms  back
+  ✓     4.6 ms  assertVisible "Text & Keys"
+  ✓   123.5 ms  tapOn id: secret_field
+  ✓   108.8 ms  pressKey
+  ✓     2.3 ms  assertVisible "Text & Keys"
+  ✓   195.1 ms  tapOn id: field_one
+  ✓    37.2 ms  pasteText
+  ✓     4.1 ms  assertVisible "Tapwing-Copy-99"
+  ✓    14.8 ms  pressKey
+  ✓     3.3 ms  assertVisible "Tapwing-Copy-9"
+  ✓   156.2 ms  pressKey
+  ✓     1.8 ms  assertVisible "Submitted: Tapwing-Copy-9"
+  ✓   212.4 ms  tapOn id: field_one
+  ✓   177.8 ms  eraseText
+  ✓     0.0 ms  setClipboard
+  ✓    32.4 ms  pasteText
+  ✓     3.7 ms  assertVisible "From-Host-Clipboard"
+  ✓   108.4 ms  pressKey
+  ✓    65.5 ms  inputText "TabTarget"
+  ✓     2.1 ms  assertVisible "TabTarget"
+  ✓    25.4 ms  eraseText
+  ✓    13.7 ms  inputRandom
+  ✓     2.6 ms  assertVisible ".{6}"
+  ✓    26.3 ms  eraseText
+  ✓    15.4 ms  inputRandom
+  ✓     2.3 ms  assertVisible "[0-9]{5}"
+  ✓    21.2 ms  eraseText
+  ✓    49.2 ms  inputRandom
+  ✓     5.0 ms  assertVisible ".+@.+\..+"
+  ✓    37.3 ms  eraseText
+  ✓    29.9 ms  inputRandom
+  ✓    29.0 ms  eraseText
+  ✓    13.3 ms  inputRandom
+  ✓    17.3 ms  eraseText
+  ✓    24.7 ms  inputRandom
+  ✓    15.6 ms  eraseText
+  ✓    29.6 ms  inputRandom
+  ✓   242.6 ms  tapOn "Open Key Dialog"
+  ✓     2.2 ms  assertVisible "Key Dialog"
+  ✓   207.0 ms  pressKey
+  ✓     3.4 ms  assertNotVisible "Key Dialog"
+  ✓   228.1 ms  tapOn "Open Key Dialog"
+  ✓     2.6 ms  assertVisible "Key Dialog"
+  ✓   209.1 ms  pressKey
+  ✓     4.1 ms  assertNotVisible "Key Dialog"
+  ✓   243.7 ms  pressKey
+PASSED F2 Text Clipboard and Keys in 6667 ms
+settle check (v2): 0 violation(s)

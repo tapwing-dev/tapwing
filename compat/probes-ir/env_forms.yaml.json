@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Commands Section Required at <ROOT>/env_forms.yaml:3:1",
+    "type" : "SyntaxError"
+  }
+}

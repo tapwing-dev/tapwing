@@ -1,0 +1,65 @@
+{
+  "setupMs": 218.045583,
+  "flows": [
+    {
+      "flow": "Negative Missing Element",
+      "path": "/Users/me/tapwing/examples/sample_app/.maestro/negative/fail_missing_element.yaml",
+      "status": "failed",
+      "totalMs": 2645.41,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 1636.577958,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "profile",
+              "pid": 13587,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"android_arm64\"",
+              "screen": [
+                0.0,
+                0.0
+              ],
+              "dpr": 1.0
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 13587,
+            "grantedPermissions": 0,
+            "phases": {
+              "stopClearMs": 31,
+              "permissionsMs": 48,
+              "amStartMs": 43,
+              "acceptMs": 436.294375,
+              "rejectedConnections": 0,
+              "configureMs": 1014.1903750000001,
+              "waitIdleMs": 22.344709
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "extendedWaitUntil",
+          "description": "extendedWaitUntil \"Definitely Does Not Exist\"",
+          "status": "failed",
+          "ms": 1001.5044580000001,
+          "error": "Element not found: Text matching regex: Definitely Does Not Exist"
+        }
+      ]
+    }
+  ]
+}

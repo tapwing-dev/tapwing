@@ -1,0 +1,69 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "scrollUntilVisible" : {
+      "centerElement" : false,
+      "direction" : "DOWN",
+      "optional" : false,
+      "originalSpeedValue" : "40",
+      "scrollDuration" : "40",
+      "selector" : {
+        "idRegex" : "maybe-later",
+        "optional" : false
+      },
+      "timeout" : "20000",
+      "visibilityPercentage" : 100,
+      "waitToSettleTimeoutMs" : 50,
+      "visibilityPercentageNormalized" : 1.0
+    }
+  }, {
+    "swipeCommand" : {
+      "duration" : 400,
+      "endRelative" : "10%, 50%",
+      "optional" : false,
+      "startRelative" : "90%, 50%",
+      "waitToSettleTimeoutMs" : 50
+    }
+  }, {
+    "swipeCommand" : {
+      "direction" : "LEFT",
+      "duration" : 400,
+      "optional" : false,
+      "waitToSettleTimeoutMs" : 50
+    }
+  }, {
+    "swipeCommand" : {
+      "direction" : "LEFT",
+      "duration" : 400,
+      "elementSelector" : {
+        "idRegex" : "feeditem_identifier",
+        "optional" : false
+      },
+      "optional" : false,
+      "waitToSettleTimeoutMs" : 50
+    }
+  }, {
+    "swipeCommand" : {
+      "duration" : 400,
+      "endPoint" : {
+        "x" : 300,
+        "y" : 400
+      },
+      "optional" : false,
+      "startPoint" : {
+        "x" : 100,
+        "y" : 200
+      },
+      "waitToSettleTimeoutMs" : 50
+    }
+  } ]
+}

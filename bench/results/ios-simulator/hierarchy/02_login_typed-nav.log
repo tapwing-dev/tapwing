@@ -1,0 +1,9 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 150 ms
+
+▶ 02_login_typed
+  ✓  2166.8 ms  launchApp
+  ✓   120.5 ms  tapOn "Log in"
+  ✓   831.9 ms  tapOn "Email"
+  ✓   295.2 ms  inputText "jan@example.com"
+  ✓     1.4 ms  assertVisible "Email is required"
+PASSED 02_login_typed in 3416 ms

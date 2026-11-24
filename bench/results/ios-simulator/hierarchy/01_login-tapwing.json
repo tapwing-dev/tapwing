@@ -1,0 +1,140 @@
+{
+  "screen": [
+    402.0,
+    874.0
+  ],
+  "root": {
+    "id": -1,
+    "accessibilityText": "Sample App",
+    "bounds": [
+      0,
+      0,
+      402,
+      874
+    ],
+    "children": [
+      {
+        "id": 0,
+        "bounds": [
+          0,
+          0,
+          402,
+          874
+        ],
+        "children": [
+          {
+            "id": 1,
+            "bounds": [
+              0,
+              0,
+              402,
+              874
+            ],
+            "children": [
+              {
+                "id": 2,
+                "bounds": [
+                  0,
+                  0,
+                  402,
+                  874
+                ],
+                "children": [
+                  {
+                    "id": 3,
+                    "bounds": [
+                      0,
+                      0,
+                      402,
+                      874
+                    ],
+                    "children": [
+                      {
+                        "id": 4,
+                        "accessibilityText": "Welcome back",
+                        "bounds": [
+                          24,
+                          134,
+                          378,
+                          170
+                        ]
+                      },
+                      {
+                        "id": 5,
+                        "accessibilityText": "Email",
+                        "resource-id": "email_input",
+                        "bounds": [
+                          24,
+                          194,
+                          378,
+                          250
+                        ],
+                        "textField": true
+                      },
+                      {
+                        "id": 6,
+                        "accessibilityText": "Password",
+                        "resource-id": "password_input",
+                        "bounds": [
+                          24,
+                          262,
+                          378,
+                          318
+                        ],
+                        "textField": true
+                      },
+                      {
+                        "id": 7,
+                        "resource-id": "login_button",
+                        "bounds": [
+                          24,
+                          342,
+                          378,
+                          390
+                        ],
+                        "children": [
+                          {
+                            "id": 8,
+                            "accessibilityText": "Log in",
+                            "bounds": [
+                              24,
+                              342,
+                              378,
+                              390
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": 9,
+                        "resource-id": "playground_button",
+                        "bounds": [
+                          24,
+                          402,
+                          378,
+                          450
+                        ],
+                        "children": [
+                          {
+                            "id": 10,
+                            "accessibilityText": "F2 Playground",
+                            "bounds": [
+                              24,
+                              402,
+                              378,
+                              450
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

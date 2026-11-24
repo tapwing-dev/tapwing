@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Missing Command Options at <ROOT>/missing_options.yaml:3:3",
+    "type" : "SyntaxError"
+  }
+}

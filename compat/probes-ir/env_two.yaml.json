@@ -1,0 +1,28 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "a",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "X" : "1"
+      },
+      "optional" : false
+    }
+  }, {
+    "backPressCommand" : {
+      "optional" : false
+    }
+  }, {
+    "scrollCommand" : {
+      "optional" : false
+    }
+  } ]
+}

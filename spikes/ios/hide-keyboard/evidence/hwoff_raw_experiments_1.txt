@@ -1,0 +1,12 @@
+== HW OFF: maestro-like swipe 1
+{"isKeyboardVisible":true}
+== swipe 2
+{"isKeyboardVisible":true}
+== tap static text 'Welcome back'
+{"isKeyboardVisible":true}
+== tap empty area (201,450)
+{"isKeyboardVisible":true}
+== pressKey escape
+{"isKeyboardVisible":true}
+== swipe down on keyboard (201,600)->(201,860) 300ms (interactive dismiss gesture)
+{"isKeyboardVisible":true}

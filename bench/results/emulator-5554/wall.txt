@@ -1,0 +1,8 @@
+maestro run 1: 55.0 s
+maestro run 2: 52.1 s
+maestro run 3: 52.5 s
+control: PASSED
+control run: 53.0 s
+tapwing run 1: 7.5 s
+tapwing run 2: 8.1 s
+tapwing run 3: 7.2 s

@@ -1,0 +1,18 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 187 ms
+
+▶ F2 hideKeyboard (iOS)
+  ✓  2988.3 ms  launchApp (clearState)
+  ✓   936.1 ms  tapOn "Email"
+  ✓   379.9 ms  inputText "jan@example.com"
+  ✓   132.2 ms  hideKeyboard
+      ⚠ hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step ("Couldn't hide the keyboard") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro.
+  ✓   818.7 ms  tapOn id: password_input
+  ✓   160.5 ms  inputText "secret123"
+  ✓    99.6 ms  hideKeyboard
+      ⚠ hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step ("Couldn't hide the keyboard") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro.
+  ✓    49.1 ms  hideKeyboard
+      ⚠ hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step ("Couldn't hide the keyboard") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro.
+  ✓   283.2 ms  tapOn id: login_button
+  ✓   530.7 ms  assertVisible "Products"
+PASSED F2 hideKeyboard (iOS) in 6394 ms
+settle check (v2): 0 violation(s)

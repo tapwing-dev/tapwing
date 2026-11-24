@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Invalid Command Format: tapOn at <ROOT>/maestro-orchestra/workspaces/e021_multiple_command_names/workspace/Flow.yaml:4:12",
+    "type" : "SyntaxError"
+  }
+}

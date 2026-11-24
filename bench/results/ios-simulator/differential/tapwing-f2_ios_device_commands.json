@@ -1,0 +1,194 @@
+{
+  "platform": "ios",
+  "setupMs": 178.76920800000002,
+  "flows": [
+    {
+      "flow": "F2 iOS device commands",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/f2_ios_device_commands.yaml",
+      "status": "passed",
+      "totalMs": 5320.343792,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 3105.1389999999997,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 53837,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"ios_arm64\"",
+              "screen": [
+                1206.0,
+                2622.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 53837,
+            "oldPids": [],
+            "grantedPermissions": 2,
+            "phases": {
+              "stopClearMs": 828,
+              "permissionsMs": 314,
+              "simctlLaunchMs": 326,
+              "acceptMs": 1272.276625,
+              "rejectedConnections": 1,
+              "configureMs": 192.218584,
+              "waitIdleMs": 3.1041250000000002
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "assertVisible",
+          "description": "assertVisible \"Welcome back\"",
+          "status": "passed",
+          "ms": 6.147833,
+          "driver": {
+            "element": {
+              "id": 4,
+              "accessibilityText": "Welcome back",
+              "bounds": [
+                24,
+                134,
+                378,
+                170
+              ]
+            }
+          }
+        },
+        {
+          "index": 2,
+          "command": "setPermissions",
+          "description": "setPermissions",
+          "status": "passed",
+          "ms": 286.06879200000003,
+          "driver": {
+            "privacyActions": 2
+          }
+        },
+        {
+          "index": 3,
+          "command": "setLocation",
+          "description": "setLocation",
+          "status": "passed",
+          "ms": 155.40220799999997,
+          "driver": {
+            "latitude": 50.0755,
+            "longitude": 14.4378
+          }
+        },
+        {
+          "index": 4,
+          "command": "clearKeychain",
+          "description": "clearKeychain",
+          "status": "passed",
+          "ms": 153.936917,
+          "driver": null
+        },
+        {
+          "index": 5,
+          "command": "setAirplaneMode",
+          "description": "setAirplaneMode",
+          "status": "passed",
+          "ms": 0.000584,
+          "driver": {
+            "noop": true,
+            "warning": "Airplane mode is not available on iOS simulators (Maestro parity: ignored)"
+          },
+          "warning": "Airplane mode is not available on iOS simulators (Maestro parity: ignored)"
+        },
+        {
+          "index": 6,
+          "command": "pressKey",
+          "description": "pressKey",
+          "status": "passed",
+          "ms": 0.000583,
+          "driver": {
+            "noop": true,
+            "note": "IOSDriver.pressKey ignores this key"
+          }
+        },
+        {
+          "index": 7,
+          "command": "launchApp",
+          "description": "launchApp",
+          "status": "passed",
+          "ms": 1593.334416,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 54122,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"ios_arm64\"",
+              "screen": [
+                1206.0,
+                2622.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 54122,
+            "oldPids": [],
+            "grantedPermissions": 2,
+            "phases": {
+              "stopClearMs": 0,
+              "permissionsMs": 270,
+              "simctlLaunchMs": 164,
+              "acceptMs": 1149.181292,
+              "rejectedConnections": 1,
+              "configureMs": 5.908459,
+              "waitIdleMs": 2.45825
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 8,
+          "command": "assertVisible",
+          "description": "assertVisible \"Welcome back\"",
+          "status": "passed",
+          "ms": 6.123,
+          "driver": {
+            "element": {
+              "id": 4,
+              "accessibilityText": "Welcome back",
+              "bounds": [
+                24,
+                134,
+                378,
+                170
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

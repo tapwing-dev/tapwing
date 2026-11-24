@@ -1,0 +1,9 @@
+appId: com.example
+---
+- swipe:
+    from:
+      id: card
+      point: 50%, 90%
+    direction: left
+    duration: 300
+    label: L

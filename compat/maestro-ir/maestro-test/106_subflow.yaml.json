@@ -1,0 +1,40 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "onFlowComplete" : {
+          "commands" : [ {
+            "runScriptCommand" : {
+              "env" : { },
+              "optional" : false,
+              "script" : "output.teardown_subflow_result = 'teardown subflow';",
+              "scriptDir" : "<ROOT>/maestro-test",
+              "sourceDescription" : "106_teardown.js"
+            }
+          } ]
+        },
+        "onFlowStart" : {
+          "commands" : [ {
+            "runScriptCommand" : {
+              "env" : { },
+              "optional" : false,
+              "script" : "output.setup_subflow_result = 'setup subflow';",
+              "scriptDir" : "<ROOT>/maestro-test",
+              "sourceDescription" : "106_setup.js"
+            }
+          } ]
+        },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${ console.log('subflow'); }"
+    }
+  } ]
+}

@@ -1,0 +1,408 @@
+[
+  {
+    "name": "000_individual_file",
+    "input": [
+      "000_individual_file/flow.yaml"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "001_simple",
+    "input": [
+      "001_simple"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "001_multiple_files",
+    "input": [
+      "001_simple/flowA.yaml",
+      "001_simple/flowB.yaml"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "002_subflows",
+    "input": [
+      "002_subflows"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "002_multiple_folders",
+    "input": [
+      "001_simple",
+      "002_subflows"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "002_files_and_folders",
+    "input": [
+      "000_individual_file/flow.yaml",
+      "001_simple",
+      "002_subflows",
+      "003_include_tags/flowC.yaml"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "003_include_tags",
+    "input": [
+      "003_include_tags"
+    ],
+    "includeTags": [
+      "included"
+    ],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "004_exclude_tags",
+    "input": [
+      "004_exclude_tags"
+    ],
+    "includeTags": [],
+    "excludeTags": [
+      "excluded"
+    ],
+    "config": null
+  },
+  {
+    "name": "005_custom_include_pattern",
+    "input": [
+      "005_custom_include_pattern"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "006_include_subfolders",
+    "input": [
+      "006_include_subfolders"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "007_empty_config",
+    "input": [
+      "007_empty_config"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "008_literal_pattern",
+    "input": [
+      "008_literal_pattern"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "009_custom_config_fields",
+    "input": [
+      "009_custom_config_fields"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "010_global_include_tags",
+    "input": [
+      "010_global_include_tags"
+    ],
+    "includeTags": [
+      "featureB"
+    ],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "011_global_exclude_tags",
+    "input": [
+      "011_global_exclude_tags"
+    ],
+    "includeTags": [],
+    "excludeTags": [
+      "featureA"
+    ],
+    "config": null
+  },
+  {
+    "name": "013_execution_order",
+    "input": [
+      "013_execution_order"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "014_config_not_null",
+    "input": [
+      "014_config_not_null"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": "014_config_not_null/config/another_config.yaml"
+  },
+  {
+    "name": "015_workspace_cloud_configs",
+    "input": [
+      "015_workspace_cloud_configs"
+    ],
+    "includeTags": [
+      "included"
+    ],
+    "excludeTags": [
+      "notIncluded"
+    ],
+    "config": null
+  },
+  {
+    "name": "016_normalized_media_paths",
+    "input": [
+      "016_normalized_media_paths"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "017_normalized_media_paths_subflow",
+    "input": [
+      "017_normalized_media_paths_subflow"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "018_additional_config_files",
+    "input": [
+      "018_additional_config_files"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "019_negation_exclude_single_file",
+    "input": [
+      "019_negation_exclude_single_file"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "020_negation_exclude_directory",
+    "input": [
+      "020_negation_exclude_directory"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "021_negation_with_specific_positive",
+    "input": [
+      "021_negation_with_specific_positive"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "x01_cli_and_config_include_tags",
+    "input": [
+      "010_global_include_tags"
+    ],
+    "includeTags": [
+      "featureC"
+    ],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "x02_single_file_ignores_tags",
+    "input": [
+      "003_include_tags/flowB.yaml"
+    ],
+    "includeTags": [
+      "included"
+    ],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "x03_explicit_config_file_is_not_a_flow",
+    "input": [
+      "005_custom_include_pattern/flowD.yaml",
+      "005_custom_include_pattern/config.yaml"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "x04_include_tags_no_match",
+    "input": [
+      "003_include_tags"
+    ],
+    "includeTags": [
+      "nope"
+    ],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e000_flow_path_does_not_exist",
+    "input": [
+      "e000_flow_path_does_not_exist/workspace"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e001_directory_does_not_contain_flow_files",
+    "input": [
+      "e001_directory_does_not_contain_flow_files/workspace"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e002_top_level_directory_does_not_contain_flow_files",
+    "input": [
+      "e002_top_level_directory_does_not_contain_flow_files/workspace"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e003_flow_inclusion_pattern_does_not_match_any_flow_files",
+    "input": [
+      "e003_flow_inclusion_pattern_does_not_match_any_flow_files/workspace"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e004_tags_config_does_not_match_any_flow_files",
+    "input": [
+      "e004_tags_config_does_not_match_any_flow_files/workspace"
+    ],
+    "includeTags": [
+      "parameterInclude"
+    ],
+    "excludeTags": [
+      "parameterExclude"
+    ],
+    "config": null
+  },
+  {
+    "name": "e005_single_flow_does_not_exist",
+    "input": [
+      "e005_single_flow_does_not_exist/workspace/Flow.yaml"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e006_single_flow_invalid_string_command",
+    "input": [
+      "e006_single_flow_invalid_string_command/workspace/Flow.yaml"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e007_single_flow_malformatted_command",
+    "input": [
+      "e007_single_flow_malformatted_command/workspace/Flow.yaml"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e008_subflow_invalid_string_command",
+    "input": [
+      "e008_subflow_invalid_string_command/workspace"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e009_nested_subflow_invalid_string_command",
+    "input": [
+      "e009_nested_subflow_invalid_string_command/workspace"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e010_missing_config_section",
+    "input": [
+      "e010_missing_config_section/workspace"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e012_invalid_subflow_path",
+    "input": [
+      "e012_invalid_subflow_path/workspace"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e013_invalid_media_file",
+    "input": [
+      "e013_invalid_media_file/workspace"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  },
+  {
+    "name": "e024_only_negation_patterns",
+    "input": [
+      "e024_only_negation_patterns/workspace"
+    ],
+    "includeTags": [],
+    "excludeTags": [],
+    "config": null
+  }
+]

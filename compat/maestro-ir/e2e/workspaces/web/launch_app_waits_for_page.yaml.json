@@ -1,0 +1,114 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "http://127.0.0.1:7357/launch_redirect.html",
+        "ext" : { },
+        "name" : "A screenshot right after launchApp should not fail",
+        "properties" : { },
+        "tags" : [ "passing", "web" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "http://127.0.0.1:7357/launch_redirect.html",
+      "optional" : false
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "optional" : false,
+      "path" : "launch_app_waits_for_page_1"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Landed"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "http://127.0.0.1:7357/launch_redirect.html",
+      "optional" : false
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "optional" : false,
+      "path" : "launch_app_waits_for_page_2"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Landed"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "http://127.0.0.1:7357/launch_redirect.html",
+      "optional" : false
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "optional" : false,
+      "path" : "launch_app_waits_for_page_3"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Landed"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "http://127.0.0.1:7357/launch_redirect.html",
+      "optional" : false
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "optional" : false,
+      "path" : "launch_app_waits_for_page_4"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Landed"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "http://127.0.0.1:7357/launch_redirect.html",
+      "optional" : false
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "optional" : false,
+      "path" : "launch_app_waits_for_page_5"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Landed"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

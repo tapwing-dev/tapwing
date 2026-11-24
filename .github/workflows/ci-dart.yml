@@ -1,0 +1,63 @@
+name: CI - Dart & Sample App
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Flutter ${{ matrix.flutter }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The Flutter version PLAN.md records as primary: strict analysis, no infos allowed.
+          - flutter: '3.47.5'
+            analyze_args: ''
+          # The newest Flutter the repo is verified on. 3.50 deprecates `package:flutter/material.dart`
+          # in favour of `package:material_ui`, which does not exist before 3.50 and so cannot be
+          # adopted while the driver supports Flutter >= 3.41. That deprecation is reported as an
+          # info, so infos stay non-fatal here; warnings and errors still fail the job.
+          - flutter: '3.50.0'
+            analyze_args: '--no-fatal-infos'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: ${{ matrix.flutter }}
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Driver - install dependencies
+        working-directory: packages/tapwing_driver
+        run: flutter pub get
+
+      - name: Driver - analyze
+        working-directory: packages/tapwing_driver
+        run: flutter analyze ${{ matrix.analyze_args }}
+
+      - name: Driver - test
+        working-directory: packages/tapwing_driver
+        run: flutter test
+
+      - name: Sample app - install dependencies
+        working-directory: examples/sample_app
+        run: flutter pub get
+
+      - name: Sample app - analyze
+        working-directory: examples/sample_app
+        run: flutter analyze ${{ matrix.analyze_args }}
+
+      # Widget tests of the app plus the selector/semantics compatibility checks against the
+      # real tapwing_driver and the `.maestro/` flows.
+      - name: Sample app - test
+        working-directory: examples/sample_app
+        run: flutter test

@@ -1,0 +1,7 @@
+Running on Pixel_6_Pro
+ > Flow F2 Dark Mode
+Launch app "dev.tapwing.sample_app" with clear state... COMPLETED
+Tap on id: playground_button... COMPLETED
+Tap on id: nav_screenshot_theme... COMPLETED
+Assert that "Theme: dark" is visible... COMPLETED
+Assert dark mode is enabled... COMPLETED

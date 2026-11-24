@@ -1,0 +1,20 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.test",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : false,
+      "optional" : false,
+      "point" : "50%, 90%",
+      "retryIfNoChange" : false
+    }
+  } ]
+}

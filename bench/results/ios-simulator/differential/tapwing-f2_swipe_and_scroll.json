@@ -1,0 +1,664 @@
+{
+  "platform": "ios",
+  "setupMs": 176.051125,
+  "flows": [
+    {
+      "flow": "F2 Swipe and Scroll",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/f2_swipe_and_scroll.yaml",
+      "status": "passed",
+      "totalMs": 21965.723875,
+      "settlePolicy": "v2",
+      "settleViolations": 1,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 3021.205042,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 41856,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"ios_arm64\"",
+              "screen": [
+                1206.0,
+                2622.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 41856,
+            "oldPids": [],
+            "grantedPermissions": 2,
+            "phases": {
+              "stopClearMs": 825,
+              "permissionsMs": 306,
+              "simctlLaunchMs": 328,
+              "acceptMs": 1345.38975,
+              "rejectedConnections": 1,
+              "configureMs": 214.227541,
+              "waitIdleMs": 1.879833
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 579.5331249999999,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                24,
+                402,
+                378,
+                450
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 6585,
+              "actUs": 45796,
+              "settleUs": 522765
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "0 tap 201,426"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: nav_swipe_scroll",
+          "status": "passed",
+          "ms": 523.504167,
+          "driver": {
+            "element": {
+              "id": 17,
+              "accessibilityText": "Swipe & Scroll\ndirection, coords, from element, scrollUntilVisible",
+              "resource-id": "nav_swipe_scroll",
+              "bounds": [
+                16,
+                206,
+                386,
+                286
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 1041,
+              "actUs": 9394,
+              "settleUs": 509719
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "574 tap 201,246"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 3,
+          "command": "swipe",
+          "description": "swipe",
+          "status": "passed",
+          "ms": 492.855167,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 4,
+          "command": "assertVisible",
+          "description": "assertVisible \"Dismiss A done\"",
+          "status": "passed",
+          "ms": 1.545125,
+          "driver": {
+            "element": {
+              "id": 58,
+              "accessibilityText": "Dismiss A done",
+              "bounds": [
+                148,
+                146,
+                253,
+                166
+              ]
+            }
+          }
+        },
+        {
+          "index": 5,
+          "command": "swipe",
+          "description": "swipe",
+          "status": "passed",
+          "ms": 431.19441600000005,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 6,
+          "command": "assertVisible",
+          "description": "assertVisible \"Dismiss B done\"",
+          "status": "passed",
+          "ms": 0.912125,
+          "driver": {
+            "element": {
+              "id": 60,
+              "accessibilityText": "Dismiss B done",
+              "bounds": [
+                148,
+                206,
+                253,
+                226
+              ]
+            }
+          }
+        },
+        {
+          "index": 7,
+          "command": "scroll",
+          "description": "scroll",
+          "status": "passed",
+          "ms": 2579.724292,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 8,
+          "command": "swipe",
+          "description": "swipe",
+          "status": "passed",
+          "ms": 797.295125,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 9,
+          "command": "swipe",
+          "description": "swipe",
+          "status": "passed",
+          "ms": 813.953834,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 10,
+          "command": "swipe",
+          "description": "swipe",
+          "status": "passed",
+          "ms": 776.904708,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 11,
+          "command": "scrollUntilVisible",
+          "description": "scrollUntilVisible \"VRow 35\"",
+          "status": "passed",
+          "ms": 2.686959,
+          "driver": {
+            "element": {
+              "id": 79,
+              "accessibilityText": "VRow 35",
+              "bounds": [
+                0,
+                504,
+                402,
+                560
+              ]
+            },
+            "swipes": 0
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 12,
+          "command": "assertVisible",
+          "description": "assertVisible \"VRow 35\"",
+          "status": "passed",
+          "ms": 0.6605,
+          "driver": {
+            "element": {
+              "id": 79,
+              "accessibilityText": "VRow 35",
+              "bounds": [
+                0,
+                504,
+                402,
+                560
+              ]
+            }
+          }
+        },
+        {
+          "index": 13,
+          "command": "scrollUntilVisible",
+          "description": "scrollUntilVisible \"VRow 1\"",
+          "status": "passed",
+          "ms": 2296.42825,
+          "driver": {
+            "element": {
+              "id": 114,
+              "accessibilityText": "VRow 1",
+              "bounds": [
+                0,
+                258,
+                402,
+                314
+              ]
+            },
+            "swipes": 2
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 14,
+          "command": "assertVisible",
+          "description": "assertVisible \"VRow 1\"",
+          "status": "passed",
+          "ms": 1.412042,
+          "driver": {
+            "element": {
+              "id": 114,
+              "accessibilityText": "VRow 1",
+              "bounds": [
+                0,
+                258,
+                402,
+                314
+              ]
+            }
+          }
+        },
+        {
+          "index": 15,
+          "command": "tapOn",
+          "description": "tapOn \"Horizontal mode\"",
+          "status": "passed",
+          "ms": 62.011833,
+          "driver": {
+            "element": {
+              "id": 55,
+              "accessibilityText": "Horizontal mode",
+              "bounds": [
+                133,
+                66,
+                269,
+                114
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 573,
+              "actUs": 3220,
+              "settleUs": 57168
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "9313 tap 201,90"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 3,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 16,
+          "command": "scrollUntilVisible",
+          "description": "scrollUntilVisible \"HCard 10\"",
+          "status": "passed",
+          "ms": 1909.6962079999998,
+          "driver": {
+            "element": {
+              "id": 138,
+              "accessibilityText": "HCard 10",
+              "bounds": [
+                0,
+                166,
+                20,
+                826
+              ]
+            },
+            "swipes": 5
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": [
+              {
+                "widget": "Scrollable",
+                "fraction": 0.865,
+                "status": "forward"
+              }
+            ]
+          }
+        },
+        {
+          "index": 17,
+          "command": "assertVisible",
+          "description": "assertVisible \"HCard 10\"",
+          "status": "passed",
+          "ms": 5.834041,
+          "driver": {
+            "element": {
+              "id": 138,
+              "accessibilityText": "HCard 10",
+              "bounds": [
+                0,
+                166,
+                17,
+                826
+              ]
+            }
+          }
+        },
+        {
+          "index": 18,
+          "command": "scrollUntilVisible",
+          "description": "scrollUntilVisible \"HCard 1\"",
+          "status": "passed",
+          "ms": 5398.582,
+          "driver": {
+            "element": {
+              "id": 164,
+              "accessibilityText": "HCard 1",
+              "bounds": [
+                16,
+                166,
+                164,
+                826
+              ]
+            },
+            "swipes": 4
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 19,
+          "command": "assertVisible",
+          "description": "assertVisible \"HCard 1\"",
+          "status": "passed",
+          "ms": 0.914667,
+          "driver": {
+            "element": {
+              "id": 164,
+              "accessibilityText": "HCard 1",
+              "bounds": [
+                16,
+                166,
+                164,
+                826
+              ]
+            }
+          }
+        },
+        {
+          "index": 20,
+          "command": "tapOn",
+          "description": "tapOn \"PageView mode\"",
+          "status": "passed",
+          "ms": 63.632208,
+          "driver": {
+            "element": {
+              "id": 56,
+              "accessibilityText": "PageView mode",
+              "bounds": [
+                269,
+                66,
+                402,
+                114
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 487,
+              "actUs": 2981,
+              "settleUs": 57502
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "16698 tap 336,90"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 3,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 21,
+          "command": "assertVisible",
+          "description": "assertVisible \"Snap Page 1\"",
+          "status": "passed",
+          "ms": 0.66525,
+          "driver": {
+            "element": {
+              "id": 166,
+              "accessibilityText": "Snap Page 1",
+              "bounds": [
+                0,
+                118,
+                402,
+                874
+              ]
+            }
+          }
+        },
+        {
+          "index": 22,
+          "command": "scrollUntilVisible",
+          "description": "scrollUntilVisible \"Snap Page 3\"",
+          "status": "passed",
+          "ms": 1463.145625,
+          "driver": {
+            "element": {
+              "id": 169,
+              "accessibilityText": "Snap Page 3",
+              "bounds": [
+                0,
+                118,
+                402,
+                874
+              ]
+            },
+            "swipes": 2
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 23,
+          "command": "assertVisible",
+          "description": "assertVisible \"Snap Page 3\"",
+          "status": "passed",
+          "ms": 1.355834,
+          "driver": {
+            "element": {
+              "id": 169,
+              "accessibilityText": "Snap Page 3",
+              "bounds": [
+                0,
+                118,
+                402,
+                874
+              ]
+            }
+          }
+        },
+        {
+          "index": 24,
+          "command": "swipe",
+          "description": "swipe",
+          "status": "passed",
+          "ms": 695.046292,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 25,
+          "command": "assertVisible",
+          "description": "assertVisible \"Snap Page 2\"",
+          "status": "passed",
+          "ms": 0.833959,
+          "driver": {
+            "element": {
+              "id": 170,
+              "accessibilityText": "Snap Page 2",
+              "bounds": [
+                0,
+                118,
+                402,
+                874
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

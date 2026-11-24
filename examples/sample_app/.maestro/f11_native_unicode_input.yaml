@@ -1,0 +1,42 @@
+# F11a: non-ASCII `inputText` through the Android native lane. Run with
+#   tapwing test --input native .maestro/f11_native_unicode_input.yaml
+# Tapwing's driver types it with ACTION_SET_TEXT (the default IME stays
+# untouched) and falls back to its own IME for password fields.
+# Also passes in `--input auto` (Flutter lane) and in Maestro 2.12.1.
+appId: dev.tapwing.sample_app
+name: F11 Native Unicode Input
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- tapOn:
+    id: "nav_text_keys"
+- tapOn:
+    id: "field_one"
+- inputText: "Příliš žluťoučký kůň"
+- assertVisible: "Příliš žluťoučký kůň"
+# Appended at the cursor, ASCII and emoji mixed in one call.
+- inputText: " úpěl ďábelské ódy, 42 🚀"
+- assertVisible: "Příliš žluťoučký kůň úpěl ďábelské ódy, 42 🚀"
+- pressKey: Enter
+- assertVisible: "Submitted: Příliš žluťoučký kůň úpěl ďábelské ódy, 42 🚀"
+# Pure ASCII still goes key by key (75 ms per character, as in Maestro).
+- tapOn:
+    id: "field_two"
+- inputText: "Tapwing"
+- assertVisible:
+    text: "Tapwing"
+    childOf:
+      id: "field_two"
+- inputText: " Ünïcödé"
+- assertVisible:
+    text: "Tapwing Ünïcödé"
+    childOf:
+      id: "field_two"
+# A password field: Tapwing's driver cannot read masked text, so it uses its
+# fallback IME (and restores the previous one before the step returns).
+- tapOn:
+    id: "secret_field"
+- inputText: "heslo-ř"
+- assertVisible: "Text & Keys"

@@ -1,0 +1,38 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "THRESHOLD_PERCENTAGE" : "80"
+      },
+      "optional" : false
+    }
+  }, {
+    "assertScreenshotCommand" : {
+      "optional" : false,
+      "path" : "./screenshot.png",
+      "thresholdPercentage" : "${THRESHOLD_PERCENTAGE}"
+    }
+  }, {
+    "assertScreenshotCommand" : {
+      "optional" : false,
+      "path" : "./screenshot.png",
+      "thresholdPercentage" : "90"
+    }
+  }, {
+    "assertScreenshotCommand" : {
+      "optional" : false,
+      "path" : "./screenshot.png",
+      "thresholdPercentage" : "95"
+    }
+  } ]
+}

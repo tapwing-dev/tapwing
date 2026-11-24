@@ -1,0 +1,153 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Input/Keyboard"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "textInput",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "Foo"
+    }
+  }, {
+    "copyTextCommand" : {
+      "optional" : false,
+      "selector" : {
+        "idRegex" : "textInput",
+        "optional" : false
+      }
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "optional" : false,
+          "textRegex" : "Foo"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "pasteTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Foo"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "bar"
+    }
+  }, {
+    "copyTextCommand" : {
+      "optional" : false,
+      "selector" : {
+        "idRegex" : "textInput",
+        "optional" : false
+      }
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "pasteTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "pasteTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "barbar"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${maestro.copiedText = 'foo'}"
+    }
+  }, {
+    "pasteTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "optional" : false,
+          "textRegex" : "foo"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "bar"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

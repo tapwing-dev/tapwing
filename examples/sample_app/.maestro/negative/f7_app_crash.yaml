@@ -1,0 +1,18 @@
+# F7 negative: a real Java crash on the main thread. Fails in Maestro and in
+# Tapwing; Tapwing names the crash and attaches the logcat excerpt
+# (`appCrash`) instead of "connection to app lost".
+#   tapwing test .maestro/negative/f7_app_crash.yaml
+appId: dev.tapwing.sample_app
+name: F7 App Crash
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- scrollUntilVisible:
+    element:
+      id: "nav_app_health"
+- tapOn:
+    id: "nav_app_health"
+- tapOn: "Crash (native)"
+- assertVisible: "Health: idle"

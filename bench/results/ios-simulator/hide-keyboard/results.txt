@@ -1,0 +1,6 @@
+maestro / stock app rc=1
+tapwing default / stock app rc=0
+tapwing strict / stock app rc=1
+maestro / tapoutside app rc=0
+tapwing default / tapoutside app rc=0
+tapwing strict / tapoutside app rc=0

@@ -1,0 +1,140 @@
+{
+ "screen": [
+  1206.0,
+  2622.0
+ ],
+ "root": {
+  "id": 0,
+  "bounds": [
+   0,
+   0,
+   1206,
+   2622
+  ],
+  "children": [
+   {
+    "id": 1,
+    "bounds": [
+     0,
+     0,
+     1206,
+     2622
+    ],
+    "children": [
+     {
+      "id": 32,
+      "bounds": [
+       0,
+       0,
+       1206,
+       2622
+      ],
+      "children": [
+       {
+        "id": 33,
+        "bounds": [
+         0,
+         0,
+         1206,
+         2622
+        ],
+        "children": [
+         {
+          "id": 34,
+          "bounds": [
+           0,
+           0,
+           1206,
+           2622
+          ],
+          "children": [
+           {
+            "id": 35,
+            "bounds": [
+             0,
+             186,
+             1206,
+             2520
+            ],
+            "children": [
+             {
+              "id": 36,
+              "accessibilityText": "New product",
+              "bounds": [
+               255,
+               1089,
+               951,
+               1185
+              ]
+             },
+             {
+              "id": 37,
+              "bounds": [
+               255,
+               1233,
+               951,
+               1401
+              ],
+              "children": [
+               {
+                "id": 38,
+                "text": "Tapwing",
+                "hintText": "Name",
+                "bounds": [
+                 255,
+                 1233,
+                 951,
+                 1401
+                ],
+                "clickable": true,
+                "focused": true,
+                "textField": true
+               }
+              ]
+             },
+             {
+              "id": 39,
+              "accessibilityText": "Cancel",
+              "bounds": [
+               489,
+               1473,
+               702,
+               1617
+              ],
+              "clickable": true
+             },
+             {
+              "id": 40,
+              "accessibilityText": "Add",
+              "bounds": [
+               726,
+               1473,
+               951,
+               1617
+              ],
+              "clickable": true
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": 31,
+      "accessibilityText": "Dismiss",
+      "bounds": [
+       0,
+       0,
+       1206,
+       2622
+      ],
+      "clickable": true
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,31 @@
+device emulator-5554 · setup 440 ms
+
+▶ F2 Selectors and Taps
+  ✓  1733.3 ms  launchApp (clearState)
+  ✓   529.7 ms  tapOn id: playground_button
+  ✓   498.1 ms  tapOn id: nav_selectors_taps
+  ✓     2.8 ms  assertVisible "Traits Ready"
+  ✓     1.8 ms  assertVisible id: square_box
+  ✓     2.0 ms  assertVisible id: long_text_field
+  ✓     2.2 ms  assertNotVisible id: square_box
+  ✓    21.5 ms  tapOn id: split_target
+  ✓     2.9 ms  assertVisible "Left hit"
+  ✓    10.5 ms  tapOn id: split_target
+  ✓     4.2 ms  assertVisible "Right hit"
+  ✓     9.7 ms  tapOn id: split_target
+  ✓     3.5 ms  assertVisible "Left hit"
+  ✓   123.5 ms  doubleTapOn "Double tap me"
+  ✓     2.0 ms  assertVisible "Double tapped"
+  ✓  3011.9 ms  longPressOn "Long press me"
+  ✓    13.2 ms  assertVisible "Long pressed"
+  ✓   366.6 ms  tapOn id: retry_button
+  ✓     2.8 ms  assertVisible "Retry succeeded"
+  ✓    94.1 ms  tapOn "Show covered target"
+  ✓   911.5 ms  tapOn "Covered target"
+  ✓     5.5 ms  assertVisible "Covered tapped"
+  ✓    91.8 ms  tapOn "Start 8.5s task"
+  ✓     2.4 ms  assertVisible "Working 8.5s..."
+  ✓  8464.4 ms  assertNotVisible "Working 8.5s..."
+  ~  8547.9 ms  assertVisible "Optional missing element"  (optional: Element not found: Text matching regex: Optional missing element)
+PASSED F2 Selectors and Taps in 24514 ms
+settle check (v2): 0 violation(s)

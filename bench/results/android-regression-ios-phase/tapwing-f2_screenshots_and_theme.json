@@ -1,0 +1,222 @@
+{
+  "platform": "android",
+  "setupMs": 333.888334,
+  "flows": [
+    {
+      "flow": "F2 Screenshots and Light Mode",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/f2_screenshots_and_theme.yaml",
+      "status": "passed",
+      "totalMs": 4770.701208,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 2019.737417,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "profile",
+              "pid": 10561,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"android_arm64\"",
+              "screen": [
+                0.0,
+                0.0
+              ],
+              "dpr": 1.0,
+              "platform": "android"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 10561,
+            "oldPids": [
+              10080
+            ],
+            "grantedPermissions": 0,
+            "phases": {
+              "stopClearMs": 58,
+              "permissionsMs": 46,
+              "amStartMs": 62,
+              "acceptMs": 541.884,
+              "rejectedConnections": 0,
+              "configureMs": 1129.5919999999999,
+              "waitIdleMs": 91.220333
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 489.232291,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                84,
+                1335,
+                1356,
+                1503
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 2313,
+              "actUs": 6293,
+              "settleUs": 476960
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1250 tap 720,1419"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: nav_screenshot_theme",
+          "status": "passed",
+          "ms": 495.686458,
+          "driver": {
+            "element": {
+              "id": 21,
+              "accessibilityText": "Screenshot & Theme\ntakeScreenshot, assertScreenshot, dark/light mode",
+              "resource-id": "nav_screenshot_theme",
+              "bounds": [
+                56,
+                1153,
+                1384,
+                1405
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 7417,
+              "actUs": 2308,
+              "settleUs": 482436
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1749 tap 720,1279"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 3,
+          "command": "assertVisible",
+          "description": "assertVisible \"Theme: light\"",
+          "status": "passed",
+          "ms": 2.318041,
+          "driver": {
+            "element": {
+              "id": 30,
+              "accessibilityText": "Theme: light",
+              "bounds": [
+                580,
+                1500,
+                860,
+                1570
+              ]
+            }
+          }
+        },
+        {
+          "index": 4,
+          "command": "assertLightMode",
+          "description": "assertLightMode",
+          "status": "passed",
+          "ms": 34.407000000000004,
+          "driver": {
+            "darkMode": false,
+            "brightness": "light"
+          }
+        },
+        {
+          "index": 5,
+          "command": "assertScreenshot",
+          "description": "assertScreenshot",
+          "status": "passed",
+          "ms": 583.1045409999999,
+          "driver": {
+            "expected": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ref_visual_badge.png",
+            "matchPercent": 100.0
+          }
+        },
+        {
+          "index": 6,
+          "command": "takeScreenshot",
+          "description": "takeScreenshot",
+          "status": "passed",
+          "ms": 318.520792,
+          "driver": {
+            "path": "bench/results/android-regression-ios-phase/tapwing-f2_screenshots_and_theme-artifacts/screenshots/f2_artifact_badge.png"
+          }
+        },
+        {
+          "index": 7,
+          "command": "assertScreenshot",
+          "description": "assertScreenshot",
+          "status": "passed",
+          "ms": 298.803125,
+          "driver": {
+            "expected": "bench/results/android-regression-ios-phase/tapwing-f2_screenshots_and_theme-artifacts/screenshots/f2_artifact_badge.png",
+            "matchPercent": 100.0
+          }
+        },
+        {
+          "index": 8,
+          "command": "assertScreenshot",
+          "description": "assertScreenshot",
+          "status": "warned",
+          "ms": 268.72275,
+          "error": "Comparison error: threshold 95% not met, current: 0.0000% (diff written to bench/results/android-regression-ios-phase/tapwing-f2_screenshots_and_theme-artifacts/screenshot-diffs/ref_mismatch_badge_diff.png)"
+        },
+        {
+          "index": 9,
+          "command": "assertScreenshot",
+          "description": "assertScreenshot",
+          "status": "warned",
+          "ms": 249.03862500000002,
+          "error": "Screenshot size mismatch: expected 700x308, actual 1440x3120. Screenshots must have the same dimensions to compare."
+        }
+      ]
+    }
+  ]
+}

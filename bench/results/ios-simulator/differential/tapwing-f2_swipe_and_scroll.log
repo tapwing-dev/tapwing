@@ -1,0 +1,32 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 176 ms
+
+▶ F2 Swipe and Scroll
+  ✓  3021.2 ms  launchApp (clearState)
+  ✓   579.5 ms  tapOn id: playground_button
+  ✓   523.5 ms  tapOn id: nav_swipe_scroll
+  ✓   492.9 ms  swipe
+  ✓     1.5 ms  assertVisible "Dismiss A done"
+  ✓   431.2 ms  swipe
+  ✓     0.9 ms  assertVisible "Dismiss B done"
+  ✓  2579.7 ms  scroll
+  ✓   797.3 ms  swipe
+  ✓   814.0 ms  swipe
+  ✓   776.9 ms  swipe
+  ✓     2.7 ms  scrollUntilVisible "VRow 35"
+  ✓     0.7 ms  assertVisible "VRow 35"
+  ✓  2296.4 ms  scrollUntilVisible "VRow 1"
+  ✓     1.4 ms  assertVisible "VRow 1"
+  ✓    62.0 ms  tapOn "Horizontal mode"
+  ✓  1909.7 ms  scrollUntilVisible "HCard 10"
+      ⚠ returned while still animating: Scrollable 86% forward
+  ✓     5.8 ms  assertVisible "HCard 10"
+  ✓  5398.6 ms  scrollUntilVisible "HCard 1"
+  ✓     0.9 ms  assertVisible "HCard 1"
+  ✓    63.6 ms  tapOn "PageView mode"
+  ✓     0.7 ms  assertVisible "Snap Page 1"
+  ✓  1463.1 ms  scrollUntilVisible "Snap Page 3"
+  ✓     1.4 ms  assertVisible "Snap Page 3"
+  ✓   695.0 ms  swipe
+  ✓     0.8 ms  assertVisible "Snap Page 2"
+PASSED F2 Swipe and Scroll in 21966 ms
+settle check (v2): 1 violation(s)

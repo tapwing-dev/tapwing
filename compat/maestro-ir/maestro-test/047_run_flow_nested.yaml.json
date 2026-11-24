@@ -1,0 +1,84 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.other.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.other.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "runFlowCommand" : {
+          "commands" : [ {
+            "applyConfigurationCommand" : {
+              "config" : {
+                "appId" : "com.example.app",
+                "ext" : { },
+                "properties" : { },
+                "tags" : [ ]
+              },
+              "optional" : false
+            }
+          }, {
+            "launchAppCommand" : {
+              "appId" : "com.example.app",
+              "optional" : false
+            }
+          } ],
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false,
+          "sourceDescription" : "013_launch_app.yaml"
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Primary button"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "config" : {
+        "appId" : "com.other.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "046_run_flow.yaml"
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Secondary Button"
+      },
+      "waitUntilVisible" : false
+    }
+  } ]
+}

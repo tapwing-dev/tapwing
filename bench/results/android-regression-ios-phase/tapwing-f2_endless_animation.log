@@ -1,0 +1,13 @@
+device emulator-5554 · setup 303 ms
+
+▶ F2 Endless Animation
+  ✓  2207.9 ms  launchApp (clearState)
+  ✓   555.6 ms  tapOn id: playground_button
+  ✓  2010.2 ms  tapOn id: nav_endless_animation
+  ✓     2.9 ms  assertVisible "Pulsing Banner"
+  ✓   101.9 ms  tapOn "Pulse action"
+  ✓     4.5 ms  assertVisible "Pulse clicks: 1"
+  ✓    98.7 ms  tapOn "Pulse action"
+  ✓     2.2 ms  assertVisible "Pulse clicks: 2"
+PASSED F2 Endless Animation in 5009 ms
+settle check (v2): 0 violation(s)

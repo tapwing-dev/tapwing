@@ -1,0 +1,4 @@
+appId: com.example
+---
+- swipe:
+    direction: sideways

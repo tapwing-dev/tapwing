@@ -1,0 +1,6 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 159 ms
+
+▶ 01_login
+  ✓  2087.3 ms  launchApp
+  ✓     9.7 ms  assertVisible "Welcome back"
+PASSED 01_login in 2097 ms

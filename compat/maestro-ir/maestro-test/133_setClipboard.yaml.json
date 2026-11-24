@@ -1,0 +1,22 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "setClipboardCommand" : {
+      "optional" : false,
+      "text" : "Hello, Maestro!"
+    }
+  }, {
+    "pasteTextCommand" : {
+      "optional" : false
+    }
+  } ]
+}

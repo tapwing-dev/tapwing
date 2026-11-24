@@ -1,0 +1,26 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.test",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "label" : "Tap Login Button at Bottom",
+      "longPress" : false,
+      "optional" : false,
+      "relativePoint" : "50%, 90%",
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Login"
+      },
+      "waitUntilVisible" : false
+    }
+  } ]
+}

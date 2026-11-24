@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Invalid Command at <ROOT>/maestro-orchestra/workspaces/e015_array_command/workspace/Flow.yaml:3:4",
+    "type" : "SyntaxError"
+  }
+}

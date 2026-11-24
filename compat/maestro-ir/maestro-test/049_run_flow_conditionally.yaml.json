@@ -1,0 +1,101 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.other.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : ".*button.*"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Not Clicked"
+        }
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "008_tap_on_element.yaml"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Clicked"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : ".*button.*"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "${NOT_CLICKED}"
+        }
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "008_tap_on_element.yaml"
+    }
+  } ]
+}

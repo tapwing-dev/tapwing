@@ -1,0 +1,265 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "onFlowComplete" : {
+          "commands" : [ {
+            "setOrientationCommand" : {
+              "optional" : false,
+              "orientation" : "PORTRAIT"
+            }
+          } ]
+        },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "PORTRAIT"
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Orientation Test"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Portrait"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "LANDSCAPE_LEFT"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Landscape Left"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "PORTRAIT"
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Back"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "scrollUntilVisible" : {
+      "centerElement" : false,
+      "direction" : "DOWN",
+      "optional" : false,
+      "originalSpeedValue" : "40",
+      "scrollDuration" : "40",
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Orientation Test"
+      },
+      "timeout" : "20000",
+      "visibilityPercentage" : 100,
+      "visibilityPercentageNormalized" : 1.0
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Orientation Test"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "LANDSCAPE_RIGHT"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Landscape Right"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "PORTRAIT"
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Back"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "scrollUntilVisible" : {
+      "centerElement" : false,
+      "direction" : "DOWN",
+      "optional" : false,
+      "originalSpeedValue" : "40",
+      "scrollDuration" : "40",
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Orientation Test"
+      },
+      "timeout" : "20000",
+      "visibilityPercentage" : 100,
+      "visibilityPercentageNormalized" : 1.0
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Orientation Test"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "UPSIDE_DOWN"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "assertConditionCommand" : {
+          "condition" : {
+            "visible" : {
+              "optional" : false,
+              "textRegex" : "Portrait Upside Down"
+            }
+          },
+          "optional" : false
+        }
+      } ],
+      "condition" : {
+        "platform" : "ANDROID"
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "assertConditionCommand" : {
+          "condition" : {
+            "visible" : {
+              "optional" : false,
+              "textRegex" : "Landscape Right"
+            }
+          },
+          "optional" : false
+        }
+      } ],
+      "condition" : {
+        "platform" : "IOS"
+      },
+      "optional" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "PORTRAIT"
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Back"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "scrollUntilVisible" : {
+      "centerElement" : false,
+      "direction" : "DOWN",
+      "optional" : false,
+      "originalSpeedValue" : "40",
+      "scrollDuration" : "40",
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Orientation Test"
+      },
+      "timeout" : "20000",
+      "visibilityPercentage" : 100,
+      "visibilityPercentageNormalized" : 1.0
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Orientation Test"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "PORTRAIT"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Portrait"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

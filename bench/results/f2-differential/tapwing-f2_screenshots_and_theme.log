@@ -1,0 +1,15 @@
+device emulator-5554 · setup 164 ms
+
+▶ F2 Screenshots and Light Mode
+  ✓  1720.6 ms  launchApp (clearState)
+  ✓   531.8 ms  tapOn id: playground_button
+  ✓   496.9 ms  tapOn id: nav_screenshot_theme
+  ✓     2.1 ms  assertVisible "Theme: light"
+  ✓    28.4 ms  assertLightMode
+  ✓   284.7 ms  assertScreenshot
+  ✓   235.7 ms  takeScreenshot
+  ✓   223.6 ms  assertScreenshot
+  ~   238.6 ms  assertScreenshot  (optional: Comparison error: threshold 95% not met, current: 0.0000% (diff written to bench/results/f2-differential/tapwing-f2_screenshots_and_theme-artifacts/screenshot-diffs/ref_mismatch_badge_diff.png))
+  ~   218.6 ms  assertScreenshot  (optional: Screenshot size mismatch: expected 700x308, actual 1440x3120. Screenshots must have the same dimensions to compare.)
+PASSED F2 Screenshots and Light Mode in 3992 ms
+settle check (v2): 0 violation(s)

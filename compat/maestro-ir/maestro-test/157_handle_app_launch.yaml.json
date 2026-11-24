@@ -1,0 +1,28 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "${APP_ID || 'com.example.app'}",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "launchAppCommand" : {
+          "appId" : "${APP_ID || 'com.example.app'}",
+          "clearKeychain" : true,
+          "clearState" : true,
+          "optional" : false
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${true}"
+      },
+      "optional" : false
+    }
+  } ]
+}

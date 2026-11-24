@@ -1,0 +1,33 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "backPressCommand" : {
+      "optional" : false
+    }
+  }, {
+    "hideKeyboardCommand" : {
+      "optional" : false
+    }
+  }, {
+    "scrollCommand" : {
+      "optional" : false
+    }
+  }, {
+    "clearKeychainCommand" : {
+      "optional" : false
+    }
+  }, {
+    "pasteTextCommand" : {
+      "optional" : false
+    }
+  } ]
+}

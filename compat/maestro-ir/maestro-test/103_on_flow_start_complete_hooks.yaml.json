@@ -1,0 +1,52 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "onFlowComplete" : {
+          "commands" : [ {
+            "runScriptCommand" : {
+              "env" : { },
+              "optional" : false,
+              "script" : "console.log('teardown');",
+              "scriptDir" : "<ROOT>/maestro-test",
+              "sourceDescription" : "103_teardown.js"
+            }
+          }, {
+            "inputTextCommand" : {
+              "optional" : false,
+              "text" : "test2"
+            }
+          } ]
+        },
+        "onFlowStart" : {
+          "commands" : [ {
+            "runScriptCommand" : {
+              "env" : { },
+              "optional" : false,
+              "script" : "console.log('setup');",
+              "scriptDir" : "<ROOT>/maestro-test",
+              "sourceDescription" : "103_setup.js"
+            }
+          }, {
+            "inputTextCommand" : {
+              "optional" : false,
+              "text" : "test1"
+            }
+          } ]
+        },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : false,
+      "optional" : false,
+      "point" : "100,200",
+      "retryIfNoChange" : false
+    }
+  } ]
+}

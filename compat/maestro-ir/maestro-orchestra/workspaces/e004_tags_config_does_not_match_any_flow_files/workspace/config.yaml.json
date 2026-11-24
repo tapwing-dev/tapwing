@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Config Field Required at <ROOT>/maestro-orchestra/workspaces/e004_tags_config_does_not_match_any_flow_files/workspace/config.yaml:4:18",
+    "type" : "SyntaxError"
+  }
+}

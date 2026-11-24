@@ -1,0 +1,12 @@
+appId: a
+tags: ~
+env: ~
+properties:
+  p: 1
+onFlowStart:
+  commands:
+    - back
+onFlowComplete:
+  - hideKeyboard
+---
+- back

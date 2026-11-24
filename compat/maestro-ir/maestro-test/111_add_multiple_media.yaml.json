@@ -1,0 +1,18 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.id",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "addMediaCommand" : {
+      "mediaPaths" : [ "<ROOT>/maestro-test/media/abc.png", "<ROOT>/maestro-test/media/abc.png", "<ROOT>/maestro-test/media/abc.png" ],
+      "optional" : false
+    }
+  } ]
+}

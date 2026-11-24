@@ -1,0 +1,43 @@
+// Dispatches all 14 HTTP routes consumed by `crates/tapwing/src/ios_native_lane/client.rs`.
+
+import Foundation
+
+@MainActor
+final class Router {
+    private let hierarchy = HierarchyBuilder()
+
+    func handle(_ request: HttpRequest) async -> HttpResponse {
+        switch (request.method, request.path) {
+        case ("GET", "/status"):
+            return ScreenProbe.status()
+        case ("GET", "/deviceInfo"):
+            return ScreenProbe.deviceInfo()
+        case ("POST", "/viewHierarchy"):
+            return await hierarchy.handle(request)
+        case ("POST", "/touch"):
+            return await Actions.touch(request)
+        case ("POST", "/swipeV2"):
+            return await Actions.swipeV2(request)
+        case ("POST", "/inputText"):
+            return await Actions.inputText(request)
+        case ("POST", "/eraseText"):
+            return await Actions.eraseText(request)
+        case ("POST", "/pressKey"):
+            return await Actions.pressKey(request)
+        case ("POST", "/pressButton"):
+            return Actions.pressButton(request)
+        case ("POST", "/setOrientation"):
+            return Actions.setOrientation(request)
+        case ("GET", "/isScreenStatic"):
+            return ScreenProbe.isScreenStatic()
+        case ("POST", "/runningApp"):
+            return ScreenProbe.runningApp(request)
+        case ("POST", "/keyboard"):
+            return ScreenProbe.keyboard(request)
+        case ("GET", "/screenshot"):
+            return ScreenProbe.screenshot(request)
+        default:
+            return AppError(type: .notFound, message: "Unknown route \(request.method) \(request.path)").httpResponse
+        }
+    }
+}

@@ -1,0 +1,35 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "https://x",
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "other",
+      "clearState" : true,
+      "launchArguments" : {
+        "a" : 1,
+        "b" : 1.5,
+        "c" : true,
+        "d" : "str",
+        "e" : [ 1, 2 ]
+      },
+      "optional" : false,
+      "permissions" : {
+        "camera" : "deny",
+        "location" : "1"
+      }
+    }
+  } ]
+}

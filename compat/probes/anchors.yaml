@@ -1,0 +1,4 @@
+appId: a
+---
+- tapOn: &t foo
+- tapOn: *t

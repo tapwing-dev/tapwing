@@ -1,0 +1,27 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "below" : {
+          "optional" : false,
+          "textRegex" : "Item"
+        },
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  } ]
+}

@@ -1,0 +1,11 @@
+appId: dev.tapwing.sample_app
+name: F2 Dark Mode
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- tapOn:
+    id: "nav_screenshot_theme"
+- assertVisible: "Theme: dark"
+- assertDarkMode

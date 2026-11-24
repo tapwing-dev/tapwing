@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Parsing Failed at <ROOT>/traits_bad.yaml:3:3",
+    "type" : "SyntaxError"
+  }
+}

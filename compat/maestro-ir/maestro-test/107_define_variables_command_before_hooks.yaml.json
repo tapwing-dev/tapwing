@@ -1,0 +1,33 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "${MAESTRO_APP_ID}",
+        "ext" : { },
+        "onFlowStart" : {
+          "commands" : [ {
+            "launchAppCommand" : {
+              "appId" : "${MAESTRO_APP_ID}",
+              "optional" : false
+            }
+          } ]
+        },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "MAESTRO_APP_ID" : "com.example.app"
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${ console.log(MAESTRO_APP_ID); }"
+    }
+  } ]
+}

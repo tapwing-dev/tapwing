@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Config Field Required at <ROOT>/e2e/demo_app/config.yaml:6:1",
+    "type" : "SyntaxError"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Media File Not Found at <ROOT>/maestro-orchestra/workspaces/e013_invalid_media_file/workspace/Flow.yaml:3:3",
+    "type" : "SyntaxError"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Parsing Failed at <ROOT>/yaml_syntax_error.yaml:3:19",
+    "type" : "SyntaxError"
+  }
+}

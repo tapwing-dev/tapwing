@@ -1,0 +1,31 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 183 ms
+
+▶ F2 Selectors and Taps
+  ✓  2959.8 ms  launchApp (clearState)
+  ✓   568.0 ms  tapOn id: playground_button
+  ✓   541.3 ms  tapOn id: nav_selectors_taps
+  ✓     4.7 ms  assertVisible "Traits Ready"
+  ✓     1.3 ms  assertVisible id: square_box
+  ✓     2.9 ms  assertVisible id: long_text_field
+  ✓     1.5 ms  assertNotVisible id: square_box
+  ✓    38.6 ms  tapOn id: split_target
+  ✓     1.0 ms  assertVisible "Left hit"
+  ✓    22.2 ms  tapOn id: split_target
+  ✓     1.3 ms  assertVisible "Right hit"
+  ✓    23.3 ms  tapOn id: split_target
+  ✓     0.9 ms  assertVisible "Left hit"
+  ✓   134.0 ms  doubleTapOn "Double tap me"
+  ✓     1.8 ms  assertVisible "Double tapped"
+  ✓  3016.2 ms  longPressOn "Long press me"
+  ✓     2.0 ms  assertVisible "Long pressed"
+  ✓   367.4 ms  tapOn id: retry_button
+  ✓     0.9 ms  assertVisible "Retry succeeded"
+  ✓   113.9 ms  tapOn "Show covered target"
+  ✓   930.2 ms  tapOn "Covered target"
+  ✓     0.8 ms  assertVisible "Covered tapped"
+  ✓    96.9 ms  tapOn "Start 8.5s task"
+  ✓     0.9 ms  assertVisible "Working 8.5s..."
+  ✓  8480.6 ms  assertNotVisible "Working 8.5s..."
+  ~  8526.9 ms  assertVisible "Optional missing element"  (optional: Element not found: Text matching regex: Optional missing element)
+PASSED F2 Selectors and Taps in 25868 ms
+settle check (v2): 0 violation(s)

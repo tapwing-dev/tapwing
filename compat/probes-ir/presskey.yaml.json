@@ -1,0 +1,28 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "a",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "ENTER",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "VOLUME_UP",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "BACK",
+      "optional" : false
+    }
+  } ]
+}

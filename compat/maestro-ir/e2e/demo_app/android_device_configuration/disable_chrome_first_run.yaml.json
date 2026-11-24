@@ -1,0 +1,39 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.android.chrome",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "android_device_configuration" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.android.chrome",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "optional" : false,
+          "textRegex" : "Welcome to Chrome"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "killAppCommand" : {
+      "appId" : "com.android.chrome",
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.android.chrome",
+      "optional" : false
+    }
+  } ]
+}

@@ -1,0 +1,12 @@
+appId: com.example
+---
+- assertWithAI: looks good
+- assertWithAI:
+    assertion: ok
+    optional: false
+- extractTextWithAI: price
+- extractTextWithAI:
+    query: q
+    outputVariable: out
+- assertNoDefectsWithAI:
+    label: L

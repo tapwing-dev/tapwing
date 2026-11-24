@@ -1,0 +1,51 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "A" : "1",
+            "B" : "x"
+          },
+          "optional" : false
+        }
+      }, {
+        "backPressCommand" : {
+          "optional" : false
+        }
+      }, {
+        "defineVariablesCommand" : {
+          "env" : {
+            "A" : "1",
+            "B" : "x"
+          },
+          "optional" : false
+        }
+      }, {
+        "hideKeyboardCommand" : {
+          "optional" : false
+        }
+      } ],
+      "condition" : {
+        "label" : "W",
+        "scriptCondition" : "${A == 1}",
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "a"
+        }
+      },
+      "label" : "L",
+      "optional" : false
+    }
+  } ]
+}

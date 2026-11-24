@@ -1,0 +1,219 @@
+{
+  "platform": "ios",
+  "setupMs": 184.701959,
+  "flows": [
+    {
+      "flow": "F2 Screenshots and Light Mode (iOS)",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/f2_screenshots_and_theme.yaml",
+      "status": "passed",
+      "totalMs": 6246.8855,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "setDarkMode",
+          "description": "setDarkMode",
+          "status": "passed",
+          "ms": 145.977875,
+          "driver": null
+        },
+        {
+          "index": 1,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 2945.824458,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 36993,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"ios_arm64\"",
+              "screen": [
+                1206.0,
+                2622.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 36993,
+            "oldPids": [],
+            "grantedPermissions": 2,
+            "phases": {
+              "stopClearMs": 837,
+              "permissionsMs": 315,
+              "simctlLaunchMs": 324,
+              "acceptMs": 1272.3519999999999,
+              "rejectedConnections": 1,
+              "configureMs": 194.296458,
+              "waitIdleMs": 1.88475
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 575.31225,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                24,
+                402,
+                378,
+                450
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 4650,
+              "actUs": 38130,
+              "settleUs": 529033
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "0 tap 201,426"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 3,
+          "command": "tapOn",
+          "description": "tapOn id: nav_screenshot_theme",
+          "status": "passed",
+          "ms": 539.2390419999999,
+          "driver": {
+            "element": {
+              "id": 21,
+              "accessibilityText": "Screenshot & Theme\ntakeScreenshot, assertScreenshot, dark/light mode",
+              "resource-id": "nav_screenshot_theme",
+              "bounds": [
+                16,
+                358,
+                386,
+                438
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 1166,
+              "actUs": 8894,
+              "settleUs": 526682
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "573 tap 201,398"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 4,
+          "command": "assertVisible",
+          "description": "assertVisible \"Theme: light\"",
+          "status": "passed",
+          "ms": 3.695042,
+          "driver": {
+            "element": {
+              "id": 30,
+              "accessibilityText": "Theme: light",
+              "bounds": [
+                158,
+                430,
+                243,
+                450
+              ]
+            }
+          }
+        },
+        {
+          "index": 5,
+          "command": "assertLightMode",
+          "description": "assertLightMode",
+          "status": "passed",
+          "ms": 162.23754200000002,
+          "driver": {
+            "darkMode": false,
+            "brightness": "light"
+          }
+        },
+        {
+          "index": 6,
+          "command": "assertScreenshot",
+          "description": "assertScreenshot",
+          "status": "passed",
+          "ms": 471.33825,
+          "driver": {
+            "expected": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/ref_visual_badge_ios.png",
+            "matchPercent": 100.0
+          }
+        },
+        {
+          "index": 7,
+          "command": "takeScreenshot",
+          "description": "takeScreenshot",
+          "status": "passed",
+          "ms": 475.52875,
+          "driver": {
+            "path": "bench/results/ios-simulator/differential/tapwing-f2_screenshots_and_theme-artifacts/screenshots/f2_artifact_badge.png"
+          }
+        },
+        {
+          "index": 8,
+          "command": "assertScreenshot",
+          "description": "assertScreenshot",
+          "status": "passed",
+          "ms": 465.366042,
+          "driver": {
+            "expected": "bench/results/ios-simulator/differential/tapwing-f2_screenshots_and_theme-artifacts/screenshots/f2_artifact_badge.png",
+            "matchPercent": 100.0
+          }
+        },
+        {
+          "index": 9,
+          "command": "assertScreenshot",
+          "description": "assertScreenshot",
+          "status": "warned",
+          "ms": 451.725375,
+          "error": "Screenshot size mismatch: expected 700x308, actual 600x264. Screenshots must have the same dimensions to compare."
+        }
+      ]
+    }
+  ]
+}

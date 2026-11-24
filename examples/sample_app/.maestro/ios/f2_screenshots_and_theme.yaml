@@ -1,0 +1,34 @@
+appId: dev.tapwing.sampleApp
+name: F2 Screenshots and Light Mode (iOS)
+---
+- setDarkMode: disabled
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- tapOn:
+    id: "nav_screenshot_theme"
+- assertVisible: "Theme: light"
+- assertLightMode
+# Reference captured by Maestro 2.12.1 on the iPhone 18 Pro simulator (@3x).
+- assertScreenshot:
+    path: "ref_visual_badge_ios"
+    cropOn:
+      id: "visual_badge"
+    thresholdPercentage: 98
+- takeScreenshot:
+    path: "f2_artifact_badge"
+    cropOn:
+      id: "visual_badge"
+- assertScreenshot:
+    path: "f2_artifact_badge"
+    cropOn:
+      id: "visual_badge"
+    thresholdPercentage: 99
+# Android reference: different size, so this optional step only warns.
+- assertScreenshot:
+    path: "../ref_visual_badge"
+    cropOn:
+      id: "visual_badge"
+    thresholdPercentage: 95
+    optional: true

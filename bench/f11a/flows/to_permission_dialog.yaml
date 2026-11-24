@@ -1,0 +1,11 @@
+# Leaves the system location-permission dialog on screen.
+appId: dev.tapwing.sample_app
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- tapOn:
+    id: "playground_button"
+- tapOn: "Request Location Permission"
+- waitForAnimationToEnd

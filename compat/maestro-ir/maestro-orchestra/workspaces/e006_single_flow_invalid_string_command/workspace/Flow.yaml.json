@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Invalid Command: invalidCommand at <ROOT>/maestro-orchestra/workspaces/e006_single_flow_invalid_string_command/workspace/Flow.yaml:3:3",
+    "type" : "SyntaxError"
+  }
+}

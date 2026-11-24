@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Config Field Required at <ROOT>/maestro-orchestra/workspaces/e018_config_missing_appId/workspace/Flow.yaml:2:1",
+    "type" : "SyntaxError"
+  }
+}

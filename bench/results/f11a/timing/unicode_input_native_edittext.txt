@@ -1,0 +1,4 @@
+maestro  inputText   451 ms  field="Displej žluťoučký"  ime unchanged
+tapwing  inputText    11 ms  field="Displej žluťoučký"  ime unchanged
+maestro  inputText   466 ms  field="Displej žluťoučký"  ime unchanged
+tapwing  inputText    11 ms  field="Displej žluťoučký"  ime unchanged

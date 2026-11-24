@@ -1,0 +1,39 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "containsChild" : {
+            "above" : {
+              "optional" : false,
+              "textRegex" : "bottom side"
+            },
+            "below" : {
+              "optional" : false,
+              "textRegex" : "top side"
+            },
+            "containsChild" : {
+              "idRegex" : "level-2",
+              "optional" : false
+            },
+            "idRegex" : "level-1",
+            "optional" : false
+          },
+          "idRegex" : "level-0",
+          "optional" : false
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

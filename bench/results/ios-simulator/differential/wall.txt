@@ -1,0 +1,11 @@
+f2_dark_mode tapwing rc=0 5.38s maestro rc=0 21.79s
+f2_endless_animation tapwing rc=0 6.11s maestro rc=0 37.18s
+f2_hide_keyboard tapwing rc=0 6.61s maestro rc=0 41.87s
+f2_screenshots_and_theme tapwing rc=0 6.47s maestro rc=0 21.65s
+f2_selectors_and_taps tapwing rc=0 26.10s maestro rc=0 66.48s
+f2_swipe_and_scroll tapwing rc=0 22.45s maestro rc=0 78.71s
+f2_text_clipboard_keys tapwing rc=0 12.91s maestro rc=0 65.63s
+login_and_browse tapwing rc=0 15.61s maestro rc=0 63.49s
+neg-fail_assert_not_visible tapwing rc=1 4.25s maestro rc=1 17.71s
+neg-fail_missing_element tapwing rc=1 4.12s maestro rc=1 17.27s
+f2_ios_device_commands tapwing rc=0 5.54s maestro rc=0 18.75s

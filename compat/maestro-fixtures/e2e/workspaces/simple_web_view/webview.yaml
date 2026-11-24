@@ -1,0 +1,21 @@
+appId: com.example.SimpleWebViewApp
+tags:
+  - passing
+  - ios
+---
+- launchApp:
+    clearState: true
+
+# The tap can be silently dropped on a loaded runner, leaving us on the launch
+# screen. Re-drive rather than wait; assertNotVisible confirms we navigated.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn: Open Login Page
+      - assertNotVisible: Open Login Page
+      - extendedWaitUntil:
+          visible: Login
+          timeout: 90000
+          label: Wait for Login page to load
+- assertVisible: Sign In
+- assertVisible: Forgot your password?

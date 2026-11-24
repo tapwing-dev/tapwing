@@ -1,0 +1,47 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "a",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false,
+      "timeout" : "0x10"
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false,
+      "timeout" : "010"
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false,
+      "timeout" : "1_000"
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false,
+      "timeout" : "1e3"
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false,
+      "timeout" : "1.50"
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false,
+      "timeout" : "yes"
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false
+    }
+  } ]
+}

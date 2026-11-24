@@ -1,0 +1,5 @@
+appId: dev.tapwing.sampleApp
+---
+- launchApp: {clearState: true}
+- tapOn: "Email"
+- inputText: "a@b.c"

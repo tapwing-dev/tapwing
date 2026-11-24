@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Commands Section Required at <ROOT>/maestro-orchestra/workspaces/e011_missing_dashes/workspace/Flow.yaml:3:10",
+    "type" : "SyntaxError"
+  }
+}

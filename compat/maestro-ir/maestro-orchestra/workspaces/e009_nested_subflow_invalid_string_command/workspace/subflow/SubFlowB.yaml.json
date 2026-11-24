@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Invalid Command: invalidCommand at <ROOT>/maestro-orchestra/workspaces/e009_nested_subflow_invalid_string_command/workspace/subflow/SubFlowB.yaml:3:3",
+    "type" : "SyntaxError"
+  }
+}

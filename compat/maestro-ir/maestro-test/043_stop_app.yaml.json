@@ -1,0 +1,23 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "stopAppCommand" : {
+      "appId" : "com.example.app",
+      "optional" : false
+    }
+  }, {
+    "stopAppCommand" : {
+      "appId" : "another.app",
+      "optional" : false
+    }
+  } ]
+}

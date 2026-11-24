@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Parsing Failed at <ROOT>/ewu_none.yaml:3:3",
+    "type" : "SyntaxError"
+  }
+}

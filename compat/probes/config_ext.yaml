@@ -1,0 +1,8 @@
+appId: a
+foo: 1
+bar: [1, "x", 2.5, yes, ~]
+baz: {k: v}
+name: 12
+tags: [1, yes]
+---
+- back

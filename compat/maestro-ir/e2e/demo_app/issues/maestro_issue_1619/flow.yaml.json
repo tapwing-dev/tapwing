@@ -1,0 +1,57 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "issue 1619 repro"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "runScriptCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "First|Second"
+        }
+      },
+      "env" : { },
+      "optional" : false,
+      "script" : "console.log(\"Script executed\")\n",
+      "scriptDir" : "<ROOT>/e2e/demo_app/issues/maestro_issue_1619",
+      "sourceDescription" : "script.js"
+    }
+  }, {
+    "runScriptCommand" : {
+      "condition" : {
+        "visible" : {
+          "idRegex" : "first|second",
+          "optional" : false
+        }
+      },
+      "env" : { },
+      "optional" : false,
+      "script" : "console.log(\"Script executed\")\n",
+      "scriptDir" : "<ROOT>/e2e/demo_app/issues/maestro_issue_1619",
+      "sourceDescription" : "script.js"
+    }
+  } ]
+}

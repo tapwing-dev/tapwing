@@ -1,0 +1,304 @@
+{
+  "platform": "android",
+  "setupMs": 302.772708,
+  "flows": [
+    {
+      "flow": "F2 Endless Animation",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/f2_endless_animation.yaml",
+      "status": "passed",
+      "totalMs": 5009.467958,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 2207.880917,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "profile",
+              "pid": 10716,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"android_arm64\"",
+              "screen": [
+                0.0,
+                0.0
+              ],
+              "dpr": 1.0,
+              "platform": "android"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 10716,
+            "oldPids": [
+              10561
+            ],
+            "grantedPermissions": 0,
+            "phases": {
+              "stopClearMs": 50,
+              "permissionsMs": 33,
+              "amStartMs": 69,
+              "acceptMs": 477.434166,
+              "rejectedConnections": 0,
+              "configureMs": 1295.5940830000002,
+              "waitIdleMs": 102.07745899999999
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 555.576458,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                84,
+                1335,
+                1356,
+                1503
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 12821,
+              "actUs": 21098,
+              "settleUs": 474720
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1496 tap 720,1419"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: nav_endless_animation",
+          "status": "passed",
+          "ms": 2010.188583,
+          "driver": {
+            "element": {
+              "id": 23,
+              "accessibilityText": "Endless Animation\nlarge repeating animation (> 2% screen) settle test",
+              "resource-id": "nav_endless_animation",
+              "bounds": [
+                56,
+                1405,
+                1384,
+                1657
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 6023,
+              "actUs": 2840,
+              "settleUs": 1997863
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "2005 tap 720,1531"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": [
+              {
+                "widget": "FadeTransition",
+                "fraction": 0.092,
+                "status": "forward",
+                "infinite": true
+              }
+            ]
+          }
+        },
+        {
+          "index": 3,
+          "command": "assertVisible",
+          "description": "assertVisible \"Pulsing Banner\"",
+          "status": "passed",
+          "ms": 2.9190829999999997,
+          "driver": {
+            "element": {
+              "id": 30,
+              "accessibilityText": "Pulsing Banner",
+              "bounds": [
+                480,
+                1498,
+                960,
+                1599
+              ]
+            }
+          }
+        },
+        {
+          "index": 4,
+          "command": "tapOn",
+          "description": "tapOn \"Pulse action\"",
+          "status": "passed",
+          "ms": 101.921958,
+          "driver": {
+            "element": {
+              "id": 32,
+              "accessibilityText": "Pulse action",
+              "bounds": [
+                499,
+                1990,
+                941,
+                2158
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 38177,
+              "actUs": 2351,
+              "settleUs": 47821
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "4055 tap 720,2074"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 2,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": [
+              {
+                "widget": "FadeTransition",
+                "fraction": 0.092,
+                "status": "forward",
+                "infinite": true
+              }
+            ]
+          }
+        },
+        {
+          "index": 5,
+          "command": "assertVisible",
+          "description": "assertVisible \"Pulse clicks: 1\"",
+          "status": "passed",
+          "ms": 4.511125000000001,
+          "driver": {
+            "element": {
+              "id": 31,
+              "accessibilityText": "Pulse clicks: 1",
+              "bounds": [
+                558,
+                1878,
+                882,
+                1948
+              ]
+            }
+          }
+        },
+        {
+          "index": 6,
+          "command": "tapOn",
+          "description": "tapOn \"Pulse action\"",
+          "status": "passed",
+          "ms": 98.674209,
+          "driver": {
+            "element": {
+              "id": 32,
+              "accessibilityText": "Pulse action",
+              "bounds": [
+                499,
+                1990,
+                941,
+                2158
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 44720,
+              "actUs": 2727,
+              "settleUs": 47241
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "4171 tap 720,2074"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 3,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": [
+              {
+                "widget": "FadeTransition",
+                "fraction": 0.092,
+                "status": "forward",
+                "infinite": true
+              }
+            ]
+          }
+        },
+        {
+          "index": 7,
+          "command": "assertVisible",
+          "description": "assertVisible \"Pulse clicks: 2\"",
+          "status": "passed",
+          "ms": 2.204166,
+          "driver": {
+            "element": {
+              "id": 31,
+              "accessibilityText": "Pulse clicks: 2",
+              "bounds": [
+                558,
+                1878,
+                882,
+                1948
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

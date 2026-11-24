@@ -1,0 +1,11 @@
+Running on iPhone 18 Pro - iOS 27.2 - 47862A4D-744F-4125-8D9E-20D8B51AD7DF
+ > Flow F2 Dark Mode (iOS)
+Enable dark mode... COMPLETED
+Launch app "dev.tapwing.sampleApp" with clear state... COMPLETED
+Tap on id: playground_button... COMPLETED
+Tap on id: nav_screenshot_theme... COMPLETED
+Assert that "Theme: dark" is visible... COMPLETED
+Assert dark mode is enabled... COMPLETED
+Toggle dark mode... COMPLETED
+Assert that "Theme: light" is visible... COMPLETED
+Assert dark mode is disabled... COMPLETED

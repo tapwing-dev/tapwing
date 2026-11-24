@@ -1,0 +1,24 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "a",
+        "ext" : {
+          "bar" : [ 1, "x", 2.5, true, null ],
+          "baz" : {
+            "k" : "v"
+          },
+          "foo" : 1
+        },
+        "name" : "12",
+        "properties" : { },
+        "tags" : [ "1", "yes" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "backPressCommand" : {
+      "optional" : false
+    }
+  } ]
+}

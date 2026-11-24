@@ -1,0 +1,151 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "ALLOW_VALUE" : "${maestro.platform == \"android\" ? \"allow\" : \"always\"}",
+        "DENY_VALUE" : "${maestro.platform == \"android\" ? \"deny\" : \"never\"}",
+        "EMPTY_VALUE" : "",
+        "NONSENSE_VALUE" : "nonsense"
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : true,
+      "optional" : false,
+      "permissions" : {
+        "location" : "${ALLOW_VALUE}"
+      }
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Permission Check"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Location: Allowed"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : true,
+      "optional" : false,
+      "permissions" : {
+        "location" : "${DENY_VALUE}"
+      }
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Permission Check"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Location: Not allowed"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "launchAppCommand" : {
+          "appId" : "com.example.example",
+          "clearState" : true,
+          "optional" : false,
+          "permissions" : {
+            "location" : "${NONSENSE_VALUE}"
+          }
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Permission Check"
+          },
+          "waitUntilVisible" : false
+        }
+      }, {
+        "assertConditionCommand" : {
+          "condition" : {
+            "visible" : {
+              "optional" : false,
+              "textRegex" : "Location: Not allowed"
+            }
+          },
+          "optional" : false
+        }
+      }, {
+        "launchAppCommand" : {
+          "appId" : "com.example.example",
+          "clearState" : true,
+          "optional" : false,
+          "permissions" : {
+            "location" : "${EMPTY_VALUE}"
+          }
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Permission Check"
+          },
+          "waitUntilVisible" : false
+        }
+      }, {
+        "assertConditionCommand" : {
+          "condition" : {
+            "visible" : {
+              "optional" : false,
+              "textRegex" : "Location: Not allowed"
+            }
+          },
+          "optional" : false
+        }
+      } ],
+      "condition" : {
+        "platform" : "ANDROID"
+      },
+      "optional" : false
+    }
+  } ]
+}

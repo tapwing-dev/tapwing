@@ -1,0 +1,270 @@
+{
+  "platform": "ios",
+  "setupMs": 179.300875,
+  "flows": [
+    {
+      "flow": "hideKeyboard with a focused field (iOS)",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/bench/ios/hide_keyboard_focus.yaml",
+      "status": "passed",
+      "totalMs": 5229.1251250000005,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 2945.775084,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 61115,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"ios_arm64\"",
+              "screen": [
+                1206.0,
+                2622.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 61115,
+            "oldPids": [],
+            "grantedPermissions": 2,
+            "phases": {
+              "stopClearMs": 831,
+              "permissionsMs": 297,
+              "simctlLaunchMs": 323,
+              "acceptMs": 1316.680375,
+              "rejectedConnections": 1,
+              "configureMs": 172.967791,
+              "waitIdleMs": 2.8639580000000002
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 568.49025,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                24,
+                402,
+                378,
+                450
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 4545,
+              "actUs": 121986,
+              "settleUs": 438528
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "0 tap 201,426"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: nav_text_keys",
+          "status": "passed",
+          "ms": 539.376125,
+          "driver": {
+            "element": {
+              "id": 19,
+              "accessibilityText": "Text & Keys\ncopy/paste/clipboard, inputRandom*, pressKey",
+              "resource-id": "nav_text_keys",
+              "bounds": [
+                16,
+                286,
+                386,
+                358
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 1122,
+              "actUs": 9339,
+              "settleUs": 527430
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "566 tap 201,322"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 3,
+          "command": "tapOn",
+          "description": "tapOn id: field_one",
+          "status": "passed",
+          "ms": 794.1896670000001,
+          "driver": {
+            "element": {
+              "id": 35,
+              "accessibilityText": "Field One",
+              "resource-id": "field_one",
+              "bounds": [
+                16,
+                166,
+                386,
+                222
+              ],
+              "textField": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 1183,
+              "actUs": 352053,
+              "settleUs": 440075
+            },
+            "ime": {
+              "clientId": 1,
+              "keyboard": true,
+              "log": [
+                "1107 tap 201,194",
+                "1140 out TextInput.setClient client=1 text=\"\"",
+                "1141 out TextInput.setEditableSizeAndTransform",
+                "1144 out TextInput.setMarkedTextRect",
+                "1144 out TextInput.setStyle",
+                "1145 out TextInput.setEditingState text=\"\"",
+                "1145 out TextInput.show",
+                "1145 out TextInput.requestAutofill",
+                "1484 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 4,
+          "command": "inputText",
+          "description": "inputText \"Tapwing\"",
+          "status": "passed",
+          "ms": 265.603625,
+          "driver": {
+            "settle": "stable",
+            "ime": {
+              "usedClient": 1,
+              "clientId": 1,
+              "keyboard": true,
+              "log": [
+                "1903 in  TextInputClient.updateEditingState client=1 text=\"K\"",
+                "1932 in  TextInputClient.updateEditingState client=1 text=\"Ko\"",
+                "1957 out TextInput.setSelectionRects",
+                "1957 out TextInput.setCaretRect",
+                "1958 in  TextInputClient.updateEditingState client=1 text=\"Kol\"",
+                "1970 in  TextInputClient.updateEditingState client=1 text=\"Koli\"",
+                "2000 out TextInput.setSelectionRects",
+                "2000 out TextInput.setCaretRect",
+                "2000 in  TextInputClient.updateEditingState client=1 text=\"Tapwi\"",
+                "2022 in  TextInputClient.updateEditingState client=1 text=\"Tapwir\"",
+                "2061 out TextInput.setSelectionRects",
+                "2061 out TextInput.setCaretRect",
+                "2062 in  TextInputClient.updateEditingState client=1 text=\"Tapwing\"",
+                "2134 out TextInput.setSelectionRects",
+                "2135 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 5,
+          "command": "hideKeyboard",
+          "description": "hideKeyboard",
+          "status": "passed",
+          "ms": 99.718333,
+          "driver": {
+            "settle": "stable",
+            "warning": "hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step (\"Couldn't hide the keyboard\") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro."
+          },
+          "warning": "hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step (\"Couldn't hide the keyboard\") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro.",
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 2,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 6,
+          "command": "assertVisible",
+          "description": "assertVisible \"Text & Keys\"",
+          "status": "passed",
+          "ms": 1.6324589999999999,
+          "driver": {
+            "element": {
+              "id": 48,
+              "accessibilityText": "Text & Keys",
+              "bounds": [
+                148,
+                76,
+                253,
+                104
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

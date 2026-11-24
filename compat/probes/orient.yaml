@@ -1,0 +1,4 @@
+appId: a
+---
+- setOrientation: landscapeLeft
+- setOrientation: ${X}

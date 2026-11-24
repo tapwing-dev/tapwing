@@ -1,0 +1,127 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "idRegex" : "non-existent-id",
+          "optional" : true
+        }
+      },
+      "optional" : true
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "optional" : true,
+          "textRegex" : "Flutter Demo Home Page"
+        }
+      },
+      "optional" : true
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${ false }"
+      },
+      "label" : "Warn",
+      "optional" : true
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : true,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "non-existent-id",
+        "optional" : true
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : true,
+      "repeat" : {
+        "delay" : 100,
+        "repeat" : 2
+      },
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "non-existent-id",
+        "optional" : true
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : true,
+      "optional" : true,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "non-existent-id",
+        "optional" : true
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "copyTextCommand" : {
+      "optional" : true,
+      "selector" : {
+        "idRegex" : "non-existent-id",
+        "optional" : true
+      }
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "non.existent.app.id",
+      "optional" : true
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : true,
+      "repeat" : {
+        "delay" : 500,
+        "repeat" : 3
+      },
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "non-existent-id",
+        "optional" : true
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "scrollUntilVisible" : {
+      "centerElement" : false,
+      "direction" : "DOWN",
+      "optional" : true,
+      "originalSpeedValue" : "40",
+      "scrollDuration" : "40",
+      "selector" : {
+        "idRegex" : "non-existent-id",
+        "optional" : true
+      },
+      "timeout" : "20000",
+      "visibilityPercentage" : 100,
+      "visibilityPercentageNormalized" : 1.0
+    }
+  } ]
+}

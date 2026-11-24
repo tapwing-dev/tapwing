@@ -1,0 +1,52 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Non existent text"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "repeatCommand" : {
+      "commands" : [ {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Non existent text"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "optional" : false,
+      "times" : "2"
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Button"
+      },
+      "waitUntilVisible" : false
+    }
+  } ]
+}

@@ -1,0 +1,9 @@
+appId: dev.tapwing.sampleApp
+---
+- launchApp
+- tapOn: "F2 Playground"
+- assertVisible:
+    id: "nav_selectors_taps"
+- tapOn:
+    id: "nav_selectors_taps"
+- assertVisible: "Traits Ready"

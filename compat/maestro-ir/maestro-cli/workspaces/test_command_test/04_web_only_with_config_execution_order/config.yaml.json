@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Config Field Required at <ROOT>/maestro-cli/workspaces/test_command_test/04_web_only_with_config_execution_order/config.yaml:10:1",
+    "type" : "SyntaxError"
+  }
+}

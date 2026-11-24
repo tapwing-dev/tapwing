@@ -1,0 +1,28 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "a",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "travelCommand" : {
+      "optional" : false,
+      "points" : [ {
+        "latitude" : "0.0",
+        "longitude" : "0.0"
+      }, {
+        "latitude" : "1.0E7",
+        "longitude" : "1.0E-4"
+      }, {
+        "latitude" : "43.723",
+        "longitude" : "10.3966"
+      } ],
+      "speedMPS" : 7900.0
+    }
+  } ]
+}

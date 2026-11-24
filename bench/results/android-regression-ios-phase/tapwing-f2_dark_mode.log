@@ -1,0 +1,10 @@
+device emulator-5554 · setup 596 ms
+
+▶ F2 Dark Mode
+  ✓  1961.3 ms  launchApp (clearState)
+  ✓   518.1 ms  tapOn id: playground_button
+  ✓   497.5 ms  tapOn id: nav_screenshot_theme
+  ✓     1.7 ms  assertVisible "Theme: dark"
+  ✓    31.4 ms  assertDarkMode
+PASSED F2 Dark Mode in 3028 ms
+settle check (v2): 0 violation(s)

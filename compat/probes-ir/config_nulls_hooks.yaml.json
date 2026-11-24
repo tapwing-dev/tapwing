@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Incorrect Format: onFlowStart at <ROOT>/config_nulls_hooks.yaml:7:3",
+    "type" : "SyntaxError"
+  }
+}

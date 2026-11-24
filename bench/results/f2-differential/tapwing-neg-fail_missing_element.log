@@ -1,0 +1,9 @@
+device emulator-5554 · setup 218 ms
+
+▶ Negative Missing Element
+  ✓  1636.6 ms  launchApp (clearState)
+  ✗  1001.5 ms  extendedWaitUntil "Definitely Does Not Exist"
+      Element not found: Text matching regex: Definitely Does Not Exist
+      on screen: "Welcome back", "Email", "Password", "Log in", "F2 Playground"
+FAILED Negative Missing Element in 2645 ms
+settle check (v2): 0 violation(s)

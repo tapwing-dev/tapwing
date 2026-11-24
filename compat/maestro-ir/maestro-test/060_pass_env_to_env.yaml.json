@@ -1,0 +1,66 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "PARAM" : "${PARAM}",
+        "PARAM_INLINE" : "${PARAM}"
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "PARAM" : "${PARAM}",
+            "PARAM_FLOW" : "${PARAM_INLINE}"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${PARAM_FLOW}"
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${PARAM_INLINE}"
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${PARAM}"
+        }
+      } ],
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "060_subflow.yaml"
+    }
+  } ]
+}

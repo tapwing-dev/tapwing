@@ -1,0 +1,15 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 185 ms
+
+▶ F2 Screenshots and Light Mode (iOS)
+  ✓   146.0 ms  setDarkMode
+  ✓  2945.8 ms  launchApp (clearState)
+  ✓   575.3 ms  tapOn id: playground_button
+  ✓   539.2 ms  tapOn id: nav_screenshot_theme
+  ✓     3.7 ms  assertVisible "Theme: light"
+  ✓   162.2 ms  assertLightMode
+  ✓   471.3 ms  assertScreenshot
+  ✓   475.5 ms  takeScreenshot
+  ✓   465.4 ms  assertScreenshot
+  ~   451.7 ms  assertScreenshot  (optional: Screenshot size mismatch: expected 700x308, actual 600x264. Screenshots must have the same dimensions to compare.)
+PASSED F2 Screenshots and Light Mode (iOS) in 6247 ms
+settle check (v2): 0 violation(s)

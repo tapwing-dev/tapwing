@@ -1,0 +1,18 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "org.wikimedia.wikipedia",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "ios", "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "org.wikimedia.wikipedia",
+      "optional" : false
+    }
+  } ]
+}

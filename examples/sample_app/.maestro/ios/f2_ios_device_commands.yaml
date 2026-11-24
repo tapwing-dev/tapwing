@@ -1,0 +1,24 @@
+appId: dev.tapwing.sampleApp
+name: F2 iOS device commands
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: deny
+      location: inuse
+- assertVisible: "Welcome back"
+- setPermissions:
+    permissions:
+      photos: allow
+      # Explicit location takes always|inuse|never|unset (`allow` only via `all`).
+      location: always
+- setLocation:
+    latitude: 50.0755
+    longitude: 14.4378
+- clearKeychain
+- setAirplaneMode: enabled
+- pressKey: Volume Up
+- launchApp:
+    stopApp: false
+- assertVisible: "Welcome back"

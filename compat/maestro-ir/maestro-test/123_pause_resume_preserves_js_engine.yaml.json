@@ -1,0 +1,48 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.app",
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.preMessage = \"Hello from pre-message\"; output.preMessage}"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.message = \"Hello from preserved JS state!\"; output.message}"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.getMessage = function() { return output.message; }; output.counter = 1; output.counter}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.preMessage}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.message}"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "// Verify that our variables and functions are still available if (output.message !== \"Hello from preserved JS state!\") { throw new Error(\"Message variable was not preserved\"); } if (output.counter !== 1) { throw new Error(\"Counter variable was not preserved\"); } if (output.getMessage() !== \"Hello from preserved JS state!\") { throw new Error(\"Function was not preserved\"); } // Try to modify and verify the state is still mutable output.counter++; if (output.counter !== 2) { throw new Error(\"Counter was not mutable\"); } // Return a value to ensure the script completes successfully output.counter"
+    }
+  } ]
+}

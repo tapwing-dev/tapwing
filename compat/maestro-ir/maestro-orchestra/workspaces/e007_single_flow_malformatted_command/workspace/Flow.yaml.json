@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Unknown Property: invalidOption at <ROOT>/maestro-orchestra/workspaces/e007_single_flow_malformatted_command/workspace/Flow.yaml:4:24",
+    "type" : "SyntaxError"
+  }
+}

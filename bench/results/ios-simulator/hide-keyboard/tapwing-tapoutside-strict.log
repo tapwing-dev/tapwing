@@ -1,0 +1,12 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 178 ms
+
+▶ hideKeyboard with a focused field (iOS)
+  ✓  2931.5 ms  launchApp (clearState)
+  ✓   578.6 ms  tapOn id: playground_button
+  ✓   538.8 ms  tapOn id: nav_text_keys
+  ✓   796.7 ms  tapOn id: field_one
+  ✓   263.0 ms  inputText "Tapwing"
+  ✓  1084.6 ms  hideKeyboard
+  ✓     2.1 ms  assertVisible "Text & Keys"
+PASSED hideKeyboard with a focused field (iOS) in 6210 ms
+settle check (v2): 0 violation(s)

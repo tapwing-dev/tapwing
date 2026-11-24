@@ -1,0 +1,36 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : { },
+      "optional" : false,
+      "script" : "output.speed = {\n    slow: 40\n}\n\noutput.timeout = {\n    slow: 20000\n}\n\noutput.element = {\n    id: \"maestro\"\n}\n",
+      "scriptDir" : "<ROOT>/maestro-test",
+      "sourceDescription" : "117_scroll_until_visible_speed.js"
+    }
+  }, {
+    "scrollUntilVisible" : {
+      "centerElement" : false,
+      "direction" : "DOWN",
+      "optional" : false,
+      "originalSpeedValue" : "${output.speed.slow}",
+      "scrollDuration" : "${output.speed.slow}",
+      "selector" : {
+        "idRegex" : "${output.element.id}",
+        "optional" : false
+      },
+      "timeout" : "${output.timeout.slow}",
+      "visibilityPercentage" : 100,
+      "visibilityPercentageNormalized" : 1.0
+    }
+  } ]
+}

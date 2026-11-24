@@ -1,0 +1,111 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Carousel Test"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Showing Card A"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Showing Photo 1"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "swipeCommand" : {
+      "direction" : "LEFT",
+      "duration" : 400,
+      "elementSelector" : {
+        "optional" : false,
+        "textRegex" : "Card A"
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Showing Card A"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Showing Photo 2"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "swipeCommand" : {
+      "direction" : "LEFT",
+      "duration" : 400,
+      "elementSelector" : {
+        "optional" : false,
+        "textRegex" : "Card A"
+      },
+      "optional" : false,
+      "relativePoint" : "50%, 85%"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Showing Card B"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Showing Photo 1"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

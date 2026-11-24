@@ -1,0 +1,33 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.mobileapp2",
+        "ext" : { },
+        "name" : "mobileflow2",
+        "properties" : {
+          "property-1" : "property1 value",
+          "property-2" : "property2 value"
+        },
+        "tags" : [ "tagNameToInclude" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.mobileapp2",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Submit"
+      },
+      "waitUntilVisible" : false
+    }
+  } ]
+}

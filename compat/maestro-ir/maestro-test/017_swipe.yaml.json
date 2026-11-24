@@ -1,0 +1,26 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "swipeCommand" : {
+      "duration" : 3000,
+      "endPoint" : {
+        "x" : 100,
+        "y" : 200
+      },
+      "optional" : false,
+      "startPoint" : {
+        "x" : 100,
+        "y" : 500
+      }
+    }
+  } ]
+}

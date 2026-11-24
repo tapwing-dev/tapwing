@@ -1,0 +1,18 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.SimpleWebViewApp",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "regression" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.SimpleWebViewApp",
+      "optional" : false
+    }
+  } ]
+}

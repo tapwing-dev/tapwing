@@ -1,0 +1,11 @@
+appId: com.example
+---
+- retry:
+    commands:
+      - back
+- retry:
+    maxRetries: 3
+    env:
+      K: v
+    commands:
+      - scroll

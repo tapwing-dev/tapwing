@@ -1,0 +1,73 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "name" : "Issue 565 (swipe)",
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : false,
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Gesture Tester"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false
+    }
+  }, {
+    "swipeCommand" : {
+      "duration" : 1000,
+      "endRelative" : "15%, 50%",
+      "optional" : false,
+      "startRelative" : "50%, 15%"
+    }
+  }, {
+    "swipeCommand" : {
+      "duration" : 1000,
+      "endRelative" : "85%, 85%",
+      "optional" : false,
+      "startRelative" : "15%, 50%"
+    }
+  }, {
+    "swipeCommand" : {
+      "duration" : 1000,
+      "endRelative" : "85%, 50%",
+      "optional" : false,
+      "startRelative" : "85%, 85%"
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : false,
+      "optional" : false,
+      "point" : "85%, 50%",
+      "retryIfNoChange" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "All green"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

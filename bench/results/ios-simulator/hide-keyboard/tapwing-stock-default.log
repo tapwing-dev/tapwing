@@ -1,0 +1,13 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 179 ms
+
+▶ hideKeyboard with a focused field (iOS)
+  ✓  2945.8 ms  launchApp (clearState)
+  ✓   568.5 ms  tapOn id: playground_button
+  ✓   539.4 ms  tapOn id: nav_text_keys
+  ✓   794.2 ms  tapOn id: field_one
+  ✓   265.6 ms  inputText "Tapwing"
+  ✓    99.7 ms  hideKeyboard
+      ⚠ hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step ("Couldn't hide the keyboard") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro.
+  ✓     1.6 ms  assertVisible "Text & Keys"
+PASSED hideKeyboard with a focused field (iOS) in 5229 ms
+settle check (v2): 0 violation(s)

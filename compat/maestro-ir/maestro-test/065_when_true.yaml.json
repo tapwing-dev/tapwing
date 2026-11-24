@@ -1,0 +1,383 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "name" : "True"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${name}"
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${true}"
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "065_subflow.yaml"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "name" : "False"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${name}"
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${false}"
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "065_subflow.yaml"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "name" : "String"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${name}"
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${'String'}"
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "065_subflow.yaml"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "name" : "Undefined"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${name}"
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${undefined}"
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "065_subflow.yaml"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "name" : "Empty"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${name}"
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${}"
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "065_subflow.yaml"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "name" : "Null"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${name}"
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${null}"
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "065_subflow.yaml"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "name" : "Zero"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${name}"
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${0}"
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "065_subflow.yaml"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "name" : "Positive Int"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${name}"
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${123}"
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "065_subflow.yaml"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "name" : "Object"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${name}"
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${{field: 'value'}}"
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "065_subflow.yaml"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "name" : "Array"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${name}"
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${[]}"
+      },
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "065_subflow.yaml"
+    }
+  } ]
+}

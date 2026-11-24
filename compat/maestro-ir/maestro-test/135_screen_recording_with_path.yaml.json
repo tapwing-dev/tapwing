@@ -1,0 +1,22 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.other.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "startRecordingCommand" : {
+      "optional" : false,
+      "path" : "135_recordings/filename"
+    }
+  }, {
+    "stopRecordingCommand" : {
+      "optional" : false
+    }
+  } ]
+}

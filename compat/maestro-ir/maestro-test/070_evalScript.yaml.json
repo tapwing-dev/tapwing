@@ -1,0 +1,33 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.number = 1 + 1}"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.text = 'Result is: ' + output.number}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.number}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.text}"
+    }
+  } ]
+}

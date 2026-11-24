@@ -1,0 +1,6 @@
+maestro  inputText   454 ms  field="Příliš žluťoučký kůň"  ime unchanged
+tapwing  inputText     4 ms  field="Příliš žluťoučký kůň"  ime unchanged
+maestro  inputText   441 ms  field="Příliš žluťoučký kůň"  ime unchanged
+tapwing  inputText     7 ms  field="Příliš žluťoučký kůň"  ime unchanged
+maestro  inputText   461 ms  field="Příliš žluťoučký kůň"  ime unchanged
+tapwing  inputText     4 ms  field="Příliš žluťoučký kůň"  ime unchanged

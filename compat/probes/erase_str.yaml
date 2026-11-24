@@ -1,0 +1,5 @@
+appId: a
+---
+- eraseText: "5"
+- eraseText:
+    charactersToErase: "7"

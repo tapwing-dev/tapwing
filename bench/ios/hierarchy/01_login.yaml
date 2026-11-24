@@ -1,0 +1,4 @@
+appId: dev.tapwing.sampleApp
+---
+- launchApp
+- assertVisible: "Welcome back"

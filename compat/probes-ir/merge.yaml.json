@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Unknown Property: << at <ROOT>/merge.yaml:-1:-1",
+    "type" : "SyntaxError"
+  }
+}

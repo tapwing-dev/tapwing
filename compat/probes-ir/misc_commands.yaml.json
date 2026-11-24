@@ -1,0 +1,86 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "setLocationCommand" : {
+      "latitude" : "43.7230",
+      "longitude" : "10.3966",
+      "optional" : false
+    }
+  }, {
+    "setClipboardCommand" : {
+      "optional" : false,
+      "text" : "hi"
+    }
+  }, {
+    "setClipboardCommand" : {
+      "label" : "L",
+      "optional" : false,
+      "text" : "yo"
+    }
+  }, {
+    "startRecordingCommand" : {
+      "optional" : false,
+      "path" : "rec"
+    }
+  }, {
+    "startRecordingCommand" : {
+      "optional" : true,
+      "path" : "rec2"
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "optional" : false,
+      "path" : "shot"
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "cropOn" : {
+        "idRegex" : "x",
+        "optional" : false
+      },
+      "optional" : false,
+      "path" : "s2"
+    }
+  }, {
+    "assertScreenshotCommand" : {
+      "optional" : false,
+      "path" : "base",
+      "thresholdPercentage" : "95"
+    }
+  }, {
+    "assertScreenshotCommand" : {
+      "cropOn" : {
+        "optional" : false,
+        "textRegex" : "y"
+      },
+      "optional" : false,
+      "path" : "base2",
+      "thresholdPercentage" : "90"
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false,
+      "timeout" : "3000"
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_UP",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "TV_INPUT_HDMI_2",
+      "label" : "L",
+      "optional" : false
+    }
+  } ]
+}

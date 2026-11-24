@@ -1,0 +1,30 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "copyTextCommand" : {
+      "optional" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "x"
+      }
+    }
+  }, {
+    "copyTextCommand" : {
+      "label" : "L",
+      "optional" : true,
+      "selector" : {
+        "idRegex" : "y",
+        "optional" : true
+      }
+    }
+  } ]
+}

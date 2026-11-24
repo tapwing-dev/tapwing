@@ -1,0 +1,9 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 337 ms
+
+▶ 10_screenshot_theme
+  ✓  2206.9 ms  launchApp
+  ✓   588.8 ms  tapOn "F2 Playground"
+  ✓     1.5 ms  assertVisible id: nav_selectors_taps
+  ✓   539.3 ms  tapOn id: nav_screenshot_theme
+  ✓     1.3 ms  assertVisible id: visual_badge
+PASSED 10_screenshot_theme in 3338 ms

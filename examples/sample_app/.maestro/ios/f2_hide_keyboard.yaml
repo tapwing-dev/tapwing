@@ -1,0 +1,18 @@
+appId: dev.tapwing.sampleApp
+name: F2 hideKeyboard (iOS)
+---
+# Passes in stock Maestro iOS only because the sample app unfocuses on taps
+# outside text fields on iOS (EditableTextTapOutsideIntent in main.dart).
+- launchApp:
+    clearState: true
+- tapOn: "Email"
+- inputText: "jan@example.com"
+- hideKeyboard
+- tapOn:
+    id: "password_input"
+- inputText: "secret123"
+- hideKeyboard
+- hideKeyboard
+- tapOn:
+    id: "login_button"
+- assertVisible: "Products"

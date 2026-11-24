@@ -1,0 +1,9 @@
+appId: com.example
+---
+- extendedWaitUntil:
+    visible: a
+    timeout: ${T}
+- extendedWaitUntil:
+    notVisible:
+      id: b
+    label: L

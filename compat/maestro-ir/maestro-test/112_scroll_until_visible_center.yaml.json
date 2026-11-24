@@ -1,0 +1,28 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "scrollUntilVisible" : {
+      "centerElement" : true,
+      "direction" : "DOWN",
+      "optional" : false,
+      "originalSpeedValue" : "100",
+      "scrollDuration" : "100",
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Test"
+      },
+      "timeout" : "10",
+      "visibilityPercentage" : 100,
+      "visibilityPercentageNormalized" : 1.0
+    }
+  } ]
+}

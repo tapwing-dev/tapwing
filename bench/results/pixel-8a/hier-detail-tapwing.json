@@ -1,0 +1,158 @@
+{
+  "root": {
+    "bounds": [
+      0,
+      0,
+      1080,
+      2400
+    ],
+    "children": [
+      {
+        "bounds": [
+          0,
+          0,
+          1080,
+          2400
+        ],
+        "children": [
+          {
+            "bounds": [
+              0,
+              0,
+              1080,
+              2400
+            ],
+            "children": [
+              {
+                "bounds": [
+                  0,
+                  0,
+                  1080,
+                  2400
+                ],
+                "children": [
+                  {
+                    "bounds": [
+                      0,
+                      0,
+                      1080,
+                      268
+                    ],
+                    "children": [
+                      {
+                        "accessibilityText": "Back",
+                        "bounds": [
+                          11,
+                          132,
+                          137,
+                          258
+                        ],
+                        "clickable": true,
+                        "id": 43
+                      },
+                      {
+                        "accessibilityText": "Product 2",
+                        "bounds": [
+                          189,
+                          158,
+                          438,
+                          231
+                        ],
+                        "id": 44
+                      }
+                    ],
+                    "id": 42
+                  },
+                  {
+                    "bounds": [
+                      0,
+                      268,
+                      1080,
+                      2400
+                    ],
+                    "children": [
+                      {
+                        "bounds": [
+                          0,
+                          268,
+                          1080,
+                          2400
+                        ],
+                        "children": [
+                          {
+                            "accessibilityText": "Details of Product 2",
+                            "bounds": [
+                              42,
+                              310,
+                              1038,
+                              363
+                            ],
+                            "id": 35
+                          },
+                          {
+                            "bounds": [
+                              42,
+                              363,
+                              1038,
+                              405
+                            ],
+                            "id": 36
+                          },
+                          {
+                            "bounds": [
+                              42,
+                              405,
+                              1038,
+                              552
+                            ],
+                            "children": [
+                              {
+                                "bounds": [
+                                  42,
+                                  405,
+                                  1038,
+                                  552
+                                ],
+                                "children": [
+                                  {
+                                    "accessibilityText": "Favorite",
+                                    "bounds": [
+                                      42,
+                                      405,
+                                      1038,
+                                      552
+                                    ],
+                                    "checked": true,
+                                    "clickable": true,
+                                    "id": 39
+                                  }
+                                ],
+                                "id": 38,
+                                "resource-id": "favorite_switch"
+                              }
+                            ],
+                            "id": 37
+                          }
+                        ],
+                        "id": 41
+                      }
+                    ],
+                    "id": 34
+                  }
+                ],
+                "id": 33
+              }
+            ],
+            "id": 32
+          }
+        ],
+        "id": 1
+      }
+    ],
+    "id": 0
+  },
+  "screen": [
+    1080.0,
+    2400.0
+  ]
+}

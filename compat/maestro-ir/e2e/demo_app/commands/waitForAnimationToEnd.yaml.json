@@ -1,0 +1,146 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Animation Test"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${maestro.startTime = new Date()}"
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${maestro.endTime = new Date()}"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${maestro.endTime - maestro.startTime < 3000}"
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Animate (30s)"
+      },
+      "waitToSettleTimeoutMs" : 100,
+      "waitUntilVisible" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${maestro.startTime = new Date()}"
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false,
+      "timeout" : "1000"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${maestro.endTime = new Date()}"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${maestro.endTime - maestro.startTime > 1000}"
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${maestro.endTime - maestro.startTime < 4000}"
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.myTimeout = 1000}"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${maestro.startTime = new Date()}"
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false,
+      "timeout" : "${output.myTimeout}"
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${maestro.endTime = new Date()}"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${maestro.endTime - maestro.startTime > 1000}"
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${maestro.endTime - maestro.startTime < 4000}"
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${maestro.startTime = new Date()}"
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${maestro.endTime = new Date()}"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${maestro.endTime - maestro.startTime > 4000}"
+      },
+      "optional" : false
+    }
+  } ]
+}

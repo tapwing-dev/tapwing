@@ -1,0 +1,62 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "containsDescendants" : [ {
+            "optional" : false,
+            "textRegex" : "Child 1"
+          }, {
+            "enabled" : false,
+            "optional" : false,
+            "textRegex" : "Child 2"
+          } ],
+          "idRegex" : "id1",
+          "optional" : false
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "containsDescendants" : [ {
+            "optional" : false,
+            "textRegex" : "Child 1"
+          } ],
+          "idRegex" : "id2",
+          "optional" : false
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "containsDescendants" : [ {
+            "optional" : false,
+            "textRegex" : "Child 1"
+          }, {
+            "optional" : false,
+            "textRegex" : "Child 3"
+          } ],
+          "idRegex" : "id1",
+          "optional" : false
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

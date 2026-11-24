@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Incorrect Command Format: launchApp at <ROOT>/maestro-orchestra/workspaces/e023_launchApp_empty_string/workspace/Flow.yaml:3:13",
+    "type" : "SyntaxError"
+  }
+}

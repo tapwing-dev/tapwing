@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Incorrect Command Format: inputText at <ROOT>/input_null.yaml:3:18",
+    "type" : "SyntaxError"
+  }
+}

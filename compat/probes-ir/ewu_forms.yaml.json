@@ -1,0 +1,35 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "a"
+        }
+      },
+      "optional" : false,
+      "timeout" : "${T}"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "idRegex" : "b",
+          "optional" : false
+        }
+      },
+      "label" : "L",
+      "optional" : false
+    }
+  } ]
+}

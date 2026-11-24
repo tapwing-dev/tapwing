@@ -1,0 +1,174 @@
+{
+  "platform": "android",
+  "setupMs": 595.597458,
+  "flows": [
+    {
+      "flow": "F2 Dark Mode",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/f2_dark_mode.yaml",
+      "status": "passed",
+      "totalMs": 3028.35,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 1961.3494170000001,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "profile",
+              "pid": 10928,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"android_arm64\"",
+              "screen": [
+                0.0,
+                0.0
+              ],
+              "dpr": 1.0,
+              "platform": "android"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 10928,
+            "oldPids": [
+              10716
+            ],
+            "grantedPermissions": 0,
+            "phases": {
+              "stopClearMs": 90,
+              "permissionsMs": 59,
+              "amStartMs": 65,
+              "acceptMs": 525.3665,
+              "rejectedConnections": 0,
+              "configureMs": 7.875709,
+              "waitIdleMs": 1083.427667
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 518.114834,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                84,
+                1335,
+                1356,
+                1503
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 1319,
+              "actUs": 7723,
+              "settleUs": 483887
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1156 tap 720,1419"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: nav_screenshot_theme",
+          "status": "passed",
+          "ms": 497.497417,
+          "driver": {
+            "element": {
+              "id": 21,
+              "accessibilityText": "Screenshot & Theme\ntakeScreenshot, assertScreenshot, dark/light mode",
+              "resource-id": "nav_screenshot_theme",
+              "bounds": [
+                56,
+                1153,
+                1384,
+                1405
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 10819,
+              "actUs": 2626,
+              "settleUs": 480284
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1665 tap 720,1279"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 3,
+          "command": "assertVisible",
+          "description": "assertVisible \"Theme: dark\"",
+          "status": "passed",
+          "ms": 1.66625,
+          "driver": {
+            "element": {
+              "id": 30,
+              "accessibilityText": "Theme: dark",
+              "bounds": [
+                580,
+                1500,
+                860,
+                1570
+              ]
+            }
+          }
+        },
+        {
+          "index": 4,
+          "command": "assertDarkMode",
+          "description": "assertDarkMode",
+          "status": "passed",
+          "ms": 31.442375000000002,
+          "driver": {
+            "darkMode": true,
+            "brightness": "dark"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "size" : {
+            "height" : 100,
+            "tolerance" : 1,
+            "width" : 100
+          }
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

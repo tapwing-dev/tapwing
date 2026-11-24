@@ -1,0 +1,4 @@
+appId: a
+---
+- tapOn:
+    <<: {text: x}

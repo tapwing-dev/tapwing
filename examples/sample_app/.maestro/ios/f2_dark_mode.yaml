@@ -1,0 +1,16 @@
+appId: dev.tapwing.sampleApp
+name: F2 Dark Mode (iOS)
+---
+# iOS simulator: `simctl ui appearance` (IOSDriver.setDarkMode / isDarkModeEnabled).
+- setDarkMode: enabled
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- tapOn:
+    id: "nav_screenshot_theme"
+- assertVisible: "Theme: dark"
+- assertDarkMode
+- toggleDarkMode
+- assertVisible: "Theme: light"
+- assertLightMode

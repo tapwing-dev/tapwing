@@ -1,0 +1,57 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.other.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.value = 0}"
+    }
+  }, {
+    "repeatCommand" : {
+      "commands" : [ {
+        "evalScriptCommand" : {
+          "optional" : false,
+          "scriptString" : "${output.value = output.value + 1}"
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${output.value}"
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Button"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "condition" : {
+        "scriptCondition" : "${output.value < 3}"
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Value 3"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

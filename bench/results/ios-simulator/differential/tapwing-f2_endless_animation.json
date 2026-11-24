@@ -1,0 +1,299 @@
+{
+  "platform": "ios",
+  "setupMs": 189.914083,
+  "flows": [
+    {
+      "flow": "F2 Endless Animation",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/f2_endless_animation.yaml",
+      "status": "passed",
+      "totalMs": 5880.796458,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 3044.949834,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 30316,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"ios_arm64\"",
+              "screen": [
+                1206.0,
+                2622.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 30316,
+            "oldPids": [],
+            "grantedPermissions": 2,
+            "phases": {
+              "stopClearMs": 866,
+              "permissionsMs": 317,
+              "simctlLaunchMs": 332,
+              "acceptMs": 1360.497,
+              "rejectedConnections": 1,
+              "configureMs": 163.91400000000002,
+              "waitIdleMs": 3.94375
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 572.6034589999999,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                24,
+                402,
+                378,
+                450
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 4391,
+              "actUs": 38520,
+              "settleUs": 526701
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "0 tap 201,426"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: nav_endless_animation",
+          "status": "passed",
+          "ms": 2059.608041,
+          "driver": {
+            "element": {
+              "id": 23,
+              "accessibilityText": "Endless Animation\nlarge repeating animation (> 2% screen) settle test",
+              "resource-id": "nav_endless_animation",
+              "bounds": [
+                16,
+                438,
+                386,
+                518
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 889,
+              "actUs": 9281,
+              "settleUs": 2048069
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "569 tap 201,478"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": [
+              {
+                "widget": "FadeTransition",
+                "fraction": 0.096,
+                "status": "forward",
+                "infinite": true
+              }
+            ]
+          }
+        },
+        {
+          "index": 3,
+          "command": "assertVisible",
+          "description": "assertVisible \"Pulsing Banner\"",
+          "status": "passed",
+          "ms": 1.7395,
+          "driver": {
+            "element": {
+              "id": 30,
+              "accessibilityText": "Pulsing Banner",
+              "bounds": [
+                128,
+                429,
+                273,
+                458
+              ]
+            }
+          }
+        },
+        {
+          "index": 4,
+          "command": "tapOn",
+          "description": "tapOn \"Pulse action\"",
+          "status": "passed",
+          "ms": 93.73016700000001,
+          "driver": {
+            "element": {
+              "id": 32,
+              "accessibilityText": "Pulse action",
+              "bounds": [
+                135,
+                570,
+                266,
+                618
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 42126,
+              "actUs": 2315,
+              "settleUs": 48248
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "2674 tap 201,594"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 4,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": [
+              {
+                "widget": "FadeTransition",
+                "fraction": 0.096,
+                "status": "forward",
+                "infinite": true
+              }
+            ]
+          }
+        },
+        {
+          "index": 5,
+          "command": "assertVisible",
+          "description": "assertVisible \"Pulse clicks: 1\"",
+          "status": "passed",
+          "ms": 0.825958,
+          "driver": {
+            "element": {
+              "id": 31,
+              "accessibilityText": "Pulse clicks: 1",
+              "bounds": [
+                153,
+                538,
+                248,
+                558
+              ]
+            }
+          }
+        },
+        {
+          "index": 6,
+          "command": "tapOn",
+          "description": "tapOn \"Pulse action\"",
+          "status": "passed",
+          "ms": 94.931292,
+          "driver": {
+            "element": {
+              "id": 32,
+              "accessibilityText": "Pulse action",
+              "bounds": [
+                135,
+                570,
+                266,
+                618
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 44514,
+              "actUs": 1764,
+              "settleUs": 47967
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "2772 tap 201,594"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 6,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": [
+              {
+                "widget": "FadeTransition",
+                "fraction": 0.096,
+                "status": "forward",
+                "infinite": true
+              }
+            ]
+          }
+        },
+        {
+          "index": 7,
+          "command": "assertVisible",
+          "description": "assertVisible \"Pulse clicks: 2\"",
+          "status": "passed",
+          "ms": 0.638959,
+          "driver": {
+            "element": {
+              "id": 31,
+              "accessibilityText": "Pulse clicks: 2",
+              "bounds": [
+                152,
+                538,
+                249,
+                558
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

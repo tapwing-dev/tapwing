@@ -1,0 +1,56 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "name" : "Issue assertScreenshot Threshold",
+        "properties" : { },
+        "tags" : [ "failing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "assertScreenshot Threshold"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Toggle 10px"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false
+    }
+  }, {
+    "assertScreenshotCommand" : {
+      "optional" : false,
+      "path" : "./screenshots/assertScreenshot_threshold.png",
+      "thresholdPercentage" : "95"
+    }
+  } ]
+}

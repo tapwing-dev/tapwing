@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Config Field Required at <ROOT>/maestro-orchestra/workspaces/020_negation_exclude_directory/config.yaml:4:1",
+    "type" : "SyntaxError"
+  }
+}

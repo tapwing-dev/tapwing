@@ -1,0 +1,137 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : {
+          "jsEngine" : "graaljs"
+        },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "MY_VAR" : "0"
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "MY_VAR" : "1"
+          },
+          "optional" : false
+        }
+      }, {
+        "assertConditionCommand" : {
+          "condition" : {
+            "scriptCondition" : "${MY_VAR === '1'}"
+          },
+          "optional" : false
+        }
+      }, {
+        "defineVariablesCommand" : {
+          "env" : {
+            "MY_VAR" : "1"
+          },
+          "optional" : false
+        }
+      }, {
+        "evalScriptCommand" : {
+          "optional" : false,
+          "scriptString" : "${if(MY_VAR !== '1') { throw Error } }"
+        }
+      }, {
+        "defineVariablesCommand" : {
+          "env" : {
+            "MY_VAR" : "1"
+          },
+          "optional" : false
+        }
+      }, {
+        "runScriptCommand" : {
+          "env" : {
+            "MY_VAR" : "3"
+          },
+          "optional" : false,
+          "script" : "console.log('Log from runScript')",
+          "scriptDir" : "<ROOT>/maestro-test",
+          "sourceDescription" : "127_script.js"
+        }
+      }, {
+        "defineVariablesCommand" : {
+          "env" : {
+            "MY_VAR" : "1"
+          },
+          "optional" : false
+        }
+      }, {
+        "runScriptCommand" : {
+          "env" : { },
+          "optional" : false,
+          "script" : "MY_VAR = 4",
+          "scriptDir" : "<ROOT>/maestro-test",
+          "sourceDescription" : "127_script_mutate_env_var.js"
+        }
+      }, {
+        "defineVariablesCommand" : {
+          "env" : {
+            "MY_VAR" : "1"
+          },
+          "optional" : false
+        }
+      }, {
+        "runFlowCommand" : {
+          "commands" : [ {
+            "defineVariablesCommand" : {
+              "env" : {
+                "MY_VAR" : "2"
+              },
+              "optional" : false
+            }
+          }, {
+            "assertConditionCommand" : {
+              "condition" : {
+                "scriptCondition" : "${MY_VAR === '2'}"
+              },
+              "optional" : false
+            }
+          } ],
+          "optional" : false
+        }
+      }, {
+        "defineVariablesCommand" : {
+          "env" : {
+            "MY_VAR" : "1"
+          },
+          "optional" : false
+        }
+      }, {
+        "assertConditionCommand" : {
+          "condition" : {
+            "scriptCondition" : "${MY_VAR === '1'}"
+          },
+          "optional" : false
+        }
+      } ],
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "assertConditionCommand" : {
+          "condition" : {
+            "scriptCondition" : "${MY_VAR === '0'}"
+          },
+          "optional" : false
+        }
+      } ],
+      "optional" : false
+    }
+  } ]
+}

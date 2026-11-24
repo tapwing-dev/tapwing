@@ -1,0 +1,12 @@
+appId: a
+---
+- runFlow:
+    when:
+      platform: android
+    commands:
+      - back
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - back

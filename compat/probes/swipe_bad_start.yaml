@@ -1,0 +1,4 @@
+appId: com.example
+---
+- swipe:
+    start: 10, 20

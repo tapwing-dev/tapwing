@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Invalid Command: inp at <ROOT>/maestro-orchestra/workspaces/e016_config_invalid_command_in_onFlowStart/workspace/Flow.yaml:3:5",
+    "type" : "SyntaxError"
+  }
+}

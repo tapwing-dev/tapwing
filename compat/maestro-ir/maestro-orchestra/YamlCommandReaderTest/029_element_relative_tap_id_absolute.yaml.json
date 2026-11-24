@@ -1,0 +1,25 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.test",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "relativePoint" : "25, 75",
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "submit-btn",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  } ]
+}

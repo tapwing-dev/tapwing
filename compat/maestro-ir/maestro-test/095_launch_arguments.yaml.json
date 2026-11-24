@@ -1,0 +1,32 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "ARGUMENT_B" : "argumentB",
+        "BOOL_VALUE" : "true"
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.app",
+      "launchArguments" : {
+        "${ARGUMENT_B}" : 4,
+        "argumentA" : true,
+        "argumentC" : 4.0,
+        "argumentD" : "Hello String Value ${BOOL_VALUE}"
+      },
+      "optional" : false
+    }
+  } ]
+}

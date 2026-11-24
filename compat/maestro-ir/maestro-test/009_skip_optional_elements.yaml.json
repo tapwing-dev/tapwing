@@ -1,0 +1,34 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : true,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : true,
+        "textRegex" : "Optional Element"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Non Optional"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

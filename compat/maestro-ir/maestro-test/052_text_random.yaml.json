@@ -1,0 +1,49 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "NUMBER",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT",
+      "length" : 5,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "NUMBER",
+      "length" : 5,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT_EMAIL_ADDRESS",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT_PERSON_NAME",
+      "length" : 8,
+      "optional" : false
+    }
+  } ]
+}

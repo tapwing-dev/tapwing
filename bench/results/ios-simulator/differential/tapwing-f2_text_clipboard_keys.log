@@ -1,0 +1,56 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 187 ms
+
+▶ F2 Text Clipboard and Keys (iOS)
+  ✓  3064.1 ms  launchApp (clearState)
+  ✓   603.3 ms  tapOn id: playground_button
+  ✓   540.1 ms  tapOn id: nav_text_keys
+  ✓     2.0 ms  copyTextFrom
+  ✓   791.4 ms  tapOn id: secret_field
+  ✓     0.0 ms  back
+  ✓     1.7 ms  assertVisible "Text & Keys"
+  ✓     0.0 ms  pressKey
+  ✓     0.7 ms  assertVisible "Text & Keys"
+  ✓   812.6 ms  tapOn id: field_one
+  ✓   634.0 ms  pasteText
+  ✓     1.0 ms  assertVisible "Tapwing-Copy-99"
+  ✓    62.8 ms  pressKey
+  ✓     0.7 ms  assertVisible "Tapwing-Copy-9"
+  ✓   149.9 ms  pressKey
+  ✓     0.9 ms  assertVisible "Submitted: Tapwing-Copy-9"
+  ✓   267.7 ms  tapOn id: field_one
+  ✓   377.0 ms  eraseText
+  ✓     0.0 ms  setClipboard
+  ✓   432.7 ms  pasteText
+  ✓     1.6 ms  assertVisible "From-Host-Clipboard"
+  ✓     0.0 ms  pressKey
+  ✓   231.8 ms  tapOn id: field_two
+  ✓   398.4 ms  inputText "TabTarget"
+  ✓     0.9 ms  assertVisible "TabTarget"
+  ✓   296.4 ms  eraseText
+  ✓   198.5 ms  inputRandom
+  ✓     0.8 ms  assertVisible ".{6}"
+  ✓   166.3 ms  eraseText
+  ✓   130.3 ms  inputRandom
+  ✓     0.7 ms  assertVisible "[0-9]{5}"
+  ✓    98.4 ms  eraseText
+  ✓   465.4 ms  inputRandom
+  ✓     1.4 ms  assertVisible ".+@.+\..+"
+  ✓   379.3 ms  eraseText
+  ✓   349.5 ms  inputRandom
+  ✓   249.4 ms  eraseText
+  ✓   249.2 ms  inputRandom
+  ✓   197.1 ms  eraseText
+  ✓   468.9 ms  inputRandom
+  ✓   363.1 ms  eraseText
+  ✓   150.0 ms  inputRandom
+  ✓   250.3 ms  tapOn "Open Key Dialog"
+  ✓     0.9 ms  assertVisible "Key Dialog"
+  ✓     0.0 ms  pressKey
+  ✓     0.3 ms  assertVisible "Key Dialog"
+  ✓     0.0 ms  pressKey
+  ✓     0.3 ms  assertVisible "Key Dialog"
+  ✓   246.4 ms  tapOn "Close"
+  ✓     1.2 ms  assertNotVisible "Key Dialog"
+  ✓     0.0 ms  pressKey
+PASSED F2 Text Clipboard and Keys (iOS) in 12681 ms
+settle check (v2): 0 violation(s)

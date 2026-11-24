@@ -1,0 +1,26 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : { },
+      "optional" : false,
+      "script" : "output.sharedResult = 'Sub'\noutput.subFlow = {\n  result: 'Sub'\n}\noutput.subFlowFileName = MAESTRO_FILENAME\n",
+      "scriptDir" : "<ROOT>/maestro-test",
+      "sourceDescription" : "064_script_alt.js"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.sharedResult}"
+    }
+  } ]
+}

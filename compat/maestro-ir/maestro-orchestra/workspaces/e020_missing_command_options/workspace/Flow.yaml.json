@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Missing Command Options at <ROOT>/maestro-orchestra/workspaces/e020_missing_command_options/workspace/Flow.yaml:3:3",
+    "type" : "SyntaxError"
+  }
+}

@@ -1,0 +1,8 @@
+appId: com.example
+---
+- openLink: https://a
+- openLink:
+    link: https://b
+    browser: true
+    autoVerify: true
+    label: L

@@ -1,0 +1,13 @@
+Config Section Required at /tmp/WorkspaceExecutionPlannerErrorsTest_workspace/workspace/Flow.yaml:1:1
+
+  >    1 | 
+           ^
+
+  Flow files must start with a config section. Eg:
+  
+  ```yaml
+  appId: com.example.app # <-- config section
+  ---
+  - launchApp
+  ```
+  See: https://docs.maestro.dev/getting-started/writing-your-first-flow

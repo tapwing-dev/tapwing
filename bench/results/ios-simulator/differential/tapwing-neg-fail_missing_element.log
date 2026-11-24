@@ -1,0 +1,9 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 177 ms
+
+▶ Negative Missing Element
+  ✓  2893.9 ms  launchApp (clearState)
+  ✗  1004.8 ms  extendedWaitUntil "Definitely Does Not Exist"
+      Element not found: Text matching regex: Definitely Does Not Exist
+      on screen: "Sample App", "Welcome back", "Email", "Password", "Log in", "F2 Playground"
+FAILED Negative Missing Element in 3904 ms
+settle check (v2): 0 violation(s)

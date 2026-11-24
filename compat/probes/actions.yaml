@@ -1,0 +1,7 @@
+appId: com.example
+---
+- action: back
+- action: hideKeyboard
+- action: scroll
+- action: clearKeychain
+- action: pasteText

@@ -1,0 +1,8 @@
+== HW ON: maestro-like swipe 1 (201,437)->(201,410) 50ms
+{"isKeyboardVisible":true}
+== swipe 2 (201,437)->(188,437)
+{"isKeyboardVisible":true}
+== tap on static text 'Welcome back' (201,152)
+{"isKeyboardVisible":true}
+== tap on empty area (201,600)
+{"isKeyboardVisible":true}

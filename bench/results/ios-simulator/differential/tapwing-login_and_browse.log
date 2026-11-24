@@ -1,0 +1,34 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 190 ms
+
+▶ Login and browse (iOS)
+  ✓  3088.0 ms  launchApp (clearState)
+  ✓     8.8 ms  assertVisible "Welcome back"
+  ✓   140.5 ms  tapOn "Log in"
+  ✓     0.8 ms  assertVisible "Email is required"
+  ✓   832.4 ms  tapOn "Email"
+  ✓   297.6 ms  inputText "jan@example.com"
+  ✓   817.9 ms  tapOn id: password_input
+  ✓   144.2 ms  inputText "secret123"
+  ✓   100.9 ms  hideKeyboard
+      ⚠ hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step ("Couldn't hide the keyboard") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro.
+  ✓   282.2 ms  tapOn id: login_button
+  ✓   513.6 ms  assertVisible "Products"
+  ✓     1.5 ms  assertVisible "Product 1.*"
+  ✓  6851.9 ms  scrollUntilVisible "Product 40.*"
+  ✓   533.3 ms  tapOn "Product 40.*"
+  ✓     0.8 ms  assertVisible "Details of Product 40"
+  ✓    43.2 ms  tapOn id: favorite_switch
+  ✓     0.9 ms  assertVisible "Favorite"
+  ✓     0.0 ms  back
+  ✓     0.4 ms  assertVisible "Details of Product 40"
+  ✓   585.3 ms  tapOn "Back"
+  ✓     0.6 ms  assertVisible "Products"
+  ✓   192.7 ms  tapOn "Add product"
+  ✓     0.7 ms  assertVisible "New product"
+  ✓   231.8 ms  tapOn "Name"
+  ✓   329.0 ms  inputText "Tapwing"
+  ✓   348.7 ms  tapOn "Add"
+  ✓     0.8 ms  assertVisible "Added Tapwing"
+  ✓     0.8 ms  assertNotVisible "New product"
+PASSED Login and browse (iOS) in 15377 ms
+settle check (v2): 0 violation(s)

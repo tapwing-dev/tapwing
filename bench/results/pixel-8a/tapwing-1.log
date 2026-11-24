@@ -1,0 +1,31 @@
+device 4C101JEKB02816 · setup 232 ms
+
+▶ Login and browse
+  ✓   724.3 ms  launchApp (clearState)
+  ✓     4.1 ms  assertVisible "Welcome back"
+  ✓    56.2 ms  tapOn "Log in"
+  ✓     3.0 ms  assertVisible "Email is required"
+  ✓   566.0 ms  tapOn "Email"
+  ✓    32.4 ms  inputText "jan@example.com"
+  ✓   184.0 ms  tapOn id: password_input
+  ✓    27.9 ms  inputText "secret123"
+  ✓   402.4 ms  hideKeyboard
+  ✓   212.5 ms  tapOn id: login_button
+  ✓   459.3 ms  assertVisible "Products"
+  ✓     6.6 ms  assertVisible "Product 1.*"
+  ✓  1078.9 ms  scrollUntilVisible "Product 40.*"
+  ✓   481.3 ms  tapOn "Product 40.*"
+  ✓     5.0 ms  assertVisible "Details of Product 40"
+  ✓    55.9 ms  tapOn id: favorite_switch
+  ✓     6.3 ms  assertVisible "Favorite"
+  ✓   490.2 ms  back
+  ✓     3.5 ms  assertVisible "Products"
+  ✓   175.3 ms  tapOn "Add product"
+  ✓     6.7 ms  assertVisible "New product"
+  ✓   574.5 ms  tapOn "Name"
+  ✓    29.1 ms  inputText "Tapwing"
+  ✓   415.3 ms  tapOn "Add"
+  ✓     5.4 ms  assertVisible "Added Tapwing"
+  ✓     4.3 ms  assertNotVisible "New product"
+PASSED Login and browse in 6096 ms
+settle check (v2): 0 violation(s)

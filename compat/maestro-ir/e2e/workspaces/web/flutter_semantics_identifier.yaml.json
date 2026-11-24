@@ -1,0 +1,49 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "http://127.0.0.1:7357/flutter_semantics_identifier.html",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing", "web" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "http://127.0.0.1:7357/flutter_semantics_identifier.html",
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "idRegex" : "login_button",
+          "optional" : false
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : "login_button",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Tapped"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

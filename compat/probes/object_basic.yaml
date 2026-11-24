@@ -1,0 +1,14 @@
+appId: com.example
+---
+- back:
+    label: B
+    optional: true
+- inputRandomText:
+    length: 5
+- inputRandomEmail:
+    label: E
+- stopApp:
+    appId: other
+- clearState: other.app
+- killApp:
+    label: K

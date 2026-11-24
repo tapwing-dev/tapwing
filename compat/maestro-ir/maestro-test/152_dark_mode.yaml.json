@@ -1,0 +1,27 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "setDarkModeCommand" : {
+      "optional" : false,
+      "value" : "Enable"
+    }
+  }, {
+    "setDarkModeCommand" : {
+      "optional" : false,
+      "value" : "Disable"
+    }
+  }, {
+    "toggleDarkModeCommand" : {
+      "optional" : false
+    }
+  } ]
+}

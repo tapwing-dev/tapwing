@@ -1,0 +1,10 @@
+Running on iPhone 18 Pro - iOS 27.2 - 47862A4D-744F-4125-8D9E-20D8B51AD7DF
+ > Flow F2 Endless Animation
+Launch app "dev.tapwing.sampleApp" with clear state... COMPLETED
+Tap on id: playground_button... COMPLETED
+Tap on id: nav_endless_animation... COMPLETED
+Assert that "Pulsing Banner" is visible... COMPLETED
+Tap on "Pulse action"... COMPLETED
+Assert that "Pulse clicks: 1" is visible... COMPLETED
+Tap on "Pulse action"... COMPLETED
+Assert that "Pulse clicks: 2" is visible... COMPLETED

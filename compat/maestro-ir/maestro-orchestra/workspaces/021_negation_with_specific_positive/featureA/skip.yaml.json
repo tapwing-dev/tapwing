@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Config Field Required at <ROOT>/maestro-orchestra/workspaces/021_negation_with_specific_positive/featureA/skip.yaml:2:1",
+    "type" : "SyntaxError"
+  }
+}

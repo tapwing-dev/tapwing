@@ -1,0 +1,30 @@
+# F7 app health: every step passes in Maestro and in Tapwing's default
+# `--app-errors report`, while Tapwing reports what the app logged on the way
+# (layout overflow, image load failure, build error, uncaught async error, and
+# in debug builds setState after dispose):
+#   tapwing test .maestro/ios/f7_app_health.yaml --device "<udid>"                    # passes, lists the issues per step
+#   tapwing test .maestro/ios/f7_app_health.yaml --device "<udid>" --app-errors fail  # fails at `tapOn "Show overflow"`
+appId: dev.tapwing.sampleApp
+name: F7 App Health
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- scrollUntilVisible:
+    element:
+      id: "nav_app_health"
+- tapOn:
+    id: "nav_app_health"
+- tapOn: "Show overflow"
+- assertVisible: "Health: overflow shown"
+# Debug builds only: a delayed setState after dispose (framework assertion),
+# reported under the step during which it fires.
+- tapOn: "setState after dispose"
+- assertVisible: "Health: late setState scheduled"
+- tapOn: "Load broken image"
+- assertVisible: "Health: image requested"
+- tapOn: "Throw in build"
+- assertVisible: "Health: build error shown"
+- tapOn: "Throw async"
+- assertVisible: "Health: async error thrown"

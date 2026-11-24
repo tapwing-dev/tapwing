@@ -1,0 +1,27 @@
+# F8b trace viewer: the app makes HTTP requests to a server it runs itself on
+# the loopback interface (no host or internet services). Passes unchanged in
+# Maestro; in Tapwing, --trace records each request under the step that
+# started it (URLs, headers, and errors redacted):
+#   tapwing test .maestro/f8_trace_network.yaml --trace
+#   tapwing test .maestro/f8_trace_network.yaml --trace --trace-screenshots steps
+appId: dev.tapwing.sample_app
+name: F8b Trace Network
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- scrollUntilVisible:
+    element:
+      id: "nav_network"
+- tapOn:
+    id: "nav_network"
+- assertVisible: "Network: ready"
+- tapOn: "Fetch products"
+- assertVisible: "Network: products 200"
+- tapOn: "Post login"
+- assertVisible: "Network: login 200"
+- tapOn: "Fetch missing"
+- assertVisible: "Network: missing 404"
+- tapOn: "Fetch offline"
+- assertVisible: "Network: offline failed"

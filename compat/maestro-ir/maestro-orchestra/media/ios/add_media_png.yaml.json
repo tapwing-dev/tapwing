@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Media File Not Found at <ROOT>/maestro-orchestra/media/ios/add_media_png.yaml:3:3",
+    "type" : "SyntaxError"
+  }
+}

@@ -1,0 +1,214 @@
+//! F7 app health: step attribution, `--app-errors report|fail`, ignore rules,
+//! trailing issues, crash diagnosis, and report summaries, over `FakeDriver`.
+
+use std::path::Path;
+
+use serde_json::{Value, json};
+use tapwing::app_health::{AppErrorsPolicy, AppHealthOpts, IssueBatch, crash_issue};
+use tapwing::backend::TransportError;
+use tapwing::fake_driver::FakeDriver;
+use tapwing::flow::Loader;
+use tapwing::orchestra::{FlowResult, Orchestra, OrchestraOpts};
+
+const FLOW: &str = "\
+appId: dev.tapwing.sample_app
+---
+- evalScript: ${1}
+- evalScript: ${2}
+- evalScript: ${3}
+";
+
+fn issue(id: u64, kind: &str, message: &str) -> Value {
+    json!({ "id": id, "seq": id, "kind": kind, "message": message, "count": 1, "request": id })
+}
+
+fn batch(current: Vec<Value>, late: Vec<Value>) -> IssueBatch {
+    IssueBatch { current, late, dropped: 0 }
+}
+
+fn run(driver: &mut FakeDriver, source: &str, policy: AppErrorsPolicy, ignore: &[&str]) -> FlowResult {
+    let flow = Loader::new().parse(Path::new("f7.yaml"), source).expect("flow parses");
+    let ignore: Vec<String> = ignore.iter().map(|s| s.to_string()).collect();
+    let opts = OrchestraOpts {
+        lookup_timeout_ms: 0,
+        optional_lookup_timeout_ms: 0,
+        app_health: AppHealthOpts::new(policy, &ignore, false).unwrap(),
+        ..Default::default()
+    };
+    Orchestra::new(driver, opts).run_parsed_flow(&flow)
+}
+
+fn kinds(step: &Value) -> Vec<String> {
+    step["appIssues"].as_array().into_iter().flatten().map(|i| i["kind"].as_str().unwrap().to_string()).collect()
+}
+
+#[test]
+fn report_attaches_issues_to_the_step_that_caused_them_and_keeps_pass_fail() {
+    let mut driver = FakeDriver::new();
+    driver.app_issue_batches = [
+        batch(vec![], vec![]),
+        batch(vec![issue(1, "layoutOverflow", "A RenderFlex overflowed by 12 pixels on the right.")], vec![]),
+        // Fired after step 2's response: delivered during step 3, belongs to step 2.
+        batch(vec![], vec![issue(2, "uncaughtError", "StateError: Bad state: late")]),
+    ]
+    .into();
+    let res = run(&mut driver, FLOW, AppErrorsPolicy::Report, &[]);
+    assert!(res.success, "report never changes pass/fail: {:?}", res.error);
+    assert!(res.steps[0].get("appIssues").is_none());
+    assert_eq!(kinds(&res.steps[1]), ["layoutOverflow", "uncaughtError"]);
+    assert!(res.steps[2].get("appIssues").is_none());
+
+    let report = res.to_report_json("f7", Path::new("f7.yaml"), "v2");
+    assert_eq!(
+        report["appIssueSummary"],
+        json!({ "total": 2, "ignored": 0, "byKind": { "layoutOverflow": 1, "uncaughtError": 1 } })
+    );
+}
+
+#[test]
+fn repeats_replace_the_record_by_id() {
+    let mut driver = FakeDriver::new();
+    let mut repeat = issue(1, "imageLoadError", "HTTP 404");
+    repeat["count"] = json!(4);
+    driver.app_issue_batches =
+        [batch(vec![issue(1, "imageLoadError", "HTTP 404")], vec![]), batch(vec![], vec![repeat])].into();
+    let res = run(&mut driver, FLOW, AppErrorsPolicy::Report, &[]);
+    let issues = res.steps[0]["appIssues"].as_array().unwrap();
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0]["count"], 4);
+}
+
+#[test]
+fn fail_policy_fails_at_the_step_and_stops_the_flow() {
+    let mut driver = FakeDriver::new();
+    driver.app_issue_batches =
+        [batch(vec![], vec![]), batch(vec![issue(1, "buildError", "boom in build")], vec![])].into();
+    let res = run(&mut driver, FLOW, AppErrorsPolicy::Fail, &[]);
+    assert!(!res.success);
+    assert_eq!(res.steps.len(), 2, "third command never ran");
+    assert_eq!(res.steps[1]["status"], "failed");
+    assert_eq!(
+        res.steps[1]["error"],
+        "App issue during `evalScript ${2}`: buildError: boom in build (--app-errors fail)"
+    );
+    assert_eq!(kinds(&res.steps[1]), ["buildError"]);
+}
+
+#[test]
+fn fail_policy_blames_the_previous_step_for_late_issues() {
+    let mut driver = FakeDriver::new();
+    driver.app_issue_batches =
+        [batch(vec![], vec![]), batch(vec![], vec![issue(1, "uncaughtError", "StateError: async")])].into();
+    let res = run(&mut driver, FLOW, AppErrorsPolicy::Fail, &[]);
+    assert!(!res.success);
+    assert_eq!(kinds(&res.steps[0]), ["uncaughtError"], "attached to the step that caused it");
+    assert!(res.steps[1]["error"].as_str().unwrap().contains("during `evalScript ${1}`"));
+}
+
+#[test]
+fn ignored_issues_are_reported_but_never_fail() {
+    let mut driver = FakeDriver::new();
+    driver.app_issue_batches =
+        [batch(vec![issue(1, "layoutOverflow", "A RenderFlex overflowed by 3.0 pixels on the bottom.")], vec![])]
+            .into();
+    let res = run(&mut driver, FLOW, AppErrorsPolicy::Fail, &["overflowed by [0-9.]+ pixels on the bottom"]);
+    assert!(res.success, "{:?}", res.error);
+    assert_eq!(res.steps[0]["appIssues"][0]["ignored"], true);
+    let report = res.to_report_json("f7", Path::new("f7.yaml"), "v2");
+    assert_eq!(report["appIssueSummary"]["ignored"], 1);
+}
+
+#[test]
+fn optional_does_not_downgrade_an_app_issue_failure() {
+    let mut driver = FakeDriver::new();
+    driver.app_issue_batches = [batch(vec![issue(1, "uncaughtError", "x")], vec![])].into();
+    let source = "appId: a\n---\n- evalScript:\n    script: ${1}\n    optional: true\n";
+    let res = run(&mut driver, source, AppErrorsPolicy::Fail, &[]);
+    assert!(!res.success);
+    assert_eq!(res.steps[0]["status"], "failed");
+}
+
+#[test]
+fn trailing_issues_go_to_the_last_step_and_fail_under_fail() {
+    let mut driver = FakeDriver::new();
+    driver.trailing_app_issues = batch(vec![issue(9, "uncaughtError", "after the last step")], vec![]);
+    let res = run(&mut driver, FLOW, AppErrorsPolicy::Fail, &[]);
+    assert!(!res.success);
+    assert_eq!(kinds(&res.steps[2]), ["uncaughtError"]);
+    assert!(res.error.unwrap().to_string().contains("during `evalScript ${3}`"));
+
+    let mut driver = FakeDriver::new();
+    driver.trailing_app_issues = batch(vec![issue(9, "uncaughtError", "after the last step")], vec![]);
+    assert!(run(&mut driver, FLOW, AppErrorsPolicy::Report, &[]).success);
+}
+
+#[test]
+fn crash_on_transport_error_names_the_crash_and_stays_a_transport_error() {
+    let mut driver = FakeDriver::new();
+    driver.command_error = Some(Box::new(|| TransportError("app closed the connection during `back`".into()).into()));
+    driver.crash = Some(crash_issue(
+        "App crashed",
+        Some("AndroidRuntime: FATAL EXCEPTION: main\nAndroidRuntime: java.lang.IllegalStateException: boom"),
+    ));
+    let source = "appId: a\n---\n- evalScript: ${1}\n- back\n";
+    let res = run(&mut driver, source, AppErrorsPolicy::Report, &[]);
+    assert!(!res.success);
+    let err = res.error.unwrap();
+    assert!(err.is::<TransportError>(), "still a transport error for retry/runFlow semantics");
+    assert_eq!(err.to_string(), "App crashed during `back`: AndroidRuntime: java.lang.IllegalStateException: boom");
+    let step = &res.steps[1];
+    assert_eq!(step["status"], "failed");
+    assert_eq!(kinds(step), ["appCrash"]);
+}
+
+#[test]
+fn transport_error_without_crash_is_unchanged() {
+    let mut driver = FakeDriver::new();
+    driver.command_error = Some(Box::new(|| TransportError("connection to app lost".into()).into()));
+    let res = run(&mut driver, "appId: a\n---\n- back\n", AppErrorsPolicy::Report, &[]);
+    assert_eq!(res.error.unwrap().to_string(), "connection to app lost");
+    assert!(res.steps.is_empty());
+}
+
+#[test]
+fn clean_flows_have_no_summary() {
+    let mut driver = FakeDriver::new();
+    let res = run(&mut driver, FLOW, AppErrorsPolicy::Report, &[]);
+    let report = res.to_report_json("f7", Path::new("f7.yaml"), "v2");
+    assert!(report.get("appIssueSummary").is_none());
+    assert!(res.steps.iter().all(|s| s.get("appIssues").is_none()));
+}
+
+#[test]
+fn crash_behind_a_plain_connection_error_is_named_too() {
+    // The real driver reports a dropped socket as a plain error, not a
+    // TransportError; the backend only diagnoses once the connection is gone.
+    let mut driver = FakeDriver::new();
+    driver.command_error = Some(Box::new(|| anyhow::anyhow!("app closed the connection during `tapOn`")));
+    driver.crash = Some(crash_issue("App crashed", Some("AndroidRuntime: java.lang.IllegalStateException: boom")));
+    let res = run(&mut driver, "appId: a\n---\n- back\n", AppErrorsPolicy::Report, &[]);
+    assert!(!res.success);
+    assert_eq!(
+        res.steps[0]["error"],
+        "App crashed during `back`: AndroidRuntime: java.lang.IllegalStateException: boom"
+    );
+    assert_eq!(kinds(&res.steps[0]), ["appCrash"]);
+}
+
+#[test]
+fn dropped_issues_are_surfaced_in_summary() {
+    let mut driver = FakeDriver::new();
+    driver.app_issue_batches = [
+        IssueBatch { current: vec![issue(1, "uncaughtError", "flood #1")], late: vec![], dropped: 1200 },
+        IssueBatch { current: vec![], late: vec![], dropped: 300 },
+    ]
+    .into();
+    let res = run(&mut driver, FLOW, AppErrorsPolicy::Report, &[]);
+    assert!(res.success, "{:?}", res.error);
+    assert_eq!(res.dropped_app_issues, 1500);
+    let report = res.to_report_json("f7", Path::new("f7.yaml"), "v2");
+    assert_eq!(
+        report["appIssueSummary"],
+        json!({ "total": 1, "ignored": 0, "dropped": 1500, "byKind": { "uncaughtError": 1 } })
+    );
+}

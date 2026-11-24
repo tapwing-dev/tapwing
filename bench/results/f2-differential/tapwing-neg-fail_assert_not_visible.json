@@ -1,0 +1,84 @@
+{
+  "setupMs": 149.188125,
+  "flows": [
+    {
+      "flow": "Negative Assert Not Visible",
+      "path": "/Users/me/tapwing/examples/sample_app/.maestro/negative/fail_assert_not_visible.yaml",
+      "status": "failed",
+      "totalMs": 3050.550875,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 2045.3005000000003,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "profile",
+              "pid": 22993,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"android_arm64\"",
+              "screen": [
+                0.0,
+                0.0
+              ],
+              "dpr": 1.0
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 22993,
+            "grantedPermissions": 0,
+            "phases": {
+              "stopClearMs": 67,
+              "permissionsMs": 49,
+              "amStartMs": 45,
+              "acceptMs": 463.288209,
+              "rejectedConnections": 0,
+              "configureMs": 1344.678041,
+              "waitIdleMs": 41.548041
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "assertVisible",
+          "description": "assertVisible \"Welcome back\"",
+          "status": "passed",
+          "ms": 10.008709,
+          "driver": {
+            "element": {
+              "id": 4,
+              "accessibilityText": "Welcome back",
+              "bounds": [
+                84,
+                397,
+                1356,
+                523
+              ]
+            }
+          }
+        },
+        {
+          "index": 2,
+          "command": "extendedWaitUntil",
+          "description": "extendedWaitUntil \"Welcome back\"",
+          "status": "failed",
+          "ms": 985.8003749999999,
+          "error": "\"Text matching regex: Welcome back\" is visible"
+        }
+      ]
+    }
+  ]
+}

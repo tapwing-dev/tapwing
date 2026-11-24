@@ -1,0 +1,12 @@
+Running on iPhone 18 Pro - iOS 27.2 - 47862A4D-744F-4125-8D9E-20D8B51AD7DF
+ > Flow F2 hideKeyboard (iOS)
+Launch app "dev.tapwing.sampleApp" with clear state... COMPLETED
+Tap on "Email"... COMPLETED
+Input text jan@example.com... COMPLETED
+Hide Keyboard... COMPLETED
+Tap on id: password_input... COMPLETED
+Input text secret123... COMPLETED
+Hide Keyboard... COMPLETED
+Hide Keyboard... COMPLETED
+Tap on id: login_button... COMPLETED
+Assert that "Products" is visible... COMPLETED

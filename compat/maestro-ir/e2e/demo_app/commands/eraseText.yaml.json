@@ -1,0 +1,121 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Form Test"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Email"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "foo"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "foo"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "optional" : true,
+          "textRegex" : "foo"
+        }
+      },
+      "optional" : true
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "testing"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "above" : {
+            "optional" : false,
+            "textRegex" : "Login"
+          },
+          "optional" : false,
+          "textRegex" : "testing"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "charactersToErase" : 3,
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "above" : {
+            "optional" : false,
+            "textRegex" : "Login"
+          },
+          "optional" : false,
+          "textRegex" : "testing"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "above" : {
+            "optional" : false,
+            "textRegex" : "Login"
+          },
+          "optional" : false,
+          "textRegex" : "test"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

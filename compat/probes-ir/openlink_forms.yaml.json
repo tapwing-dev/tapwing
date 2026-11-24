@@ -1,0 +1,28 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "openLinkCommand" : {
+      "autoVerify" : false,
+      "browser" : false,
+      "link" : "https://a",
+      "optional" : false
+    }
+  }, {
+    "openLinkCommand" : {
+      "autoVerify" : true,
+      "browser" : true,
+      "label" : "L",
+      "link" : "https://b",
+      "optional" : false
+    }
+  } ]
+}

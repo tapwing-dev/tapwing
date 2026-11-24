@@ -1,0 +1,243 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "org.wikimedia.wikipedia",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "ios", "passing", "advanced" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "org.wikimedia.wikipedia",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "launchAppCommand" : {
+          "appId" : "org.wikimedia.wikipedia",
+          "clearState" : true,
+          "optional" : false
+        }
+      }, {
+        "assertConditionCommand" : {
+          "condition" : {
+            "visible" : {
+              "optional" : false,
+              "textRegex" : "Next"
+            }
+          },
+          "optional" : false
+        }
+      }, {
+        "repeatCommand" : {
+          "commands" : [ {
+            "swipeCommand" : {
+              "direction" : "LEFT",
+              "duration" : 400,
+              "optional" : false
+            }
+          }, {
+            "waitForAnimationToEndCommand" : {
+              "optional" : false
+            }
+          } ],
+          "condition" : {
+            "notVisible" : {
+              "optional" : false,
+              "textRegex" : "Get started"
+            }
+          },
+          "optional" : false,
+          "times" : "5"
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Get started"
+          },
+          "waitUntilVisible" : false
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : true,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : true,
+            "textRegex" : "Non existent view"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "config" : {
+        "appId" : "org.wikimedia.wikipedia",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "subflows/onboarding-ios.yaml"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Done"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Explore your Wikipedia Year in Review"
+        }
+      },
+      "label" : "Dismiss Year In Review popup, if visible",
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Continue without logging in"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "You have been logged out"
+        }
+      },
+      "label" : "Dismiss the auth modal if visible",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : true,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : true,
+        "textRegex" : "Non existent view"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Search Wikipedia"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : { },
+      "optional" : false,
+      "script" : "output.result = 'qwerty';\n",
+      "scriptDir" : "<ROOT>/e2e/workspaces/wikipedia/scripts",
+      "sourceDescription" : "scripts/getSearchQuery.js"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.result}"
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "qwerty"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "${output.result}"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "org.wikimedia.wikipedia",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "launchAppCommand" : {
+          "appId" : "org.wikimedia.wikipedia",
+          "clearState" : true,
+          "optional" : false
+        }
+      }, {
+        "assertConditionCommand" : {
+          "condition" : {
+            "visible" : {
+              "optional" : false,
+              "textRegex" : "Next"
+            }
+          },
+          "optional" : false
+        }
+      }, {
+        "assertConditionCommand" : {
+          "condition" : {
+            "visible" : {
+              "optional" : false,
+              "textRegex" : "Skip"
+            }
+          },
+          "optional" : false
+        }
+      } ],
+      "config" : {
+        "appId" : "org.wikimedia.wikipedia",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "subflows/launch-clearstate-ios.yaml"
+    }
+  } ]
+}

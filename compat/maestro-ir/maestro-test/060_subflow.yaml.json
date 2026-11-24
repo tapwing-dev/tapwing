@@ -1,0 +1,28 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${PARAM_FLOW}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${PARAM_INLINE}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${PARAM}"
+    }
+  } ]
+}

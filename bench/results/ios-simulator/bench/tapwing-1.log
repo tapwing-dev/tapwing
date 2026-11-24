@@ -1,0 +1,34 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 170 ms
+
+▶ Login and browse (iOS)
+  ✓  2922.0 ms  launchApp (clearState)
+  ✓     6.2 ms  assertVisible "Welcome back"
+  ✓   105.9 ms  tapOn "Log in"
+  ✓     1.0 ms  assertVisible "Email is required"
+  ✓   830.4 ms  tapOn "Email"
+  ✓   298.5 ms  inputText "jan@example.com"
+  ✓   826.4 ms  tapOn id: password_input
+  ✓   138.1 ms  inputText "secret123"
+  ✓   117.8 ms  hideKeyboard
+      ⚠ hideKeyboard: soft keyboard hidden, the text field keeps focus (like Maestro Android). Maestro iOS passes this step only if the app unfocuses on taps outside the field (EditableTextTapOutsideIntent / TextField.onTapOutside), since Flutter on iOS does not by default; otherwise it fails with "Couldn't hide the keyboard". Run with --maestro-compat=strict to check.
+  ✓   282.1 ms  tapOn id: login_button
+  ✓   513.8 ms  assertVisible "Products"
+  ✓     2.4 ms  assertVisible "Product 1.*"
+  ✓  6848.4 ms  scrollUntilVisible "Product 40.*"
+  ✓   535.5 ms  tapOn "Product 40.*"
+  ✓     0.6 ms  assertVisible "Details of Product 40"
+  ✓    42.5 ms  tapOn id: favorite_switch
+  ✓     0.9 ms  assertVisible "Favorite"
+  ✓     0.0 ms  back
+  ✓     0.6 ms  assertVisible "Details of Product 40"
+  ✓   593.8 ms  tapOn "Back"
+  ✓     1.4 ms  assertVisible "Products"
+  ✓   199.3 ms  tapOn "Add product"
+  ✓     0.6 ms  assertVisible "New product"
+  ✓   215.1 ms  tapOn "Name"
+  ✓   230.4 ms  inputText "Tapwing"
+  ✓   349.1 ms  tapOn "Add"
+  ✓     0.8 ms  assertVisible "Added Tapwing"
+  ✓     0.9 ms  assertNotVisible "New product"
+PASSED Login and browse (iOS) in 15093 ms
+settle check (v2): 0 violation(s)

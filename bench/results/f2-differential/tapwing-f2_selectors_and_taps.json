@@ -1,0 +1,747 @@
+{
+  "setupMs": 195.909417,
+  "flows": [
+    {
+      "flow": "F2 Selectors and Taps",
+      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_selectors_and_taps.yaml",
+      "status": "passed",
+      "totalMs": 24567.648667,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 1859.711041,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "profile",
+              "pid": 12382,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"android_arm64\"",
+              "screen": [
+                0.0,
+                0.0
+              ],
+              "dpr": 1.0
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 12382,
+            "grantedPermissions": 0,
+            "phases": {
+              "stopClearMs": 55,
+              "permissionsMs": 83,
+              "amStartMs": 63,
+              "acceptMs": 467.018083,
+              "rejectedConnections": 0,
+              "configureMs": 1047.4254999999998,
+              "waitIdleMs": 95.90795800000001
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 495.76470900000004,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                84,
+                1335,
+                1356,
+                1503
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 498,
+              "actUs": 9058,
+              "settleUs": 483124
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1180 tap 720,1419"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: nav_selectors_taps",
+          "status": "passed",
+          "ms": 496.706208,
+          "driver": {
+            "element": {
+              "id": 15,
+              "accessibilityText": "Selectors & Taps\ntraits, css, point, doubleTap, longPress, retry",
+              "resource-id": "nav_selectors_taps",
+              "bounds": [
+                56,
+                397,
+                1384,
+                649
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 10374,
+              "actUs": 2600,
+              "settleUs": 480628
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1688 tap 720,523"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 3,
+          "command": "assertVisible",
+          "description": "assertVisible \"Traits Ready\"",
+          "status": "passed",
+          "ms": 1.785125,
+          "driver": {
+            "element": {
+              "id": 31,
+              "accessibilityText": "Traits Ready",
+              "bounds": [
+                56,
+                397,
+                1384,
+                467
+              ]
+            }
+          }
+        },
+        {
+          "index": 4,
+          "command": "assertVisible",
+          "description": "assertVisible id: square_box",
+          "status": "passed",
+          "ms": 2.164917,
+          "driver": {
+            "element": {
+              "id": 34,
+              "accessibilityText": "Square box",
+              "resource-id": "square_box",
+              "bounds": [
+                56,
+                509,
+                371,
+                824
+              ]
+            }
+          }
+        },
+        {
+          "index": 5,
+          "command": "assertVisible",
+          "description": "assertVisible id: long_text_field",
+          "status": "passed",
+          "ms": 1.658292,
+          "driver": {
+            "element": {
+              "id": 35,
+              "text": "Tapwing long text sample exceeding two hundred characters so that Android AccessibilityNodeInfo text length passes the Maestro LONG_TEXT trait threshold of strictly greater than two hundred characters without any ambiguity whatsoever.",
+              "hintText": "Long text",
+              "resource-id": "long_text_field",
+              "bounds": [
+                427,
+                527,
+                1384,
+                807
+              ],
+              "textField": true
+            }
+          }
+        },
+        {
+          "index": 6,
+          "command": "assertNotVisible",
+          "description": "assertNotVisible id: square_box",
+          "status": "passed",
+          "ms": 1.817709,
+          "driver": true
+        },
+        {
+          "index": 7,
+          "command": "tapOn",
+          "description": "tapOn id: split_target",
+          "status": "passed",
+          "ms": 24.13625,
+          "driver": {
+            "element": {
+              "id": 40,
+              "accessibilityText": "Split target",
+              "resource-id": "split_target",
+              "bounds": [
+                56,
+                978,
+                1384,
+                1174
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 4719,
+              "actUs": 1121,
+              "settleUs": 16278
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "2188 tap 321,1076"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 8,
+          "command": "assertVisible",
+          "description": "assertVisible \"Left hit\"",
+          "status": "passed",
+          "ms": 2.1554170000000004,
+          "driver": {
+            "element": {
+              "id": 37,
+              "accessibilityText": "Left hit",
+              "bounds": [
+                56,
+                880,
+                1384,
+                950
+              ]
+            }
+          }
+        },
+        {
+          "index": 9,
+          "command": "tapOn",
+          "description": "tapOn id: split_target",
+          "status": "passed",
+          "ms": 10.620209000000001,
+          "driver": {
+            "element": {
+              "id": 40,
+              "accessibilityText": "Split target",
+              "resource-id": "split_target",
+              "bounds": [
+                56,
+                978,
+                1384,
+                1174
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 296,
+              "actUs": 1551,
+              "settleUs": 6464
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "2213 tap 1118,1076"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 10,
+          "command": "assertVisible",
+          "description": "assertVisible \"Right hit\"",
+          "status": "passed",
+          "ms": 2.420958,
+          "driver": {
+            "element": {
+              "id": 37,
+              "accessibilityText": "Right hit",
+              "bounds": [
+                56,
+                880,
+                1384,
+                950
+              ]
+            }
+          }
+        },
+        {
+          "index": 11,
+          "command": "tapOn",
+          "description": "tapOn id: split_target",
+          "status": "passed",
+          "ms": 12.056666,
+          "driver": {
+            "element": {
+              "id": 40,
+              "accessibilityText": "Split target",
+              "resource-id": "split_target",
+              "bounds": [
+                56,
+                978,
+                1384,
+                1174
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 282,
+              "actUs": 761,
+              "settleUs": 9016
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "2229 tap 76,998"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 12,
+          "command": "assertVisible",
+          "description": "assertVisible \"Left hit\"",
+          "status": "passed",
+          "ms": 1.6919170000000001,
+          "driver": {
+            "element": {
+              "id": 37,
+              "accessibilityText": "Left hit",
+              "bounds": [
+                56,
+                880,
+                1384,
+                950
+              ]
+            }
+          }
+        },
+        {
+          "index": 13,
+          "command": "doubleTapOn",
+          "description": "doubleTapOn \"Double tap me\"",
+          "status": "passed",
+          "ms": 109.404708,
+          "driver": {
+            "element": {
+              "id": 42,
+              "accessibilityText": "Double tap me",
+              "bounds": [
+                56,
+                1230,
+                1384,
+                1398
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 262,
+              "actUs": 101799,
+              "settleUs": 4988
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "2248 tap 720,1314",
+                "2348 tap 720,1314"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 14,
+          "command": "assertVisible",
+          "description": "assertVisible \"Double tapped\"",
+          "status": "passed",
+          "ms": 2.218208,
+          "driver": {
+            "element": {
+              "id": 42,
+              "accessibilityText": "Double tapped",
+              "bounds": [
+                56,
+                1230,
+                1384,
+                1398
+              ]
+            }
+          }
+        },
+        {
+          "index": 15,
+          "command": "longPressOn",
+          "description": "longPressOn \"Long press me\"",
+          "status": "passed",
+          "ms": 3015.534042,
+          "driver": {
+            "element": {
+              "id": 44,
+              "accessibilityText": "Long press me",
+              "bounds": [
+                56,
+                1440,
+                1384,
+                1608
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 364,
+              "actUs": 3006913,
+              "settleUs": 2976
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "2362 tap 720,1524"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 16,
+          "command": "assertVisible",
+          "description": "assertVisible \"Long pressed\"",
+          "status": "passed",
+          "ms": 5.964916,
+          "driver": {
+            "element": {
+              "id": 44,
+              "accessibilityText": "Long pressed",
+              "bounds": [
+                56,
+                1440,
+                1384,
+                1608
+              ]
+            }
+          }
+        },
+        {
+          "index": 17,
+          "command": "tapOn",
+          "description": "tapOn id: retry_button",
+          "status": "passed",
+          "ms": 367.78866700000003,
+          "driver": {
+            "element": {
+              "id": 47,
+              "resource-id": "retry_button",
+              "bounds": [
+                56,
+                1650,
+                1384,
+                1818
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 418,
+              "actUs": 5458,
+              "settleUs": 91015
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "5391 tap 720,1734",
+                "5705 tap 720,1734"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 2,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 18,
+          "command": "assertVisible",
+          "description": "assertVisible \"Retry succeeded\"",
+          "status": "passed",
+          "ms": 1.817666,
+          "driver": {
+            "element": {
+              "id": 48,
+              "accessibilityText": "Retry succeeded",
+              "bounds": [
+                56,
+                1650,
+                1384,
+                1818
+              ],
+              "clickable": true
+            }
+          }
+        },
+        {
+          "index": 19,
+          "command": "tapOn",
+          "description": "tapOn \"Show covered target\"",
+          "status": "passed",
+          "ms": 94.73866699999999,
+          "driver": {
+            "element": {
+              "id": 51,
+              "accessibilityText": "Show covered target",
+              "bounds": [
+                56,
+                1860,
+                1384,
+                2028
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 45573,
+              "actUs": 2081,
+              "settleUs": 43868
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "5808 tap 720,1944"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 3,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 20,
+          "command": "tapOn",
+          "description": "tapOn \"Covered target\"",
+          "status": "passed",
+          "ms": 912.841541,
+          "driver": {
+            "element": {
+              "id": 59,
+              "accessibilityText": "Covered target",
+              "bounds": [
+                56,
+                2056,
+                1384,
+                2238
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 44976,
+              "actUs": 4227,
+              "settleUs": 39009
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "5906 tap 720,2147",
+                "6728 tap 720,2147"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 21,
+          "command": "assertVisible",
+          "description": "assertVisible \"Covered tapped\"",
+          "status": "passed",
+          "ms": 2.094333,
+          "driver": {
+            "element": {
+              "id": 59,
+              "accessibilityText": "Covered tapped",
+              "bounds": [
+                56,
+                2056,
+                1384,
+                2238
+              ],
+              "clickable": true
+            }
+          }
+        },
+        {
+          "index": 22,
+          "command": "tapOn",
+          "description": "tapOn \"Start 8.5s task\"",
+          "status": "passed",
+          "ms": 94.726333,
+          "driver": {
+            "element": {
+              "id": 63,
+              "accessibilityText": "Start 8.5s task",
+              "bounds": [
+                56,
+                2280,
+                1384,
+                2448
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 41558,
+              "actUs": 2648,
+              "settleUs": 47622
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "6821 tap 720,2364"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 2,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 23,
+          "command": "assertVisible",
+          "description": "assertVisible \"Working 8.5s...\"",
+          "status": "passed",
+          "ms": 4.763125,
+          "driver": {
+            "element": {
+              "id": 65,
+              "accessibilityText": "Working 8.5s...",
+              "bounds": [
+                56,
+                2476,
+                1384,
+                2546
+              ]
+            }
+          }
+        },
+        {
+          "index": 24,
+          "command": "assertNotVisible",
+          "description": "assertNotVisible \"Working 8.5s...\"",
+          "status": "passed",
+          "ms": 8483.232292,
+          "driver": true
+        },
+        {
+          "index": 25,
+          "command": "assertVisible",
+          "description": "assertVisible \"Optional missing element\"",
+          "status": "warned",
+          "ms": 8515.93475,
+          "error": "Element not found: Text matching regex: Optional missing element"
+        }
+      ]
+    }
+  ]
+}

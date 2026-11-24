@@ -1,0 +1,10 @@
+Media File Not Found at /tmp/WorkspaceExecutionPlannerErrorsTest_workspace/workspace/Flow.yaml:3:3
+
+       1 | appId: com.example
+       2 | ---
+  >    3 | - addMedia:
+             ^
+       4 |   - "./assets/invalid_android.png"
+       5 | - launchApp
+
+  Media file at ./assets/invalid_android.png in flow file: /tmp/WorkspaceExecutionPlannerErrorsTest_workspace/workspace/Flow.yaml not found

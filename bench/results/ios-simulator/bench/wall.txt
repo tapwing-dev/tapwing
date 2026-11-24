@@ -1,0 +1,6 @@
+maestro run 1: 62.8 s
+maestro run 2: 62.7 s
+maestro run 3: 62.6 s
+tapwing run 1: 15.5 s
+tapwing run 2: 15.2 s
+tapwing run 3: 15.2 s

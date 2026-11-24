@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Config Field Required: commands at <ROOT>/repeat_missing.yaml:5:1",
+    "type" : "SyntaxError"
+  }
+}

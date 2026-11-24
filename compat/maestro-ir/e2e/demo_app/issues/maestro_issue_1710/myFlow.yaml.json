@@ -1,0 +1,27 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : { },
+      "optional" : false,
+      "script" : "const myVar = 'foo';\nconsole.log(myVar); // outputs 'foo'\nconsole.log(`myVar is ${myVar}`) // outputs 'myVar is foo'\n",
+      "scriptDir" : "<ROOT>/e2e/demo_app/issues/maestro_issue_1710",
+      "sourceDescription" : "./script.js"
+    }
+  } ]
+}

@@ -1,0 +1,55 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "name" : "Issue 565 (relative)",
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : false,
+      "optional" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : true,
+      "optional" : false,
+      "point" : "10%, 15%",
+      "retryIfNoChange" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : true,
+      "optional" : false,
+      "point" : "25%, 15%",
+      "retryIfNoChange" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : true,
+      "optional" : false,
+      "point" : "50%, 15%",
+      "retryIfNoChange" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : true,
+      "optional" : false,
+      "point" : "75%, 15%",
+      "retryIfNoChange" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : true,
+      "optional" : false,
+      "point" : "90%, 15%",
+      "retryIfNoChange" : false
+    }
+  } ]
+}

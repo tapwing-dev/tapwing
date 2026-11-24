@@ -1,0 +1,18 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "org.wikipedia",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "android", "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "org.wikipedia",
+      "optional" : false
+    }
+  } ]
+}

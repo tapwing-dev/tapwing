@@ -1,0 +1,8 @@
+appId: com.example
+---
+- tapOn:
+    text: 1.50
+    index: 01
+- tapOn:
+    id: 0x10
+    enabled: "true"

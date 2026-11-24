@@ -1,0 +1,14 @@
+appId: a
+---
+- swipe:
+    direction: left
+    duration: "500"
+- swipe:
+    start: 10%, 20%
+    end: 30%, 40%
+- swipe:
+    start: 100, 200
+    end: 300, 400
+- swipe:
+    from: x
+    direction: UP

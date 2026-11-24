@@ -1,0 +1,322 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Optional release tag (e.g. v0.1.0); leave empty to build artifacts without publishing'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            build_ios: true
+            sign_macos: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            build_ios: true
+            sign_macos: true
+          - target: x86_64-unknown-linux-gnu
+            # The oldest supported image, so the binary only needs glibc 2.35 (Ubuntu 22.04, Debian 12 and newer).
+            os: ubuntu-22.04
+            build_ios: false
+            sign_macos: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Also for a workflow_dispatch that publishes (non-empty `tag`): the assets are
+      # named after the Cargo version, and install.sh --version looks them up by tag.
+      - name: Verify tag matches Cargo.toml version
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/tapwing/Cargo.toml | head -n1)
+          expected="v$version"
+          if [[ "${RELEASE_TAG}" != "$expected" ]]; then
+            echo "Tag ${RELEASE_TAG} does not match crates/tapwing/Cargo.toml version ($expected)" >&2
+            exit 1
+          fi
+
+      - name: Install protoc (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends protobuf-compiler
+
+      - name: Install protoc (macOS)
+        if: runner.os == 'macOS'
+        run: command -v protoc >/dev/null || brew install protobuf
+
+      - name: Setup Rust stable and target
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup target add "${{ matrix.target }}"
+          rustc --version
+          cargo --version
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/tapwing
+          key: release-${{ matrix.target }}
+
+      - name: Setup JDK 17 (for Android driver)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Android SDK platform 37
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_ROOT" || ! -d "$SDK_ROOT" ]]; then
+            echo "ANDROID_HOME / ANDROID_SDK_ROOT not found on runner" >&2
+            exit 1
+          fi
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n1 || true)
+          if [[ -z "$SDKMANAGER" ]]; then
+            echo "sdkmanager not found under $SDK_ROOT/cmdline-tools" >&2
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-37.0" || "$SDKMANAGER" "platforms;android-37"
+
+      - name: Build Tapwing Android driver
+        run: scripts/build-android-driver.sh
+
+      - name: Build Tapwing iOS Simulator driver
+        if: matrix.build_ios
+        run: scripts/build-ios-driver.sh
+
+      - name: Build tapwing CLI (${{ matrix.target }})
+        working-directory: crates/tapwing
+        run: cargo build --release --locked --target "${{ matrix.target }}"
+
+      # Without the APPLE_CERTIFICATE_* secrets the binary is still ad-hoc signed: Apple
+      # Silicon refuses to run unsigned arm64 code, and the cross-built x86_64 binary
+      # carries no linker signature of its own.
+      - name: Codesign macOS binary (Developer ID + notarization when APPLE_* secrets are set, else ad-hoc)
+        if: matrix.sign_macos
+        env:
+          TARGET: ${{ matrix.target }}
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          BIN="crates/tapwing/target/$TARGET/release/tapwing"
+
+          if [[ -z "$APPLE_CERTIFICATE_P12_BASE64" || -z "$APPLE_CERTIFICATE_PASSWORD" || -z "$APPLE_SIGNING_IDENTITY" ]]; then
+            echo "::notice::APPLE_CERTIFICATE_P12_BASE64, APPLE_CERTIFICATE_PASSWORD, or APPLE_SIGNING_IDENTITY is not set; ad-hoc signing $TARGET (not notarized)."
+            codesign --force --sign - "$BIN"
+            codesign --verify --strict --verbose=2 "$BIN"
+            codesign --display --verbose=2 "$BIN"
+            exit 0
+          fi
+
+          WORK=$(mktemp -d "${TMPDIR:-/tmp}/tapwing-sign.XXXXXX")
+          KEYCHAIN="$WORK/tapwing-signing.keychain-db"
+          KEYCHAIN_PASS=$(openssl rand -hex 24)
+          cleanup() {
+            security delete-keychain "$KEYCHAIN" >/dev/null 2>&1 || true
+            rm -rf "$WORK"
+          }
+          trap cleanup EXIT
+
+          printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode >"$WORK/cert.p12"
+          chmod 600 "$WORK/cert.p12"
+
+          security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
+          security import "$WORK/cert.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN"
+          existing_keychains=()
+          while IFS= read -r kc; do
+            [[ -n "$kc" ]] && existing_keychains+=("$kc")
+          done < <(security list-keychains -d user | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//')
+          security list-keychains -d user -s "$KEYCHAIN" "${existing_keychains[@]}"
+
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$BIN"
+          codesign --verify --strict --verbose=2 "$BIN"
+
+          if [[ -z "$APPLE_NOTARY_KEY_P8_BASE64" || -z "$APPLE_NOTARY_KEY_ID" || -z "$APPLE_NOTARY_ISSUER_ID" ]]; then
+            echo "Skipping macOS notarization: APPLE_NOTARY_KEY_P8_BASE64, APPLE_NOTARY_KEY_ID, or APPLE_NOTARY_ISSUER_ID secret is not set."
+            exit 0
+          fi
+
+          printf '%s' "$APPLE_NOTARY_KEY_P8_BASE64" | base64 --decode >"$WORK/notary.p8"
+          chmod 600 "$WORK/notary.p8"
+
+          ditto -c -k --keepParent "$BIN" "$WORK/tapwing.zip"
+          # `--wait` can exit 0 for a rejected submission, so the JSON status decides, not the exit code.
+          set +e
+          result="$(xcrun notarytool submit "$WORK/tapwing.zip" \
+            --key "$WORK/notary.p8" \
+            --key-id "$APPLE_NOTARY_KEY_ID" \
+            --issuer "$APPLE_NOTARY_ISSUER_ID" \
+            --wait --output-format json)"
+          rc=$?
+          set -e
+          printf '%s\n' "$result"
+          status="$(printf '%s' "$result" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)"
+          sid="$(printf '%s' "$result" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)"
+          if [[ "$rc" -ne 0 || "$status" != "Accepted" ]]; then
+            echo "::error::Notarization was not accepted (status: ${status:-unknown}, exit code: $rc)"
+            if [[ -n "$sid" ]]; then
+              xcrun notarytool log "$sid" \
+                --key "$WORK/notary.p8" \
+                --key-id "$APPLE_NOTARY_KEY_ID" \
+                --issuer "$APPLE_NOTARY_ISSUER_ID" || true
+            fi
+            exit 1
+          fi
+
+      - name: Package release tarball (macOS)
+        if: matrix.build_ios
+        env:
+          TAPWING_PREBUILT_BIN: ${{ github.workspace }}/crates/tapwing/target/${{ matrix.target }}/release/tapwing
+          TAPWING_ANDROID_DRIVER_APK: ${{ github.workspace }}/drivers/android/build/tapwing-driver.apk
+          TAPWING_IOS_DRIVER_DIR: ${{ github.workspace }}/drivers/ios/build
+        run: scripts/dist.sh --target "${{ matrix.target }}"
+
+      - name: Package release tarball (Linux)
+        if: "!matrix.build_ios"
+        env:
+          TAPWING_PREBUILT_BIN: ${{ github.workspace }}/crates/tapwing/target/${{ matrix.target }}/release/tapwing
+          TAPWING_ANDROID_DRIVER_APK: ${{ github.workspace }}/drivers/android/build/tapwing-driver.apk
+        run: scripts/dist.sh --target "${{ matrix.target }}"
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: |
+            dist/tapwing-*-${{ matrix.target }}.tar.gz
+            dist/tapwing-*-${{ matrix.target }}.tar.gz.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+
+      - name: Verify tarball checksums
+        working-directory: dist
+        run: |
+          ls -la
+          for f in *.tar.gz.sha256; do
+            sha256sum -c "$f"
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          # A tag that does not exist yet is created at the commit that was built,
+          # not at the default branch head (the action's default).
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          files: |
+            dist/tapwing-*.tar.gz
+            dist/tapwing-*.tar.gz.sha256
+
+  # Regenerates Formula/tapwing.rb from the published checksums. It is always uploaded as the
+  # homebrew-formula artifact; with HOMEBREW_TAP_TOKEN set it is also pushed to the tap
+  # (<owner>/homebrew-tap, or the HOMEBREW_TAP_REPO repository variable).
+  update-homebrew:
+    name: Update Homebrew formula
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      REPO: ${{ github.repository }}
+      TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO || format('{0}/homebrew-tap', github.repository_owner) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+
+      - name: Generate Formula/tapwing.rb
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          scripts/generate-homebrew-formula.sh --version "$VERSION" --repo "$REPO" --dist-dir dist --out Formula/tapwing.rb
+          command -v ruby >/dev/null || { sudo apt-get update && sudo apt-get install -y --no-install-recommends ruby; }
+          ruby -c Formula/tapwing.rb
+          cat Formula/tapwing.rb
+
+      - name: Upload formula
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-formula
+          path: Formula/tapwing.rb
+          if-no-files-found: error
+
+      - name: Push formula to the Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          if [[ -z "${HOMEBREW_TAP_TOKEN:-}" ]]; then
+            echo "::notice title=Homebrew tap not updated::HOMEBREW_TAP_TOKEN is not set. Create the $TAP_REPO repository, add a fine-grained token with Contents read/write on it as the HOMEBREW_TAP_TOKEN secret of $REPO, and re-run this job. Until then, download the homebrew-formula artifact and commit it to $TAP_REPO as Formula/tapwing.rb."
+            exit 0
+          fi
+          git clone --quiet "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${TAP_REPO}.git" tap
+          mkdir -p tap/Formula
+          cp Formula/tapwing.rb tap/Formula/tapwing.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/tapwing.rb
+          if git diff --cached --quiet; then
+            echo "$TAP_REPO already has tapwing $VERSION"
+            exit 0
+          fi
+          git commit --quiet -m "tapwing $VERSION"
+          git push origin HEAD:main
+          echo "Pushed tapwing $VERSION to $TAP_REPO"

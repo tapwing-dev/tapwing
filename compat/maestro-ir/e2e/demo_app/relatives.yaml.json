@@ -1,0 +1,92 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing", "android" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "clearState" : true,
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Nesting Test"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "idRegex" : "level-0",
+          "optional" : false
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "containsChild" : {
+            "above" : {
+              "optional" : false,
+              "textRegex" : "bottom side"
+            },
+            "below" : {
+              "optional" : false,
+              "textRegex" : "top side"
+            },
+            "containsChild" : {
+              "idRegex" : "level-2",
+              "optional" : false
+            },
+            "idRegex" : "level-1",
+            "leftOf" : {
+              "optional" : false,
+              "textRegex" : "right side"
+            },
+            "optional" : false,
+            "rightOf" : {
+              "optional" : false,
+              "textRegex" : "left side"
+            }
+          },
+          "idRegex" : "level-0",
+          "optional" : false
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "containsChild" : {
+            "below" : {
+              "optional" : false,
+              "textRegex" : "bottom side"
+            },
+            "idRegex" : "level-1",
+            "optional" : false
+          },
+          "idRegex" : "level-0",
+          "optional" : false
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

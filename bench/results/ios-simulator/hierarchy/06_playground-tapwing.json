@@ -1,0 +1,225 @@
+{
+  "screen": [
+    402.0,
+    874.0
+  ],
+  "root": {
+    "id": -1,
+    "accessibilityText": "Sample App",
+    "bounds": [
+      0,
+      0,
+      402,
+      874
+    ],
+    "children": [
+      {
+        "id": 0,
+        "bounds": [
+          0,
+          0,
+          402,
+          874
+        ],
+        "children": [
+          {
+            "id": 1,
+            "bounds": [
+              0,
+              0,
+              402,
+              874
+            ],
+            "children": [
+              {
+                "id": 11,
+                "bounds": [
+                  0,
+                  0,
+                  402,
+                  874
+                ],
+                "children": [
+                  {
+                    "id": 12,
+                    "bounds": [
+                      0,
+                      0,
+                      402,
+                      874
+                    ],
+                    "children": [
+                      {
+                        "id": 25,
+                        "bounds": [
+                          0,
+                          0,
+                          402,
+                          118
+                        ],
+                        "children": [
+                          {
+                            "id": 26,
+                            "accessibilityText": "Back",
+                            "bounds": [
+                              4,
+                              66,
+                              52,
+                              114
+                            ]
+                          },
+                          {
+                            "id": 27,
+                            "accessibilityText": "F2 Playground",
+                            "bounds": [
+                              134,
+                              76,
+                              267,
+                              104
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": 13,
+                        "bounds": [
+                          0,
+                          118,
+                          402,
+                          874
+                        ],
+                        "children": [
+                          {
+                            "id": 24,
+                            "bounds": [
+                              0,
+                              118,
+                              402,
+                              874
+                            ],
+                            "children": [
+                              {
+                                "id": 14,
+                                "bounds": [
+                                  16,
+                                  134,
+                                  386,
+                                  206
+                                ],
+                                "children": [
+                                  {
+                                    "id": 15,
+                                    "accessibilityText": "Selectors & Taps\ntraits, css, point, doubleTap, longPress, retry",
+                                    "resource-id": "nav_selectors_taps",
+                                    "bounds": [
+                                      16,
+                                      134,
+                                      386,
+                                      206
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 16,
+                                "bounds": [
+                                  16,
+                                  206,
+                                  386,
+                                  286
+                                ],
+                                "children": [
+                                  {
+                                    "id": 17,
+                                    "accessibilityText": "Swipe & Scroll\ndirection, coords, from element, scrollUntilVisible",
+                                    "resource-id": "nav_swipe_scroll",
+                                    "bounds": [
+                                      16,
+                                      206,
+                                      386,
+                                      286
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 18,
+                                "bounds": [
+                                  16,
+                                  286,
+                                  386,
+                                  358
+                                ],
+                                "children": [
+                                  {
+                                    "id": 19,
+                                    "accessibilityText": "Text & Keys\ncopy/paste/clipboard, inputRandom*, pressKey",
+                                    "resource-id": "nav_text_keys",
+                                    "bounds": [
+                                      16,
+                                      286,
+                                      386,
+                                      358
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 20,
+                                "bounds": [
+                                  16,
+                                  358,
+                                  386,
+                                  438
+                                ],
+                                "children": [
+                                  {
+                                    "id": 21,
+                                    "accessibilityText": "Screenshot & Theme\ntakeScreenshot, assertScreenshot, dark/light mode",
+                                    "resource-id": "nav_screenshot_theme",
+                                    "bounds": [
+                                      16,
+                                      358,
+                                      386,
+                                      438
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 22,
+                                "bounds": [
+                                  16,
+                                  438,
+                                  386,
+                                  518
+                                ],
+                                "children": [
+                                  {
+                                    "id": 23,
+                                    "accessibilityText": "Endless Animation\nlarge repeating animation (> 2% screen) settle test",
+                                    "resource-id": "nav_endless_animation",
+                                    "bounds": [
+                                      16,
+                                      438,
+                                      386,
+                                      518
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

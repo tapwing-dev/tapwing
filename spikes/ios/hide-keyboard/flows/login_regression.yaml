@@ -1,0 +1,14 @@
+# Regression for the "global" tap-outside variant: field-to-field focus still works, login works.
+appId: dev.tapwing.sampleApp
+---
+- launchApp: {clearState: true}
+- tapOn: "Email"
+- inputText: "a@b.c"
+- tapOn: "Password"
+- assertVisible:
+    id: "kb_debug"
+    text: ".*focus=password inset=[1-9].*"
+- inputText: "secret"
+- hideKeyboard
+- tapOn: "Log in"
+- assertVisible: "Products"

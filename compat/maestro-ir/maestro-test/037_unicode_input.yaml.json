@@ -1,0 +1,48 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "Tést inpüt"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "مرحبا بالعالم"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "你好世界"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "こんにちは世界"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "안녕하세요"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "Hello 👋 World 🌍"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "Mixed مرحبا 你好"
+    }
+  } ]
+}

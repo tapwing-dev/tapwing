@@ -1,0 +1,4 @@
+appId: com.example
+---
+- tapOn:
+    traits: text long-text square

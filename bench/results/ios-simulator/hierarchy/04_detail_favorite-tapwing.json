@@ -1,0 +1,169 @@
+{
+  "screen": [
+    402.0,
+    874.0
+  ],
+  "root": {
+    "id": -1,
+    "accessibilityText": "Sample App",
+    "bounds": [
+      0,
+      0,
+      402,
+      874
+    ],
+    "children": [
+      {
+        "id": 0,
+        "bounds": [
+          0,
+          0,
+          402,
+          874
+        ],
+        "children": [
+          {
+            "id": 1,
+            "bounds": [
+              0,
+              0,
+              402,
+              874
+            ],
+            "children": [
+              {
+                "id": 33,
+                "bounds": [
+                  0,
+                  0,
+                  402,
+                  874
+                ],
+                "children": [
+                  {
+                    "id": 34,
+                    "bounds": [
+                      0,
+                      0,
+                      402,
+                      874
+                    ],
+                    "children": [
+                      {
+                        "id": 43,
+                        "bounds": [
+                          0,
+                          0,
+                          402,
+                          118
+                        ],
+                        "children": [
+                          {
+                            "id": 44,
+                            "accessibilityText": "Back",
+                            "bounds": [
+                              4,
+                              66,
+                              52,
+                              114
+                            ]
+                          },
+                          {
+                            "id": 45,
+                            "accessibilityText": "Product 2",
+                            "bounds": [
+                              156,
+                              76,
+                              245,
+                              104
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": 35,
+                        "bounds": [
+                          0,
+                          118,
+                          402,
+                          874
+                        ],
+                        "children": [
+                          {
+                            "id": 42,
+                            "bounds": [
+                              0,
+                              118,
+                              402,
+                              874
+                            ],
+                            "children": [
+                              {
+                                "id": 36,
+                                "accessibilityText": "Details of Product 2",
+                                "bounds": [
+                                  16,
+                                  134,
+                                  386,
+                                  154
+                                ]
+                              },
+                              {
+                                "id": 37,
+                                "bounds": [
+                                  16,
+                                  154,
+                                  386,
+                                  170
+                                ]
+                              },
+                              {
+                                "id": 38,
+                                "bounds": [
+                                  16,
+                                  170,
+                                  386,
+                                  226
+                                ],
+                                "children": [
+                                  {
+                                    "id": 39,
+                                    "resource-id": "favorite_switch",
+                                    "bounds": [
+                                      16,
+                                      170,
+                                      386,
+                                      226
+                                    ],
+                                    "children": [
+                                      {
+                                        "id": 40,
+                                        "text": "1",
+                                        "accessibilityText": "Favorite",
+                                        "bounds": [
+                                          16,
+                                          170,
+                                          386,
+                                          226
+                                        ],
+                                        "checked": true
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

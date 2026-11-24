@@ -1,0 +1,103 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "${APP_ID}",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "idRegex" : ".*${BUTTON_ID}.*",
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : ".*${BUTTON_TEXT}.*"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : ".*${BUTTON_TEXT}.*"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "idRegex" : ".*${BUTTON_ID}.*",
+          "optional" : false
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "optional" : false,
+          "textRegex" : ".*${NON_EXISTENT_TEXT}.*"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "notVisible" : {
+          "idRegex" : ".*${NON_EXISTENT_ID}.*",
+          "optional" : false
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "\\${PASSWORD} is ${PASSWORD}"
+    }
+  }, {
+    "openLinkCommand" : {
+      "autoVerify" : false,
+      "browser" : false,
+      "link" : "https://example.com/${URL}",
+      "optional" : false
+    }
+  }, {
+    "setLocationCommand" : {
+      "latitude" : "${LAT}",
+      "longitude" : "${LNG}",
+      "optional" : false
+    }
+  }, {
+    "startRecordingCommand" : {
+      "optional" : false,
+      "path" : "${MAESTRO_FILENAME}"
+    }
+  } ]
+}

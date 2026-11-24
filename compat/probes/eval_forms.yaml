@@ -1,0 +1,6 @@
+appId: com.example
+---
+- evalScript: ${output.x = 1}
+- evalScript:
+    script: ${1}
+    label: L

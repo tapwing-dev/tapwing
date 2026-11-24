@@ -1,0 +1,371 @@
+{
+  "platform": "ios",
+  "setupMs": 186.63850000000002,
+  "flows": [
+    {
+      "flow": "F2 hideKeyboard (iOS)",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/f2_hide_keyboard.yaml",
+      "status": "passed",
+      "totalMs": 6393.905084,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 2988.334583,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 32332,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"ios_arm64\"",
+              "screen": [
+                1206.0,
+                2622.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 32332,
+            "oldPids": [],
+            "grantedPermissions": 2,
+            "phases": {
+              "stopClearMs": 853,
+              "permissionsMs": 310,
+              "simctlLaunchMs": 329,
+              "acceptMs": 1297.439542,
+              "rejectedConnections": 1,
+              "configureMs": 195.79487500000002,
+              "waitIdleMs": 2.015916
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn \"Email\"",
+          "status": "passed",
+          "ms": 936.13125,
+          "driver": {
+            "element": {
+              "id": 5,
+              "accessibilityText": "Email",
+              "resource-id": "email_input",
+              "bounds": [
+                24,
+                194,
+                378,
+                250
+              ],
+              "textField": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 6822,
+              "actUs": 57139,
+              "settleUs": 865032
+            },
+            "ime": {
+              "clientId": 1,
+              "keyboard": true,
+              "log": [
+                "0 tap 201,222",
+                "50 out TextInput.setClient client=1 text=\"\"",
+                "50 out TextInput.setEditableSizeAndTransform",
+                "53 out TextInput.setMarkedTextRect",
+                "54 out TextInput.setStyle",
+                "54 out TextInput.setEditingState text=\"\"",
+                "54 out TextInput.show",
+                "54 out TextInput.requestAutofill",
+                "855 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 4,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "inputText",
+          "description": "inputText \"jan@example.com\"",
+          "status": "passed",
+          "ms": 379.852041,
+          "driver": {
+            "settle": "stable",
+            "ime": {
+              "usedClient": 1,
+              "clientId": 1,
+              "keyboard": true,
+              "log": [
+                "926 in  TextInputClient.updateEditingState client=1 text=\"j\"",
+                "961 in  TextInputClient.updateEditingState client=1 text=\"ja\"",
+                "1012 out TextInput.setSelectionRects",
+                "1012 out TextInput.setCaretRect",
+                "1013 in  TextInputClient.updateEditingState client=1 text=\"jan\"",
+                "1026 in  TextInputClient.updateEditingState client=1 text=\"jan@\"",
+                "1055 out TextInput.setSelectionRects",
+                "1055 out TextInput.setCaretRect",
+                "1055 in  TextInputClient.updateEditingState client=1 text=\"jan@e\"",
+                "1075 in  TextInputClient.updateEditingState client=1 text=\"jan@ex\"",
+                "1099 out TextInput.setSelectionRects",
+                "1099 out TextInput.setCaretRect",
+                "1100 in  TextInputClient.updateEditingState client=1 text=\"jan@exa\"",
+                "1112 in  TextInputClient.updateEditingState client=1 text=\"jan@exam\"",
+                "1127 out TextInput.setSelectionRects",
+                "1128 out TextInput.setCaretRect",
+                "1128 in  TextInputClient.updateEditingState client=1 text=\"jan@examp\"",
+                "1140 in  TextInputClient.updateEditingState client=1 text=\"jan@exampl\"",
+                "1150 in  TextInputClient.updateEditingState client=1 text=\"jan@example\"",
+                "1159 in  TextInputClient.updateEditingState client=1 text=\"jan@example.\"",
+                "1171 in  TextInputClient.updateEditingState client=1 text=\"jan@example.c\"",
+                "1205 out TextInput.setSelectionRects",
+                "1205 out TextInput.setCaretRect",
+                "1205 in  TextInputClient.updateEditingState client=1 text=\"jan@example.co\"",
+                "1216 in  TextInputClient.updateEditingState client=1 text=\"jan@example.com\"",
+                "1236 out TextInput.setSelectionRects",
+                "1236 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 3,
+          "command": "hideKeyboard",
+          "description": "hideKeyboard",
+          "status": "passed",
+          "ms": 132.21687500000002,
+          "driver": {
+            "settle": "stable",
+            "warning": "hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step (\"Couldn't hide the keyboard\") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro."
+          },
+          "warning": "hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step (\"Couldn't hide the keyboard\") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro.",
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 2,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 4,
+          "command": "tapOn",
+          "description": "tapOn id: password_input",
+          "status": "passed",
+          "ms": 818.651959,
+          "driver": {
+            "element": {
+              "id": 6,
+              "accessibilityText": "Password",
+              "resource-id": "password_input",
+              "bounds": [
+                24,
+                262,
+                378,
+                318
+              ],
+              "textField": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 47569,
+              "actUs": 66745,
+              "settleUs": 701376
+            },
+            "ime": {
+              "clientId": 2,
+              "keyboard": true,
+              "log": [
+                "1487 tap 201,290",
+                "1489 out TextInput.setClient client=2 text=\"\"",
+                "1489 out TextInput.setEditableSizeAndTransform",
+                "1489 out TextInput.setMarkedTextRect",
+                "1489 out TextInput.setStyle",
+                "1489 out TextInput.setEditingState text=\"\"",
+                "1489 out TextInput.show",
+                "1490 out TextInput.requestAutofill",
+                "1553 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 5,
+          "command": "inputText",
+          "description": "inputText \"secret123\"",
+          "status": "passed",
+          "ms": 160.51204199999998,
+          "driver": {
+            "settle": "stable",
+            "ime": {
+              "usedClient": 2,
+              "clientId": 2,
+              "keyboard": true,
+              "log": [
+                "2260 in  TextInputClient.updateEditingState client=2 text=\"s\"",
+                "2278 in  TextInputClient.updateEditingState client=2 text=\"se\"",
+                "2306 out TextInput.setSelectionRects",
+                "2306 out TextInput.setCaretRect",
+                "2306 in  TextInputClient.updateEditingState client=2 text=\"sec\"",
+                "2314 in  TextInputClient.updateEditingState client=2 text=\"secr\"",
+                "2322 in  TextInputClient.updateEditingState client=2 text=\"secre\"",
+                "2329 in  TextInputClient.updateEditingState client=2 text=\"secret\"",
+                "2340 out TextInput.setSelectionRects",
+                "2340 out TextInput.setCaretRect",
+                "2340 in  TextInputClient.updateEditingState client=2 text=\"secret1\"",
+                "2349 in  TextInputClient.updateEditingState client=2 text=\"secret12\"",
+                "2362 in  TextInputClient.updateEditingState client=2 text=\"secret123\"",
+                "2389 out TextInput.setSelectionRects",
+                "2389 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 6,
+          "command": "hideKeyboard",
+          "description": "hideKeyboard",
+          "status": "passed",
+          "ms": 99.635709,
+          "driver": {
+            "settle": "stable",
+            "warning": "hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step (\"Couldn't hide the keyboard\") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro."
+          },
+          "warning": "hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step (\"Couldn't hide the keyboard\") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro.",
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 2,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 7,
+          "command": "hideKeyboard",
+          "description": "hideKeyboard",
+          "status": "passed",
+          "ms": 49.067,
+          "driver": {
+            "settle": "stable",
+            "warning": "hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step (\"Couldn't hide the keyboard\") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro."
+          },
+          "warning": "hideKeyboard: soft keyboard hidden but the text field is still focused. Stock Maestro iOS would fail this step (\"Couldn't hide the keyboard\") because Flutter on iOS does not unfocus on taps outside a TextField. Make the app unfocus on tap outside (EditableTextTapOutsideIntent / TextField.onTapOutside) or use `pressKey: Enter`; run with --maestro-compat=strict to fail like Maestro.",
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 2,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 8,
+          "command": "tapOn",
+          "description": "tapOn id: login_button",
+          "status": "passed",
+          "ms": 283.236791,
+          "driver": {
+            "element": {
+              "id": 7,
+              "resource-id": "login_button",
+              "bounds": [
+                24,
+                342,
+                378,
+                390
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 47653,
+              "actUs": 12019,
+              "settleUs": 221233
+            },
+            "ime": {
+              "clientId": 2,
+              "keyboard": false,
+              "log": [
+                "2620 tap 201,366"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 3,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 9,
+          "command": "assertVisible",
+          "description": "assertVisible \"Products\"",
+          "status": "passed",
+          "ms": 530.710375,
+          "driver": {
+            "element": {
+              "id": 30,
+              "accessibilityText": "Products",
+              "bounds": [
+                282,
+                76,
+                364,
+                104
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

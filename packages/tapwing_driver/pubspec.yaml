@@ -1,0 +1,17 @@
+name: tapwing_driver
+description: "In-app driver for Tapwing, a Flutter-first runner for Maestro YAML flows."
+version: 0.1.1
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=3.41.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

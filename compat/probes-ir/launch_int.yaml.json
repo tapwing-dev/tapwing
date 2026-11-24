@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Failed to parse file: <ROOT>/launch_int.yaml\nList is empty.",
+    "type" : "SyntaxError"
+  }
+}

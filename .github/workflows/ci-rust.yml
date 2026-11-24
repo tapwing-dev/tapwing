@@ -1,0 +1,61 @@
+name: CI - Rust
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install protoc (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends protobuf-compiler
+
+      - name: Setup Rust stable (rustfmt, clippy)
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy --no-self-update
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/tapwing
+            bench/parse
+
+      - name: Check formatting
+        working-directory: crates/tapwing
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: crates/tapwing
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      # Unit tests, every integration test (parser compat, workspace, sharding, reports, trace,
+      # init, the cli_e2e tests of the compiled binary) and doc tests.
+      - name: Test
+        working-directory: crates/tapwing
+        run: cargo test --locked -p tapwing
+
+      # bench/parse links the parser: a parser API change must not break it unnoticed.
+      - name: Check bench/parse
+        run: cargo check --manifest-path bench/parse/Cargo.toml --locked
+
+      # Every flow the repository ships (sample app: Android, iOS and negative flows; bench flows)
+      # must still parse with the binary built above.
+      - name: Validate the repository's Maestro flows
+        run: |
+          cargo build --locked --manifest-path crates/tapwing/Cargo.toml --bin tapwing
+          crates/tapwing/target/debug/tapwing check examples/sample_app/.maestro bench/f11a/flows

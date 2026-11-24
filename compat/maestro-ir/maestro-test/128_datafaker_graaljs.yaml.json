@@ -1,0 +1,27 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : {
+          "jsEngine" : "graaljs"
+        },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.thisNumber = faker.expression(\"#{number.numberBetween '1' '10'}\")}"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${output.thisNumber >= 1 && output.thisNumber <= 10}"
+      },
+      "optional" : false
+    }
+  } ]
+}

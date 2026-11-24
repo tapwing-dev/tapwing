@@ -1,0 +1,158 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "ENTER",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "BACKSPACE",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "HOME",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "BACK",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "VOLUME_UP",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "VOLUME_DOWN",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "LOCK",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_UP",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_DOWN",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_LEFT",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_RIGHT",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_CENTER",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_PLAY_PAUSE",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_STOP",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_NEXT",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_PREVIOUS",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_REWIND",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_FAST_FORWARD",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "POWER",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "TAB",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_SYSTEM_NAVIGATION_UP",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_SYSTEM_NAVIGATION_DOWN",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_BUTTON_A",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_BUTTON_B",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "REMOTE_MENU",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "TV_INPUT",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "TV_INPUT_HDMI_1",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "TV_INPUT_HDMI_2",
+      "optional" : false
+    }
+  }, {
+    "pressKeyCommand" : {
+      "code" : "TV_INPUT_HDMI_3",
+      "optional" : false
+    }
+  } ]
+}

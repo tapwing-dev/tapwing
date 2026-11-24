@@ -1,0 +1,54 @@
+appId: dev.tapwing.sample_app
+name: F2 Selectors and Taps
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- tapOn:
+    id: "nav_selectors_taps"
+- assertVisible:
+    text: "Traits Ready"
+    traits: "text"
+- assertVisible:
+    id: "square_box"
+    traits: "square"
+- assertVisible:
+    id: "long_text_field"
+    traits: "long-text"
+- assertNotVisible:
+    id: "square_box"
+    traits: "long-text"
+- tapOn:
+    id: "split_target"
+    point: "20%, 50%"
+- assertVisible: "Left hit"
+- tapOn:
+    id: "split_target"
+    point: "80%, 50%"
+- assertVisible: "Right hit"
+- tapOn:
+    id: "split_target"
+    point: "20, 20"
+- assertVisible: "Left hit"
+- doubleTapOn: "Double tap me"
+- assertVisible: "Double tapped"
+- longPressOn: "Long press me"
+- assertVisible: "Long pressed"
+- tapOn:
+    id: "retry_button"
+    retryTapIfNoChange: true
+    waitUntilVisible: true
+    waitToSettleTimeoutMs: 500
+- assertVisible: "Retry succeeded"
+- tapOn: "Show covered target"
+- tapOn:
+    text: "Covered target"
+    waitUntilVisible: true
+- assertVisible: "Covered tapped"
+- tapOn: "Start 8.5s task"
+- assertVisible: "Working 8.5s..."
+- assertNotVisible: "Working 8.5s..."
+- assertVisible:
+    text: "Optional missing element"
+    optional: true

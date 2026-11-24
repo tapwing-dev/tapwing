@@ -1,0 +1,72 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.other.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "repeatCommand" : {
+      "commands" : [ {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Button"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "optional" : false,
+      "times" : "3"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "3"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.list = [1, 2, 3]}"
+    }
+  }, {
+    "repeatCommand" : {
+      "commands" : [ {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Button"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "optional" : false,
+      "times" : "${output.list.length}"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "6"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

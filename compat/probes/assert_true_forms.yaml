@@ -1,0 +1,8 @@
+appId: com.example
+---
+- assertTrue: 1
+- assertTrue: ${a == b}
+- assertTrue:
+    condition: ${x}
+    label: L
+    optional: true

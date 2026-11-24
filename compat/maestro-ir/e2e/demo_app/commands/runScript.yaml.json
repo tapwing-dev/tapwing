@@ -1,0 +1,80 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.something = 'baz'}"
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : { },
+      "optional" : false,
+      "script" : "if (THIS_THING == \"six\"){\n    output.something = \"foo\"\n} else {\n    output.something = \"bar\"\n}",
+      "scriptDir" : "<ROOT>/e2e/demo_app/commands",
+      "sourceDescription" : "runScript.js"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${output.something == 'bar'}"
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.something = 'baz'}"
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : { },
+      "optional" : false,
+      "script" : "if (THIS_THING == \"six\"){\n    output.something = \"foo\"\n} else {\n    output.something = \"bar\"\n}",
+      "scriptDir" : "<ROOT>/e2e/demo_app/commands",
+      "sourceDescription" : "runScript.js"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${output.something == 'bar'}"
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${output.something = 'baz'}"
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : {
+        "THIS_THING" : "six"
+      },
+      "optional" : false,
+      "script" : "if (THIS_THING == \"six\"){\n    output.something = \"foo\"\n} else {\n    output.something = \"bar\"\n}",
+      "scriptDir" : "<ROOT>/e2e/demo_app/commands",
+      "sourceDescription" : "runScript.js"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "scriptCondition" : "${output.something == 'foo'}"
+      },
+      "optional" : false
+    }
+  } ]
+}

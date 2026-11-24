@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Environment variable has no value: D at <ROOT>/env_null.yaml:9:1",
+    "type" : "SyntaxError"
+  }
+}

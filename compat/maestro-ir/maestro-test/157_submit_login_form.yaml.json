@@ -1,0 +1,61 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "${APP_ID || 'com.example.app'}",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "${APP_ID || 'com.example.app'}",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "runFlowCommand" : {
+          "commands" : [ {
+            "launchAppCommand" : {
+              "appId" : "${APP_ID || 'com.example.app'}",
+              "clearKeychain" : true,
+              "clearState" : true,
+              "optional" : false
+            }
+          } ],
+          "condition" : {
+            "scriptCondition" : "${true}"
+          },
+          "optional" : false
+        }
+      } ],
+      "config" : {
+        "appId" : "${APP_ID || 'com.example.app'}",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "157_handle_app_launch.yaml"
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Log in"
+      },
+      "waitUntilVisible" : false
+    }
+  } ]
+}

@@ -1,0 +1,292 @@
+{
+  "screen": [
+    402.0,
+    874.0
+  ],
+  "root": {
+    "id": -1,
+    "accessibilityText": "Sample App",
+    "bounds": [
+      0,
+      0,
+      402,
+      874
+    ],
+    "children": [
+      {
+        "id": 0,
+        "bounds": [
+          0,
+          0,
+          402,
+          874
+        ],
+        "children": [
+          {
+            "id": 1,
+            "bounds": [
+              0,
+              0,
+              402,
+              874
+            ],
+            "children": [
+              {
+                "id": 28,
+                "bounds": [
+                  0,
+                  0,
+                  402,
+                  874
+                ],
+                "children": [
+                  {
+                    "id": 29,
+                    "bounds": [
+                      0,
+                      0,
+                      402,
+                      874
+                    ],
+                    "children": [
+                      {
+                        "id": 52,
+                        "bounds": [
+                          0,
+                          0,
+                          402,
+                          118
+                        ],
+                        "children": [
+                          {
+                            "id": 53,
+                            "accessibilityText": "Back",
+                            "bounds": [
+                              4,
+                              66,
+                              52,
+                              114
+                            ]
+                          },
+                          {
+                            "id": 54,
+                            "accessibilityText": "Swipe & Scroll",
+                            "bounds": [
+                              72,
+                              76,
+                              117,
+                              104
+                            ]
+                          },
+                          {
+                            "id": 55,
+                            "accessibilityText": "Horizontal mode",
+                            "bounds": [
+                              133,
+                              66,
+                              269,
+                              114
+                            ]
+                          },
+                          {
+                            "id": 56,
+                            "accessibilityText": "PageView mode",
+                            "bounds": [
+                              269,
+                              66,
+                              402,
+                              114
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": 30,
+                        "resource-id": "dismiss_a",
+                        "bounds": [
+                          16,
+                          130,
+                          386,
+                          190
+                        ],
+                        "scrollable": true,
+                        "children": [
+                          {
+                            "id": 31,
+                            "accessibilityText": "Swipe left to dismiss A",
+                            "bounds": [
+                              16,
+                              130,
+                              386,
+                              190
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": 32,
+                        "resource-id": "dismiss_b",
+                        "bounds": [
+                          16,
+                          198,
+                          386,
+                          258
+                        ],
+                        "scrollable": true,
+                        "children": [
+                          {
+                            "id": 33,
+                            "accessibilityText": "Swipe right to dismiss B",
+                            "bounds": [
+                              16,
+                              198,
+                              386,
+                              258
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": 34,
+                        "bounds": [
+                          0,
+                          274,
+                          402,
+                          874
+                        ],
+                        "children": [
+                          {
+                            "id": 51,
+                            "bounds": [
+                              0,
+                              274,
+                              402,
+                              874
+                            ],
+                            "scrollable": true,
+                            "children": [
+                              {
+                                "id": 35,
+                                "accessibilityText": "VRow 1",
+                                "bounds": [
+                                  0,
+                                  274,
+                                  402,
+                                  330
+                                ]
+                              },
+                              {
+                                "id": 36,
+                                "accessibilityText": "VRow 2",
+                                "bounds": [
+                                  0,
+                                  330,
+                                  402,
+                                  386
+                                ]
+                              },
+                              {
+                                "id": 37,
+                                "accessibilityText": "VRow 3",
+                                "bounds": [
+                                  0,
+                                  386,
+                                  402,
+                                  442
+                                ]
+                              },
+                              {
+                                "id": 38,
+                                "accessibilityText": "VRow 4",
+                                "bounds": [
+                                  0,
+                                  442,
+                                  402,
+                                  498
+                                ]
+                              },
+                              {
+                                "id": 39,
+                                "accessibilityText": "VRow 5",
+                                "bounds": [
+                                  0,
+                                  498,
+                                  402,
+                                  554
+                                ]
+                              },
+                              {
+                                "id": 40,
+                                "accessibilityText": "VRow 6",
+                                "bounds": [
+                                  0,
+                                  554,
+                                  402,
+                                  610
+                                ]
+                              },
+                              {
+                                "id": 41,
+                                "accessibilityText": "VRow 7",
+                                "bounds": [
+                                  0,
+                                  610,
+                                  402,
+                                  666
+                                ]
+                              },
+                              {
+                                "id": 42,
+                                "accessibilityText": "VRow 8",
+                                "bounds": [
+                                  0,
+                                  666,
+                                  402,
+                                  722
+                                ]
+                              },
+                              {
+                                "id": 43,
+                                "accessibilityText": "VRow 9",
+                                "bounds": [
+                                  0,
+                                  722,
+                                  402,
+                                  778
+                                ]
+                              },
+                              {
+                                "id": 44,
+                                "accessibilityText": "VRow 10",
+                                "bounds": [
+                                  0,
+                                  778,
+                                  402,
+                                  834
+                                ]
+                              },
+                              {
+                                "id": 45,
+                                "accessibilityText": "VRow 11",
+                                "bounds": [
+                                  0,
+                                  834,
+                                  402,
+                                  874
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

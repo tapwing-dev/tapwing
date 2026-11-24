@@ -1,0 +1,14 @@
+appId: com.example
+---
+- runFlow:
+    env:
+      A: 1
+      B: x
+    when:
+      visible: a
+      true: "  ${A == 1}  "
+      label: W
+    commands:
+      - back
+      - hideKeyboard
+    label: L

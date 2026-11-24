@@ -1,0 +1,133 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "stopAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "openLinkCommand" : {
+      "autoVerify" : false,
+      "browser" : false,
+      "link" : "example://form",
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Open"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "condition" : {
+        "platform" : "IOS",
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Open in “Demo App”?"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Password"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "stopAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "openLinkCommand" : {
+      "autoVerify" : false,
+      "browser" : false,
+      "link" : "https://www.saucedemo.com/",
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "runFlowCommand" : {
+          "commands" : [ {
+            "tapOnElement" : {
+              "longPress" : false,
+              "optional" : false,
+              "retryIfNoChange" : false,
+              "selector" : {
+                "optional" : false,
+                "textRegex" : "Use without an account"
+              },
+              "waitUntilVisible" : false
+            }
+          } ],
+          "condition" : {
+            "visible" : {
+              "optional" : false,
+              "textRegex" : "Welcome to Chrome"
+            }
+          },
+          "optional" : false
+        }
+      }, {
+        "runFlowCommand" : {
+          "commands" : [ {
+            "tapOnElement" : {
+              "longPress" : false,
+              "optional" : false,
+              "retryIfNoChange" : false,
+              "selector" : {
+                "optional" : false,
+                "textRegex" : "No thanks"
+              },
+              "waitUntilVisible" : false
+            }
+          } ],
+          "condition" : {
+            "visible" : {
+              "optional" : false,
+              "textRegex" : "Chrome notifications make things easier"
+            }
+          },
+          "optional" : false
+        }
+      } ],
+      "condition" : {
+        "platform" : "ANDROID"
+      },
+      "label" : "Check Chrome first use",
+      "optional" : false
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Swag Labs"
+        }
+      },
+      "optional" : false
+    }
+  } ]
+}

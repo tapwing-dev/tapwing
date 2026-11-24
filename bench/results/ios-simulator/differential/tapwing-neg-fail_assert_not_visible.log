@@ -1,0 +1,9 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 184 ms
+
+▶ Negative Assert Not Visible
+  ✓  2998.1 ms  launchApp (clearState)
+  ✓     9.5 ms  assertVisible "Welcome back"
+  ✗   995.2 ms  extendedWaitUntil "Welcome back"
+      "Text matching regex: Welcome back" is visible
+FAILED Negative Assert Not Visible in 4012 ms
+settle check (v2): 0 violation(s)

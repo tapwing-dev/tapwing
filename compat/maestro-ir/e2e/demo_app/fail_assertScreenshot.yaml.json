@@ -1,0 +1,39 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "failing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Cropped Screenshot Test"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "assertScreenshotCommand" : {
+      "cropOn" : {
+        "idRegex" : "testContainer",
+        "optional" : false
+      },
+      "optional" : false,
+      "path" : "./screenshots/fail_assertScreenshot.png",
+      "thresholdPercentage" : "95"
+    }
+  } ]
+}

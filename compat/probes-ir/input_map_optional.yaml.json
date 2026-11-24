@@ -1,0 +1,19 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "label" : "L",
+      "optional" : false,
+      "text" : "hello"
+    }
+  } ]
+}

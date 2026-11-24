@@ -1,0 +1,147 @@
+{
+  "screen": [
+    402.0,
+    874.0
+  ],
+  "root": {
+    "id": -1,
+    "accessibilityText": "Sample App",
+    "bounds": [
+      0,
+      0,
+      402,
+      874
+    ],
+    "children": [
+      {
+        "id": 0,
+        "bounds": [
+          0,
+          0,
+          402,
+          874
+        ],
+        "children": [
+          {
+            "id": 1,
+            "bounds": [
+              0,
+              0,
+              402,
+              874
+            ],
+            "children": [
+              {
+                "id": 34,
+                "bounds": [
+                  0,
+                  0,
+                  402,
+                  874
+                ],
+                "children": [
+                  {
+                    "id": 35,
+                    "bounds": [
+                      0,
+                      0,
+                      402,
+                      874
+                    ],
+                    "children": [
+                      {
+                        "id": 36,
+                        "bounds": [
+                          0,
+                          0,
+                          402,
+                          874
+                        ],
+                        "children": [
+                          {
+                            "id": 37,
+                            "bounds": [
+                              0,
+                              62,
+                              402,
+                              840
+                            ],
+                            "children": [
+                              {
+                                "id": 38,
+                                "accessibilityText": "New product",
+                                "bounds": [
+                                  85,
+                                  363,
+                                  317,
+                                  395
+                                ]
+                              },
+                              {
+                                "id": 39,
+                                "bounds": [
+                                  85,
+                                  411,
+                                  317,
+                                  467
+                                ],
+                                "children": [
+                                  {
+                                    "id": 40,
+                                    "text": "Tapwing",
+                                    "accessibilityText": "Name",
+                                    "bounds": [
+                                      85,
+                                      411,
+                                      317,
+                                      467
+                                    ],
+                                    "textField": true
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 41,
+                                "accessibilityText": "Cancel",
+                                "bounds": [
+                                  163,
+                                  491,
+                                  233,
+                                  539
+                                ]
+                              },
+                              {
+                                "id": 42,
+                                "accessibilityText": "Add",
+                                "bounds": [
+                                  241,
+                                  491,
+                                  317,
+                                  539
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": 33,
+                "accessibilityText": "Dismiss",
+                "bounds": [
+                  0,
+                  0,
+                  402,
+                  874
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "copyTextCommand" : {
+      "optional" : false,
+      "selector" : {
+        "idRegex" : "Field",
+        "optional" : false
+      }
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${'Hello, ' + maestro.copiedText}"
+    }
+  } ]
+}

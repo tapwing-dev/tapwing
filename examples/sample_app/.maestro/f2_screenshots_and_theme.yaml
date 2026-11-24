@@ -1,0 +1,35 @@
+appId: dev.tapwing.sample_app
+name: F2 Screenshots and Light Mode
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- tapOn:
+    id: "nav_screenshot_theme"
+- assertVisible: "Theme: light"
+- assertLightMode
+- assertScreenshot:
+    path: "ref_visual_badge"
+    cropOn:
+      id: "visual_badge"
+    thresholdPercentage: 98
+- takeScreenshot:
+    path: "f2_artifact_badge"
+    cropOn:
+      id: "visual_badge"
+- assertScreenshot:
+    path: "f2_artifact_badge"
+    cropOn:
+      id: "visual_badge"
+    thresholdPercentage: 99
+- assertScreenshot:
+    path: "ref_mismatch_badge"
+    cropOn:
+      id: "visual_badge"
+    thresholdPercentage: 95
+    optional: true
+- assertScreenshot:
+    path: "ref_mismatch_badge"
+    thresholdPercentage: 95
+    optional: true

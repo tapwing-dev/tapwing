@@ -1,0 +1,6 @@
+appId: a
+---
+- pressKey: enter
+- pressKey: Volume Up
+- pressKey:
+    key: back

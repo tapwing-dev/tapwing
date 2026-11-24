@@ -1,0 +1,15 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 179 ms
+
+▶ F2 iOS device commands
+  ✓  3105.1 ms  launchApp (clearState)
+  ✓     6.1 ms  assertVisible "Welcome back"
+  ✓   286.1 ms  setPermissions
+  ✓   155.4 ms  setLocation
+  ✓   153.9 ms  clearKeychain
+  ✓     0.0 ms  setAirplaneMode
+      ⚠ Airplane mode is not available on iOS simulators (Maestro parity: ignored)
+  ✓     0.0 ms  pressKey
+  ✓  1593.3 ms  launchApp
+  ✓     6.1 ms  assertVisible "Welcome back"
+PASSED F2 iOS device commands in 5320 ms
+settle check (v2): 0 violation(s)

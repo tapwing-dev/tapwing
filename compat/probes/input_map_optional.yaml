@@ -1,0 +1,6 @@
+appId: com.example
+---
+- inputText:
+    text: hello
+    label: L
+    optional: true

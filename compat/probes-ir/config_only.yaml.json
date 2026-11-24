@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Commands Section Required at <ROOT>/config_only.yaml:2:1",
+    "type" : "SyntaxError"
+  }
+}

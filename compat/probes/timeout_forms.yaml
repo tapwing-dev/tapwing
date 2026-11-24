@@ -1,0 +1,16 @@
+appId: a
+---
+- waitForAnimationToEnd:
+    timeout: 0x10
+- waitForAnimationToEnd:
+    timeout: 010
+- waitForAnimationToEnd:
+    timeout: 1_000
+- waitForAnimationToEnd:
+    timeout: 1e3
+- waitForAnimationToEnd:
+    timeout: 1.50
+- waitForAnimationToEnd:
+    timeout: yes
+- waitForAnimationToEnd:
+    timeout: ~

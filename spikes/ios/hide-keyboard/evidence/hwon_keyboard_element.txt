@@ -1,0 +1,2 @@
+XCUIElementType.keyboard (19): {'Height': 226, 'Width': 402, 'X': 0, 'Y': 918} | keys(type 20) inside: 37
+type 25 (otherElement? )  {'Width': 402, 'Y': 0, 'Height': 54, 'X': 0}

@@ -1,0 +1,11 @@
+Running on iPhone 18 Pro - iOS 27.2 - 47862A4D-744F-4125-8D9E-20D8B51AD7DF
+ > Flow F2 iOS device commands
+Launch app "dev.tapwing.sampleApp" with clear state and clear keychain... COMPLETED
+Assert that "Welcome back" is visible... COMPLETED
+Set permissions... COMPLETED
+Set location (50.0755, 14.4378)... COMPLETED
+Clear keychain... COMPLETED
+Enable airplane mode... COMPLETED
+Press Volume Up key... COMPLETED
+Launch app "dev.tapwing.sampleApp" without stopping app... COMPLETED
+Assert that "Welcome back" is visible... COMPLETED

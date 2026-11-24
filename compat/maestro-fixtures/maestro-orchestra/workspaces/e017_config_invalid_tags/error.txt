@@ -1,0 +1,9 @@
+Incorrect Format: tags at /tmp/WorkspaceExecutionPlannerErrorsTest_workspace/workspace/Flow.yaml:2:7
+
+       1 | appId: com.example.app
+  >    2 | tags: foo, bar
+                 ^
+       3 | ---
+       4 | 
+
+  The format for tags is incorrect

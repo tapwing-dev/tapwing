@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Parsing Failed at <ROOT>/swipe_bad_dir.yaml:5:1",
+    "type" : "SyntaxError"
+  }
+}

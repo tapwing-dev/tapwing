@@ -1,0 +1,12 @@
+Running on iPhone 18 Pro - iOS 27.2 - 47862A4D-744F-4125-8D9E-20D8B51AD7DF
+ > Flow F2 Screenshots and Light Mode (iOS)
+Disable dark mode... COMPLETED
+Launch app "dev.tapwing.sampleApp" with clear state... COMPLETED
+Tap on id: playground_button... COMPLETED
+Tap on id: nav_screenshot_theme... COMPLETED
+Assert that "Theme: light" is visible... COMPLETED
+Assert dark mode is disabled... COMPLETED
+Assert screenshot matches ref_visual_badge_ios (threshold: 98%) (cropped on id: visual_badge)... COMPLETED
+Take screenshot f2_artifact_badge, cropped to id: visual_badge... COMPLETED
+Assert screenshot matches f2_artifact_badge (threshold: 99%) (cropped on id: visual_badge)... COMPLETED
+Assert screenshot matches ../ref_visual_badge (threshold: 95%) (cropped on id: visual_badge)... WARNED

@@ -1,0 +1,123 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "hideKeyboardCommand" : {
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example",
+      "optional" : false
+    }
+  }, {
+    "stopAppCommand" : {
+      "appId" : "com.example",
+      "optional" : false
+    }
+  }, {
+    "killAppCommand" : {
+      "appId" : "com.example",
+      "optional" : false
+    }
+  }, {
+    "clearStateCommand" : {
+      "appId" : "com.example",
+      "optional" : false
+    }
+  }, {
+    "clearKeychainCommand" : {
+      "optional" : false
+    }
+  }, {
+    "eraseTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "NUMBER",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT_EMAIL_ADDRESS",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT_PERSON_NAME",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT_CITY_NAME",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT_COUNTRY_NAME",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "inputRandomTextCommand" : {
+      "inputType" : "TEXT_COLOR",
+      "length" : 8,
+      "optional" : false
+    }
+  }, {
+    "pasteTextCommand" : {
+      "optional" : false
+    }
+  }, {
+    "scrollCommand" : {
+      "optional" : false
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false
+    }
+  }, {
+    "stopRecordingCommand" : {
+      "optional" : false
+    }
+  }, {
+    "toggleAirplaneModeCommand" : {
+      "optional" : false
+    }
+  }, {
+    "toggleDarkModeCommand" : {
+      "optional" : false
+    }
+  }, {
+    "assertDarkModeCommand" : {
+      "optional" : false
+    }
+  }, {
+    "assertLightModeCommand" : {
+      "optional" : false
+    }
+  }, {
+    "assertNoDefectsWithAICommand" : {
+      "optional" : true
+    }
+  } ]
+}

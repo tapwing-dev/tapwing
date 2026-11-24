@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Config Field Required at <ROOT>/maestro-orchestra/workspaces/018_additional_config_files/config.yaml:3:1",
+    "type" : "SyntaxError"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "https://example.com",
+        "ext" : { },
+        "name" : "Web",
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "https://example.com",
+      "optional" : false
+    }
+  } ]
+}

@@ -1,0 +1,237 @@
+{
+  "root": {
+    "bounds": [
+      0,
+      0,
+      1080,
+      2400
+    ],
+    "children": [
+      {
+        "bounds": [
+          0,
+          0,
+          1080,
+          2400
+        ],
+        "children": [
+          {
+            "bounds": [
+              0,
+              0,
+              1080,
+              2400
+            ],
+            "children": [
+              {
+                "bounds": [
+                  0,
+                  0,
+                  1080,
+                  2400
+                ],
+                "children": [
+                  {
+                    "bounds": [
+                      0,
+                      0,
+                      1080,
+                      268
+                    ],
+                    "children": [
+                      {
+                        "accessibilityText": "Products",
+                        "bounds": [
+                          42,
+                          158,
+                          274,
+                          231
+                        ],
+                        "id": 29
+                      }
+                    ],
+                    "id": 28
+                  },
+                  {
+                    "bounds": [
+                      0,
+                      268,
+                      1080,
+                      2400
+                    ],
+                    "children": [
+                      {
+                        "bounds": [
+                          0,
+                          268,
+                          1080,
+                          2400
+                        ],
+                        "children": [
+                          {
+                            "accessibilityText": "Product 1\n€ 3.00",
+                            "bounds": [
+                              0,
+                              268,
+                              1080,
+                              457
+                            ],
+                            "clickable": true,
+                            "id": 12
+                          },
+                          {
+                            "accessibilityText": "Product 2\n€ 6.00",
+                            "bounds": [
+                              0,
+                              457,
+                              1080,
+                              646
+                            ],
+                            "clickable": true,
+                            "id": 13
+                          },
+                          {
+                            "accessibilityText": "Product 3\n€ 9.00",
+                            "bounds": [
+                              0,
+                              646,
+                              1080,
+                              835
+                            ],
+                            "clickable": true,
+                            "id": 14
+                          },
+                          {
+                            "accessibilityText": "Product 4\n€ 12.00",
+                            "bounds": [
+                              0,
+                              835,
+                              1080,
+                              1024
+                            ],
+                            "clickable": true,
+                            "id": 15
+                          },
+                          {
+                            "accessibilityText": "Product 5\n€ 15.00",
+                            "bounds": [
+                              0,
+                              1024,
+                              1080,
+                              1213
+                            ],
+                            "clickable": true,
+                            "id": 16
+                          },
+                          {
+                            "accessibilityText": "Product 6\n€ 18.00",
+                            "bounds": [
+                              0,
+                              1213,
+                              1080,
+                              1402
+                            ],
+                            "clickable": true,
+                            "id": 17
+                          },
+                          {
+                            "accessibilityText": "Product 7\n€ 21.00",
+                            "bounds": [
+                              0,
+                              1402,
+                              1080,
+                              1591
+                            ],
+                            "clickable": true,
+                            "id": 18
+                          },
+                          {
+                            "accessibilityText": "Product 8\n€ 24.00",
+                            "bounds": [
+                              0,
+                              1591,
+                              1080,
+                              1780
+                            ],
+                            "clickable": true,
+                            "id": 19
+                          },
+                          {
+                            "accessibilityText": "Product 9\n€ 27.00",
+                            "bounds": [
+                              0,
+                              1780,
+                              1080,
+                              1969
+                            ],
+                            "clickable": true,
+                            "id": 20
+                          },
+                          {
+                            "accessibilityText": "Product 10\n€ 30.00",
+                            "bounds": [
+                              0,
+                              1969,
+                              1080,
+                              2158
+                            ],
+                            "clickable": true,
+                            "id": 21
+                          },
+                          {
+                            "accessibilityText": "Product 11\n€ 33.00",
+                            "bounds": [
+                              0,
+                              2158,
+                              1080,
+                              2347
+                            ],
+                            "clickable": true,
+                            "id": 22
+                          },
+                          {
+                            "accessibilityText": "Product 12\n€ 36.00",
+                            "bounds": [
+                              0,
+                              2347,
+                              1080,
+                              2400
+                            ],
+                            "clickable": true,
+                            "id": 23
+                          }
+                        ],
+                        "id": 27,
+                        "scrollable": true
+                      }
+                    ],
+                    "id": 11
+                  },
+                  {
+                    "accessibilityText": "Add product",
+                    "bounds": [
+                      891,
+                      2148,
+                      1038,
+                      2295
+                    ],
+                    "clickable": true,
+                    "id": 30
+                  }
+                ],
+                "id": 10
+              }
+            ],
+            "id": 9
+          }
+        ],
+        "id": 1
+      }
+    ],
+    "id": 0
+  },
+  "screen": [
+    1080.0,
+    2400.0
+  ]
+}

@@ -1,0 +1,53 @@
+Running on iPhone 18 Pro - iOS 27.2 - 47862A4D-744F-4125-8D9E-20D8B51AD7DF
+ > Flow F2 Text Clipboard and Keys (iOS)
+Launch app "dev.tapwing.sampleApp" with clear state... COMPLETED
+Tap on id: playground_button... COMPLETED
+Tap on id: nav_text_keys... COMPLETED
+Copy text from element with id: copy_source... COMPLETED
+Tap on id: secret_field... COMPLETED
+Press back... COMPLETED
+Assert that "Text & Keys" is visible... COMPLETED
+Press Back key... COMPLETED
+Assert that "Text & Keys" is visible... COMPLETED
+Tap on id: field_one... COMPLETED
+Paste text... COMPLETED
+Assert that "Tapwing-Copy-99" is visible... COMPLETED
+Press Backspace key... COMPLETED
+Assert that "Tapwing-Copy-9" is visible... COMPLETED
+Press Enter key... COMPLETED
+Assert that "Submitted: Tapwing-Copy-9" is visible... COMPLETED
+Tap on id: field_one... COMPLETED
+Erase 30 characters... COMPLETED
+Set Maestro clipboard to From-Host-Clipboard... COMPLETED
+Paste text... COMPLETED
+Assert that "From-Host-Clipboard" is visible... COMPLETED
+Press Tab key... COMPLETED
+Tap on id: field_two... COMPLETED
+Input text TabTarget... COMPLETED
+Assert that "TabTarget", Child of: id: field_two is visible... COMPLETED
+Erase 20 characters... COMPLETED
+Input text random TEXT... COMPLETED
+Assert that ".{6}", Child of: id: field_two is visible... COMPLETED
+Erase 20 characters... COMPLETED
+Input text random NUMBER... COMPLETED
+Assert that "[0-9]{5}", Child of: id: field_two is visible... COMPLETED
+Erase 20 characters... COMPLETED
+Input text random TEXT_EMAIL_ADDRESS... COMPLETED
+Assert that ".+@.+\..+", Child of: id: field_two is visible... COMPLETED
+Erase 40 characters... COMPLETED
+Input text random TEXT_PERSON_NAME... COMPLETED
+Erase 40 characters... COMPLETED
+Input text random TEXT_CITY_NAME... COMPLETED
+Erase 30 characters... COMPLETED
+Input text random TEXT_COUNTRY_NAME... COMPLETED
+Erase 30 characters... COMPLETED
+Input text random TEXT_COLOR... COMPLETED
+Tap on "Open Key Dialog"... COMPLETED
+Assert that "Key Dialog" is visible... COMPLETED
+Press Escape key... COMPLETED
+Assert that "Key Dialog" is visible... COMPLETED
+Press Back key... COMPLETED
+Assert that "Key Dialog" is visible... COMPLETED
+Tap on "Close"... COMPLETED
+Assert that "Key Dialog" is not visible... COMPLETED
+Press Volume Up key... COMPLETED

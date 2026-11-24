@@ -1,0 +1,230 @@
+device emulator-5620 · setup 80 ms
+
+▶ F11 Native Unicode Input
+  ✓  1537.4 ms  launchApp (clearState)
+  ✓  1331.5 ms  tapOn id: playground_button
+  ✓  1292.7 ms  tapOn id: nav_text_keys
+  ✓  1917.2 ms  tapOn id: field_one
+  ✓   451.4 ms  inputText "Příliš žluťoučký kůň"
+  ✓   286.0 ms  assertVisible "Příliš žluťoučký kůň" is visible
+  ✓   441.4 ms  inputText " úpěl ďábelské ódy, 42 🚀"
+  ✓   274.7 ms  assertVisible "Příliš žluťoučký kůň úpěl ďábelské ódy, 42 🚀" is visible
+  ✓    15.7 ms  pressKey
+  ✓    56.7 ms  assertVisible "Submitted: Příliš žluťoučký kůň úpěl ďábelské ódy, 42 🚀" is visible
+  ✓  1840.5 ms  tapOn id: field_two
+  ✓   701.7 ms  inputText "Tapwing"
+  ✓   837.1 ms  assertVisible "Tapwing" is visible
+  ✓   467.1 ms  inputText " Ünïcödé"
+  ✓   280.8 ms  assertVisible "Tapwing Ünïcödé" is visible
+  ✓  1367.8 ms  tapOn id: secret_field
+  ✓   417.2 ms  inputText "heslo-ř"
+  ✓   279.8 ms  assertVisible "Text & Keys" is visible
+PASSED F11 Native Unicode Input in 13797 ms
+
+▶ F2 Dark Mode
+  ✓  1320.1 ms  launchApp (clearState)
+  ✓  1282.9 ms  tapOn id: playground_button
+  ✓  1328.5 ms  tapOn id: nav_screenshot_theme
+  ✗ 17008.2 ms  assertVisible "Theme: dark" is visible
+      Assertion is false: "Theme: dark" is visible
+FAILED F2 Dark Mode in 20970 ms
+
+▶ F2 Endless Animation
+  ✓  1311.0 ms  launchApp (clearState)
+  ✓  1332.2 ms  tapOn id: playground_button
+  ✓  1330.1 ms  tapOn id: nav_endless_animation
+  ✓    58.8 ms  assertVisible "Pulsing Banner" is visible
+  ✓   844.8 ms  tapOn "Pulse action"
+  ✓    59.9 ms  assertVisible "Pulse clicks: 1" is visible
+  ✓   815.2 ms  tapOn "Pulse action"
+  ✓    59.7 ms  assertVisible "Pulse clicks: 2" is visible
+PASSED F2 Endless Animation in 5812 ms
+
+▶ F2 Screenshots and Light Mode
+  ✓  1284.9 ms  launchApp (clearState)
+  ✓  1318.8 ms  tapOn id: playground_button
+  ✓  1323.6 ms  tapOn id: nav_screenshot_theme
+  ✓    56.3 ms  assertVisible "Theme: light" is visible
+  ✓    11.0 ms  assertLightMode
+  ✗   134.5 ms  assertScreenshot
+      Screenshot size mismatch: expected 700x308, actual 525x231.
+FAILED F2 Screenshots and Light Mode in 4137 ms
+
+▶ F2 Selectors and Taps
+  ✓  1283.3 ms  launchApp (clearState)
+  ✓  1320.4 ms  tapOn id: playground_button
+  ✓  1323.1 ms  tapOn id: nav_selectors_taps
+  ✗ 17062.8 ms  assertVisible "Traits Ready" is visible
+      Assertion is false: "Traits Ready" is visible
+FAILED F2 Selectors and Taps in 21011 ms
+
+▶ F2 Swipe and Scroll
+  ✓  1308.7 ms  launchApp (clearState)
+  ✓  1304.4 ms  tapOn id: playground_button
+  ✓  1318.8 ms  tapOn id: nav_swipe_scroll
+  ✓  1552.1 ms  swipe
+  ✓    51.6 ms  assertVisible "Dismiss A done" is visible
+  ✓  1486.0 ms  swipe
+  ✓    62.4 ms  assertVisible "Dismiss B done" is visible
+  ✓  1052.2 ms  scroll
+  ✓   952.0 ms  swipe
+  ✓   968.9 ms  swipe
+  ✓   959.6 ms  swipe
+  ✓  1148.0 ms  scrollUntilVisible "VRow 35"
+  ✓    58.9 ms  assertVisible "VRow 35" is visible
+  ✓  7480.3 ms  scrollUntilVisible "VRow 1"
+  ✓    54.6 ms  assertVisible "VRow 1" is visible
+  ✓  1392.2 ms  tapOn "Horizontal mode"
+  ✓ 10424.1 ms  scrollUntilVisible "HCard 10"
+  ✓    60.2 ms  assertVisible "HCard 10" is visible
+  ✓ 10578.0 ms  scrollUntilVisible "HCard 1"
+  ✓    61.4 ms  assertVisible "HCard 1" is visible
+  ✓   868.4 ms  tapOn "PageView mode"
+  ✓    52.9 ms  assertVisible "Snap Page 1" is visible
+  ✗ 20258.8 ms  scrollUntilVisible "Snap Page 3"
+      Could not find a visible element matching selector: "Snap Page 3"
+FAILED F2 Swipe and Scroll in 63486 ms
+
+▶ F2 Text Clipboard and Keys
+  ✓  1326.4 ms  launchApp (clearState)
+  ✓  1355.2 ms  tapOn id: playground_button
+  ✓  1338.3 ms  tapOn id: nav_text_keys
+  ✓    68.1 ms  copyTextFrom
+  ✓  1409.7 ms  tapOn id: secret_field
+  ✓   321.8 ms  back
+  ✓   553.7 ms  assertVisible "Text & Keys" is visible
+  ✓   363.1 ms  tapOn id: secret_field
+  ✓    12.6 ms  pressKey
+  ✓   871.6 ms  assertVisible "Text & Keys" is visible
+  ✓  1338.6 ms  tapOn id: field_one
+  ✓  1554.1 ms  pasteText
+  ✓   730.2 ms  assertVisible "Tapwing-Copy-99" is visible
+  ✓    12.9 ms  pressKey
+  ✓   626.5 ms  assertVisible "Tapwing-Copy-9" is visible
+  ✓     7.7 ms  pressKey
+  ✓   879.8 ms  assertVisible "Submitted: Tapwing-Copy-9" is visible
+  ✓  1330.7 ms  tapOn id: field_one
+  ✓  1000.6 ms  eraseText
+  ✓     0.0 ms  setClipboard
+  ✓  1999.1 ms  pasteText
+  ✓   837.0 ms  assertVisible "From-Host-Clipboard" is visible
+  ✓    10.0 ms  pressKey
+  ✓   947.7 ms  inputText "TabTarget"
+  ✓   528.3 ms  assertVisible "TabTarget" is visible
+  ✓   662.4 ms  eraseText
+  ✓   705.3 ms  inputRandom
+  ✓   578.0 ms  assertVisible ".{6}" is visible
+  ✓   665.0 ms  eraseText
+  ✓   576.7 ms  inputRandom
+  ✓   541.5 ms  assertVisible "[0-9]{5}" is visible
+  ✓   665.1 ms  eraseText
+  ✓  2508.7 ms  inputRandom
+  ✓   531.1 ms  assertVisible ".+@.+\..+" is visible
+  ✓  1326.8 ms  eraseText
+  ✓  1128.9 ms  inputRandom
+  ✓  1353.4 ms  eraseText
+  ✓   642.7 ms  inputRandom
+  ✓  1023.3 ms  eraseText
+  ✓   946.5 ms  inputRandom
+  ✓  1003.7 ms  eraseText
+  ✓   467.8 ms  inputRandom
+  ✓  2694.8 ms  tapOn "Open Key Dialog"
+  ✓    56.8 ms  assertVisible "Key Dialog" is visible
+  ✓    21.1 ms  pressKey
+  ✓  1020.9 ms  assertNotVisible "Key Dialog" is not visible
+  ✓  1800.9 ms  tapOn "Open Key Dialog"
+  ✓    53.0 ms  assertVisible "Key Dialog" is visible
+  ✓    16.2 ms  pressKey
+  ✓   996.8 ms  assertNotVisible "Key Dialog" is not visible
+  ✓   170.0 ms  pressKey
+PASSED F2 Text Clipboard and Keys in 41585 ms
+
+▶ F4 Android device commands
+  ✓  1321.8 ms  launchApp (clearState)
+  ✓    65.3 ms  assertVisible "Welcome back" is visible
+  ✓    36.1 ms  setDarkMode
+  ✓    14.9 ms  assertDarkMode
+  ✓    20.8 ms  toggleDarkMode
+  ✓    13.9 ms  assertLightMode
+  ✓     5.7 ms  setDarkMode
+  ✓     6.1 ms  assertLightMode
+  ✓    17.1 ms  setOrientation
+  ✓    17.2 ms  setOrientation
+  ✓   534.1 ms  assertVisible "Welcome back" is visible
+  ✓     1.0 ms  setLocation
+  ✓  2217.6 ms  travel
+  ✓    63.9 ms  setPermissions
+  ✓  1248.1 ms  launchApp
+  ✓    25.2 ms  setAirplaneMode
+  ✓    13.6 ms  setAirplaneMode
+  ✓    18.2 ms  toggleAirplaneMode
+  ✓    19.0 ms  toggleAirplaneMode
+  ✓   920.4 ms  addMedia
+  ✓    12.5 ms  openLink
+  ✓   648.3 ms  launchApp
+  ✓    68.7 ms  startRecording
+  ✓  1247.1 ms  tapOn id: playground_button
+  ✓  1795.2 ms  stopRecording
+PASSED F4 Android device commands in 10353 ms
+
+▶ F5 Permission Dialog
+  ✓  1514.5 ms  launchApp (clearState)
+  ✓  1339.0 ms  tapOn id: playground_button
+  ✓    62.1 ms  assertVisible "Permission: unknown.*" is visible
+  ✓  1174.1 ms  tapOn "Request Location Permission"
+  ✓   915.8 ms  tapOn "While using the app|Allow"
+  ✓    57.1 ms  assertVisible "Permission: granted.*" is visible
+  ✓    55.6 ms  assertNotVisible "While using the app" is not visible
+PASSED F5 Permission Dialog in 5119 ms
+
+▶ F7 App Health
+  ✓  1290.0 ms  launchApp (clearState)
+  ✓  1334.0 ms  tapOn id: playground_button
+  ✓    56.2 ms  scrollUntilVisible id: nav_app_health
+  ✓  1319.2 ms  tapOn id: nav_app_health
+  ✓   851.1 ms  tapOn "Show overflow"
+  ✓    55.9 ms  assertVisible "Health: overflow shown" is visible
+  ✓   828.4 ms  tapOn "setState after dispose"
+  ✓     7.9 ms  assertVisible "Health: late setState scheduled" is visible
+  ✓   851.8 ms  tapOn "Load broken image"
+  ✓    53.2 ms  assertVisible "Health: image requested" is visible
+  ✓   882.3 ms  tapOn "Throw in build"
+  ✓    59.3 ms  assertVisible "Health: build error shown" is visible
+  ✓   803.0 ms  tapOn "Throw async"
+  ✓    50.4 ms  assertVisible "Health: async error thrown" is visible
+PASSED F7 App Health in 8444 ms
+
+▶ Login and browse
+  ✓  1312.2 ms  launchApp (clearState)
+  ✓    63.0 ms  assertVisible "Welcome back" is visible
+  ✓   855.6 ms  tapOn "Log in"
+  ✓    56.1 ms  assertVisible "Email is required" is visible
+  ✓  1576.9 ms  tapOn "Email"
+  ✓  1532.4 ms  inputText "jan@example.com"
+  ✓  2006.6 ms  tapOn id: password_input
+  ✓   925.3 ms  inputText "secret123"
+  ✓   887.1 ms  hideKeyboard
+  ✓   886.9 ms  tapOn id: login_button
+  ✓   985.0 ms  assertVisible "Products" is visible
+  ✓    62.8 ms  assertVisible "Product 1.*" is visible
+  ✓ 11745.3 ms  scrollUntilVisible "Product 40.*"
+  ✓  1309.5 ms  tapOn "Product 40.*"
+  ✓    60.3 ms  assertVisible "Details of Product 40" is visible
+  ✓   816.5 ms  tapOn id: favorite_switch
+  ✓    49.4 ms  assertVisible "Favorite" is visible
+  ✓   314.7 ms  back
+  ✓   734.6 ms  assertVisible "Products" is visible
+  ✓   889.8 ms  tapOn "Add product"
+  ✓    53.7 ms  assertVisible "New product" is visible
+  ✓  1927.4 ms  tapOn "Name"
+  ✓   710.9 ms  inputText "Tapwing"
+  ✓  2476.2 ms  tapOn "Add"
+  ✓    56.6 ms  assertVisible "Added Tapwing" is visible
+  ✓    56.1 ms  assertNotVisible "New product" is not visible
+PASSED Login and browse in 32353 ms
+
+7/11 flows passed in 227.2 s
+  FAILED F2 Dark Mode
+  FAILED F2 Screenshots and Light Mode
+  FAILED F2 Selectors and Taps
+  FAILED F2 Swipe and Scroll

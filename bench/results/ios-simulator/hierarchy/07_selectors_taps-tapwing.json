@@ -1,0 +1,359 @@
+{
+  "screen": [
+    402.0,
+    874.0
+  ],
+  "root": {
+    "id": -1,
+    "accessibilityText": "Sample App",
+    "bounds": [
+      0,
+      0,
+      402,
+      874
+    ],
+    "children": [
+      {
+        "id": 0,
+        "bounds": [
+          0,
+          0,
+          402,
+          874
+        ],
+        "children": [
+          {
+            "id": 1,
+            "bounds": [
+              0,
+              0,
+              402,
+              874
+            ],
+            "children": [
+              {
+                "id": 28,
+                "bounds": [
+                  0,
+                  0,
+                  402,
+                  874
+                ],
+                "children": [
+                  {
+                    "id": 29,
+                    "bounds": [
+                      0,
+                      0,
+                      402,
+                      874
+                    ],
+                    "children": [
+                      {
+                        "id": 56,
+                        "bounds": [
+                          0,
+                          0,
+                          402,
+                          118
+                        ],
+                        "children": [
+                          {
+                            "id": 57,
+                            "accessibilityText": "Back",
+                            "bounds": [
+                              4,
+                              66,
+                              52,
+                              114
+                            ]
+                          },
+                          {
+                            "id": 58,
+                            "accessibilityText": "Selectors & Taps",
+                            "bounds": [
+                              124,
+                              76,
+                              277,
+                              104
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": 30,
+                        "bounds": [
+                          0,
+                          118,
+                          402,
+                          874
+                        ],
+                        "children": [
+                          {
+                            "id": 55,
+                            "bounds": [
+                              0,
+                              118,
+                              402,
+                              874
+                            ],
+                            "children": [
+                              {
+                                "id": 31,
+                                "accessibilityText": "Traits Ready",
+                                "bounds": [
+                                  16,
+                                  134,
+                                  386,
+                                  154
+                                ]
+                              },
+                              {
+                                "id": 32,
+                                "bounds": [
+                                  16,
+                                  154,
+                                  386,
+                                  166
+                                ]
+                              },
+                              {
+                                "id": 33,
+                                "bounds": [
+                                  16,
+                                  166,
+                                  386,
+                                  256
+                                ],
+                                "children": [
+                                  {
+                                    "id": 34,
+                                    "accessibilityText": "Square box",
+                                    "resource-id": "square_box",
+                                    "bounds": [
+                                      16,
+                                      166,
+                                      106,
+                                      256
+                                    ]
+                                  },
+                                  {
+                                    "id": 35,
+                                    "text": "Tapwing long text sample exceeding two hundred characters so that Android AccessibilityNodeInfo text length passes the Maestro LONG_TEXT trait threshold of strictly greater than two hundred characters without any ambiguity whatsoever.",
+                                    "accessibilityText": "Long text",
+                                    "resource-id": "long_text_field",
+                                    "bounds": [
+                                      122,
+                                      171,
+                                      386,
+                                      251
+                                    ],
+                                    "textField": true
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 36,
+                                "bounds": [
+                                  16,
+                                  256,
+                                  386,
+                                  272
+                                ]
+                              },
+                              {
+                                "id": 37,
+                                "accessibilityText": "Split: none",
+                                "bounds": [
+                                  16,
+                                  272,
+                                  386,
+                                  292
+                                ]
+                              },
+                              {
+                                "id": 38,
+                                "bounds": [
+                                  16,
+                                  292,
+                                  386,
+                                  300
+                                ]
+                              },
+                              {
+                                "id": 39,
+                                "bounds": [
+                                  16,
+                                  300,
+                                  386,
+                                  356
+                                ],
+                                "children": [
+                                  {
+                                    "id": 40,
+                                    "accessibilityText": "Split target",
+                                    "resource-id": "split_target",
+                                    "bounds": [
+                                      16,
+                                      300,
+                                      386,
+                                      356
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 41,
+                                "bounds": [
+                                  16,
+                                  356,
+                                  386,
+                                  372
+                                ]
+                              },
+                              {
+                                "id": 42,
+                                "accessibilityText": "Double tap me",
+                                "bounds": [
+                                  16,
+                                  372,
+                                  386,
+                                  420
+                                ]
+                              },
+                              {
+                                "id": 43,
+                                "bounds": [
+                                  16,
+                                  420,
+                                  386,
+                                  432
+                                ]
+                              },
+                              {
+                                "id": 44,
+                                "accessibilityText": "Long press me",
+                                "bounds": [
+                                  16,
+                                  432,
+                                  386,
+                                  480
+                                ]
+                              },
+                              {
+                                "id": 45,
+                                "bounds": [
+                                  16,
+                                  480,
+                                  386,
+                                  492
+                                ]
+                              },
+                              {
+                                "id": 46,
+                                "bounds": [
+                                  16,
+                                  492,
+                                  386,
+                                  540
+                                ],
+                                "children": [
+                                  {
+                                    "id": 47,
+                                    "resource-id": "retry_button",
+                                    "bounds": [
+                                      16,
+                                      492,
+                                      386,
+                                      540
+                                    ],
+                                    "children": [
+                                      {
+                                        "id": 48,
+                                        "accessibilityText": "Tap twice for change",
+                                        "bounds": [
+                                          16,
+                                          492,
+                                          386,
+                                          540
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 49,
+                                "bounds": [
+                                  16,
+                                  540,
+                                  386,
+                                  552
+                                ]
+                              },
+                              {
+                                "id": 50,
+                                "bounds": [
+                                  16,
+                                  552,
+                                  386,
+                                  600
+                                ],
+                                "children": [
+                                  {
+                                    "id": 51,
+                                    "accessibilityText": "Show covered target",
+                                    "bounds": [
+                                      16,
+                                      552,
+                                      386,
+                                      600
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "id": 52,
+                                "bounds": [
+                                  16,
+                                  600,
+                                  386,
+                                  612
+                                ]
+                              },
+                              {
+                                "id": 53,
+                                "bounds": [
+                                  16,
+                                  612,
+                                  386,
+                                  660
+                                ],
+                                "children": [
+                                  {
+                                    "id": 54,
+                                    "accessibilityText": "Start 8.5s task",
+                                    "bounds": [
+                                      16,
+                                      612,
+                                      386,
+                                      660
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

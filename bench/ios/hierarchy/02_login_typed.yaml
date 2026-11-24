@@ -1,0 +1,7 @@
+appId: dev.tapwing.sampleApp
+---
+- launchApp
+- tapOn: "Log in"
+- tapOn: "Email"
+- inputText: "jan@example.com"
+- assertVisible: "Email is required"

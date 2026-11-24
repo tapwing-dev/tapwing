@@ -1,0 +1,9 @@
+appId: dev.tapwing.sample_app
+name: Negative Assert Not Visible
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Welcome back"
+- extendedWaitUntil:
+    notVisible: "Welcome back"
+    timeout: 1000

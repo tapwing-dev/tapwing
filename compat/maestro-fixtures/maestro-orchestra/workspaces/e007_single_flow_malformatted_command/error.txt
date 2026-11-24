@@ -1,0 +1,8 @@
+Unknown Property: invalidOption at /tmp/WorkspaceExecutionPlannerErrorsTest_workspace/workspace/Flow.yaml:4:24
+
+       2 | ---
+       3 | - launchApp:
+  >    4 |     invalidOption: true
+                                  ^
+
+  The property `invalidOption` is not recognized

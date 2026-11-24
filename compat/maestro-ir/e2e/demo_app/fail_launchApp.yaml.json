@@ -1,0 +1,18 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.nonexistent",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "failing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.nonexistent",
+      "optional" : false
+    }
+  } ]
+}

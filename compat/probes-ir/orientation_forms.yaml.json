@@ -1,0 +1,19 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "label" : "L",
+      "optional" : false,
+      "orientation" : "UPSIDE_DOWN"
+    }
+  } ]
+}

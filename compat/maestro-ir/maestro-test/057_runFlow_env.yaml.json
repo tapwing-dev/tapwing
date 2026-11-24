@@ -1,0 +1,86 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "defineVariablesCommand" : {
+          "env" : {
+            "INNER_ENV" : "Inner Parameter"
+          },
+          "optional" : false
+        }
+      }, {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${INNER_ENV}"
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${OUTER_ENV}"
+        }
+      }, {
+        "runFlowCommand" : {
+          "commands" : [ {
+            "defineVariablesCommand" : {
+              "env" : {
+                "INNER_ENV" : "Overridden Parameter"
+              },
+              "optional" : false
+            }
+          }, {
+            "applyConfigurationCommand" : {
+              "config" : {
+                "appId" : "com.example.app",
+                "ext" : { },
+                "properties" : { },
+                "tags" : [ ]
+              },
+              "optional" : false
+            }
+          }, {
+            "inputTextCommand" : {
+              "optional" : false,
+              "text" : "${INNER_ENV}"
+            }
+          } ],
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false,
+          "sourceDescription" : "057_subflow_override.yaml"
+        }
+      } ],
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "057_subflow.yaml"
+    }
+  } ]
+}

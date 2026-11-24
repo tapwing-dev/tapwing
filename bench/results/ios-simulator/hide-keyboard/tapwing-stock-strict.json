@@ -1,0 +1,239 @@
+{
+  "platform": "ios",
+  "setupMs": 175.13466599999998,
+  "flows": [
+    {
+      "flow": "hideKeyboard with a focused field (iOS)",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/bench/ios/hide_keyboard_focus.yaml",
+      "status": "failed",
+      "totalMs": 6130.310917,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 2958.74425,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 61660,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"ios_arm64\"",
+              "screen": [
+                1206.0,
+                2622.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 61660,
+            "oldPids": [],
+            "grantedPermissions": 2,
+            "phases": {
+              "stopClearMs": 871,
+              "permissionsMs": 297,
+              "simctlLaunchMs": 325,
+              "acceptMs": 1261.648625,
+              "rejectedConnections": 1,
+              "configureMs": 200.712167,
+              "waitIdleMs": 1.924667
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 573.622791,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                24,
+                402,
+                378,
+                450
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 5813,
+              "actUs": 40771,
+              "settleUs": 523338
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "0 tap 201,426"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: nav_text_keys",
+          "status": "passed",
+          "ms": 539.9033330000001,
+          "driver": {
+            "element": {
+              "id": 19,
+              "accessibilityText": "Text & Keys\ncopy/paste/clipboard, inputRandom*, pressKey",
+              "resource-id": "nav_text_keys",
+              "bounds": [
+                16,
+                286,
+                386,
+                358
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 1118,
+              "actUs": 9145,
+              "settleUs": 527349
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "570 tap 201,322"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 3,
+          "command": "tapOn",
+          "description": "tapOn id: field_one",
+          "status": "passed",
+          "ms": 795.383208,
+          "driver": {
+            "element": {
+              "id": 35,
+              "accessibilityText": "Field One",
+              "resource-id": "field_one",
+              "bounds": [
+                16,
+                166,
+                386,
+                222
+              ],
+              "textField": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 1136,
+              "actUs": 311293,
+              "settleUs": 481814
+            },
+            "ime": {
+              "clientId": 1,
+              "keyboard": true,
+              "log": [
+                "1111 tap 201,194",
+                "1141 out TextInput.setClient client=1 text=\"\"",
+                "1142 out TextInput.setEditableSizeAndTransform",
+                "1144 out TextInput.setMarkedTextRect",
+                "1145 out TextInput.setStyle",
+                "1145 out TextInput.setEditingState text=\"\"",
+                "1146 out TextInput.show",
+                "1146 out TextInput.requestAutofill",
+                "1552 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 4,
+          "command": "inputText",
+          "description": "inputText \"Tapwing\"",
+          "status": "passed",
+          "ms": 263.304125,
+          "driver": {
+            "settle": "stable",
+            "ime": {
+              "usedClient": 1,
+              "clientId": 1,
+              "keyboard": true,
+              "log": [
+                "1909 in  TextInputClient.updateEditingState client=1 text=\"K\"",
+                "1934 in  TextInputClient.updateEditingState client=1 text=\"Ko\"",
+                "1959 out TextInput.setSelectionRects",
+                "1960 out TextInput.setCaretRect",
+                "1960 in  TextInputClient.updateEditingState client=1 text=\"Kol\"",
+                "1972 in  TextInputClient.updateEditingState client=1 text=\"Koli\"",
+                "2000 out TextInput.setSelectionRects",
+                "2001 out TextInput.setCaretRect",
+                "2001 in  TextInputClient.updateEditingState client=1 text=\"Tapwi\"",
+                "2023 in  TextInputClient.updateEditingState client=1 text=\"Tapwir\"",
+                "2061 out TextInput.setSelectionRects",
+                "2062 out TextInput.setCaretRect",
+                "2062 in  TextInputClient.updateEditingState client=1 text=\"Tapwing\"",
+                "2121 out TextInput.setSelectionRects",
+                "2121 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 5,
+          "command": "hideKeyboard",
+          "description": "hideKeyboard",
+          "status": "failed",
+          "ms": 985.321833,
+          "error": "Couldn't hide the keyboard. This can happen if the app uses a custom input or doesn't expose a standard dismiss action."
+        }
+      ]
+    }
+  ]
+}

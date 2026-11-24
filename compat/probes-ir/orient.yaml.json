@@ -1,0 +1,23 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "a",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "LANDSCAPE_LEFT"
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "${X}"
+    }
+  } ]
+}

@@ -1,0 +1,11 @@
+device iPhone 18 Pro (47862A4D-744F-4125-8D9E-20D8B51AD7DF, iOS simulator) · setup 158 ms
+
+▶ 03_products
+  ✓  2146.7 ms  launchApp
+  ✓   834.2 ms  tapOn "Email"
+  ✓   271.7 ms  inputText "jan@example.com"
+  ✓   816.7 ms  tapOn id: password_input
+  ✓   136.1 ms  inputText "secret123"
+  ✓   297.5 ms  tapOn id: login_button
+  ✓   551.7 ms  assertVisible "Products"
+PASSED 03_products in 5056 ms

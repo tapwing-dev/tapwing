@@ -1,0 +1,56 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "QUARTER" : "25%",
+        "QUARTER_FLOAT" : "0.25"
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : false,
+      "optional" : false,
+      "point" : "0%,0%",
+      "retryIfNoChange" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : false,
+      "optional" : false,
+      "point" : "100%,100%",
+      "retryIfNoChange" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : false,
+      "optional" : false,
+      "point" : "50%,50%",
+      "retryIfNoChange" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : false,
+      "optional" : false,
+      "point" : "${QUARTER},${QUARTER}",
+      "retryIfNoChange" : false
+    }
+  }, {
+    "tapOnPointV2Command" : {
+      "longPress" : false,
+      "optional" : false,
+      "point" : "${relativePoint(QUARTER_FLOAT,QUARTER_FLOAT)}",
+      "retryIfNoChange" : false
+    }
+  } ]
+}

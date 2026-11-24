@@ -1,0 +1,46 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "A" : "1",
+        "B" : "2"
+      },
+      "optional" : false
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${A}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${B}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${A + B}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${parseInt(A) + parseInt(B)}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "\\${A} \\${B} ${A} ${B}"
+    }
+  } ]
+}

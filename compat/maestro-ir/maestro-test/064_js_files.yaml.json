@@ -1,0 +1,116 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : { },
+      "optional" : false,
+      "script" : "output.sharedResult = 'Main'\noutput.mainFlow = {\n  result: 'Main'\n}\noutput.fileName = MAESTRO_FILENAME\n",
+      "scriptDir" : "<ROOT>/maestro-test",
+      "sourceDescription" : "064_script.js"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.sharedResult}"
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "com.example.app",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "runScriptCommand" : {
+          "env" : { },
+          "optional" : false,
+          "script" : "output.sharedResult = 'Sub'\noutput.subFlow = {\n  result: 'Sub'\n}\noutput.subFlowFileName = MAESTRO_FILENAME\n",
+          "scriptDir" : "<ROOT>/maestro-test",
+          "sourceDescription" : "064_script_alt.js"
+        }
+      }, {
+        "inputTextCommand" : {
+          "optional" : false,
+          "text" : "${output.sharedResult}"
+        }
+      } ],
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "064_subflow.yaml"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.sharedResult}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.mainFlow.result}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.subFlow.result}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.subFlowFileName}"
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : {
+        "parameter" : "Input Parameter"
+      },
+      "optional" : false,
+      "script" : "output.resultWithParameters = 'Hello, ' + parameter + '!'\n",
+      "scriptDir" : "<ROOT>/maestro-test",
+      "sourceDescription" : "064_script_with_args.js"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.resultWithParameters}"
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : {
+        "parameter" : "${'Evaluated Parameter'}"
+      },
+      "optional" : false,
+      "script" : "output.resultWithParameters = 'Hello, ' + parameter + '!'\n",
+      "scriptDir" : "<ROOT>/maestro-test",
+      "sourceDescription" : "064_script_with_args.js"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.resultWithParameters}"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.fileName}"
+    }
+  } ]
+}

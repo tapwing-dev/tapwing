@@ -1,0 +1,30 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "defineVariablesCommand" : {
+      "env" : {
+        "orientation_portrait" : "PORTRAIT"
+      },
+      "optional" : false
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "${orientation_portrait}"
+    }
+  }, {
+    "setOrientationCommand" : {
+      "optional" : false,
+      "orientation" : "LANDSCAPE_LEFT"
+    }
+  } ]
+}

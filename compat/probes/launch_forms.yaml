@@ -1,0 +1,16 @@
+appId: com.example
+---
+- launchApp:
+    url: https://x
+- launchApp:
+    appId: other
+    clearState: yes
+    permissions:
+      location: 1
+      camera: deny
+    arguments:
+      a: 1
+      b: 1.5
+      c: true
+      d: str
+      e: [1, 2]

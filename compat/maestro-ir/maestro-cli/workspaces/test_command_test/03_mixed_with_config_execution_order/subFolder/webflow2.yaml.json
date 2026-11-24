@@ -1,0 +1,30 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "https://example2.com",
+        "ext" : { },
+        "name" : "webflow2",
+        "properties" : { },
+        "tags" : [ "tagNameToExclude" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "https://example2.com",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Button"
+      },
+      "waitUntilVisible" : false
+    }
+  } ]
+}

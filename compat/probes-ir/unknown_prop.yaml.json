@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Unknown Property: foo at <ROOT>/unknown_prop.yaml:5:1",
+    "type" : "SyntaxError"
+  }
+}

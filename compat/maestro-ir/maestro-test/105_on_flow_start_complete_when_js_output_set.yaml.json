@@ -1,0 +1,45 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "onFlowComplete" : {
+          "commands" : [ {
+            "runScriptCommand" : {
+              "env" : { },
+              "optional" : false,
+              "script" : "output.teardown_result = 'teardown';",
+              "scriptDir" : "<ROOT>/maestro-test",
+              "sourceDescription" : "105_teardown.js"
+            }
+          }, {
+            "evalScriptCommand" : {
+              "optional" : false,
+              "scriptString" : "${ console.log(output.teardown_result); }"
+            }
+          } ]
+        },
+        "onFlowStart" : {
+          "commands" : [ {
+            "runScriptCommand" : {
+              "env" : { },
+              "optional" : false,
+              "script" : "output.setup_result = 'setup';",
+              "scriptDir" : "<ROOT>/maestro-test",
+              "sourceDescription" : "105_setup.js"
+            }
+          } ]
+        },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "evalScriptCommand" : {
+      "optional" : false,
+      "scriptString" : "${ console.log(output.setup_result); }"
+    }
+  } ]
+}

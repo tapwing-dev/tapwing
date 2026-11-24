@@ -1,0 +1,28 @@
+Running on iPhone 18 Pro - iOS 27.2 - 47862A4D-744F-4125-8D9E-20D8B51AD7DF
+ > Flow F2 Swipe and Scroll
+Launch app "dev.tapwing.sampleApp" with clear state... COMPLETED
+Tap on id: playground_button... COMPLETED
+Tap on id: nav_swipe_scroll... COMPLETED
+Swiping in LEFT direction on id: dismiss_a... COMPLETED
+Assert that "Dismiss A done" is visible... COMPLETED
+Swiping in RIGHT direction on id: dismiss_b at 20%, 50%... COMPLETED
+Assert that "Dismiss B done" is visible... COMPLETED
+Scroll vertically... COMPLETED
+Swiping in UP direction in 300 ms... COMPLETED
+Swipe from (50%, 75%) to (50%, 35%) in 300 ms... COMPLETED
+Swipe from (200,600) to (200,350) in 300 ms... COMPLETED
+Scrolling DOWN until "VRow 35" is visible with speed 70, visibility percentage 100%, timeout 20000 ms, wait to settle 300 ms, with centering enabled... COMPLETED
+Assert that "VRow 35" is visible... COMPLETED
+Scrolling UP until "VRow 1" is visible with speed 80, visibility percentage 100%, timeout 20000 ms, with centering disabled... COMPLETED
+Assert that "VRow 1" is visible... COMPLETED
+Tap on "Horizontal mode"... COMPLETED
+Scrolling RIGHT until "HCard 10" is visible with speed 70, visibility percentage 80%, timeout 20000 ms, wait to settle 300 ms, with centering enabled... COMPLETED
+Assert that "HCard 10" is visible... COMPLETED
+Scrolling LEFT until "HCard 1" is visible with speed 70, visibility percentage 100%, timeout 20000 ms, with centering disabled... COMPLETED
+Assert that "HCard 1" is visible... COMPLETED
+Tap on "PageView mode"... COMPLETED
+Assert that "Snap Page 1" is visible... COMPLETED
+Scrolling RIGHT until "Snap Page 3" is visible with speed 90, visibility percentage 100%, timeout 20000 ms, with centering disabled... COMPLETED
+Assert that "Snap Page 3" is visible... COMPLETED
+Swiping in RIGHT direction in 400 ms... COMPLETED
+Assert that "Snap Page 2" is visible... COMPLETED

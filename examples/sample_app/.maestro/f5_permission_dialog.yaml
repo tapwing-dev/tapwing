@@ -1,0 +1,21 @@
+# F5 native lane: a REAL Android runtime-permission dialog.
+# The Flutter driver cannot see it (it belongs to the permission controller);
+# in `--input auto` the focused window is detected and `tapOn` goes through
+# Tapwing's UiAutomator driver. Run on Android API 23+:
+#   tapwing test .maestro/f5_permission_dialog.yaml
+appId: dev.tapwing.sample_app
+name: F5 Permission Dialog
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- tapOn:
+    id: "playground_button"
+- assertVisible: "Permission: unknown.*"
+- tapOn: "Request Location Permission"
+# The system dialog is on screen now (com.google.android.permissioncontroller).
+# English label; Android 11+ offers "While using the app", older releases "Allow".
+- tapOn: "While using the app|Allow"
+- assertVisible: "Permission: granted.*"
+- assertNotVisible: "While using the app"

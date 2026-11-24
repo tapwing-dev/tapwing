@@ -1,0 +1,44 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "scrollUntilVisible" : {
+      "centerElement" : true,
+      "direction" : "DOWN",
+      "optional" : false,
+      "originalSpeedValue" : "70",
+      "scrollDuration" : "70",
+      "selector" : {
+        "idRegex" : "x",
+        "optional" : false
+      },
+      "timeout" : "5000",
+      "visibilityPercentage" : 100,
+      "waitToSettleTimeoutMs" : 20,
+      "visibilityPercentageNormalized" : 1.0
+    }
+  }, {
+    "scrollUntilVisible" : {
+      "centerElement" : false,
+      "direction" : "DOWN",
+      "optional" : false,
+      "originalSpeedValue" : "40",
+      "scrollDuration" : "40",
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "y"
+      },
+      "timeout" : "20000",
+      "visibilityPercentage" : 50,
+      "visibilityPercentageNormalized" : 0.0
+    }
+  } ]
+}

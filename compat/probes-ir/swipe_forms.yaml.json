@@ -1,0 +1,49 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "a",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "swipeCommand" : {
+      "direction" : "LEFT",
+      "duration" : 500,
+      "optional" : false
+    }
+  }, {
+    "swipeCommand" : {
+      "duration" : 400,
+      "endRelative" : "30%, 40%",
+      "optional" : false,
+      "startRelative" : "10%, 20%"
+    }
+  }, {
+    "swipeCommand" : {
+      "duration" : 400,
+      "endPoint" : {
+        "x" : 300,
+        "y" : 400
+      },
+      "optional" : false,
+      "startPoint" : {
+        "x" : 100,
+        "y" : 200
+      }
+    }
+  }, {
+    "swipeCommand" : {
+      "direction" : "UP",
+      "duration" : 400,
+      "elementSelector" : {
+        "optional" : false,
+        "textRegex" : "x"
+      },
+      "optional" : false
+    }
+  } ]
+}

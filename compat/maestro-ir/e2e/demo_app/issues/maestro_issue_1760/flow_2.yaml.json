@@ -1,0 +1,26 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : { },
+      "optional" : false,
+      "script" : "console.log('Hello!')\nconsole.log('Hello money! $')\nconsole.log('$')\n",
+      "scriptDir" : "<ROOT>/e2e/demo_app/issues/maestro_issue_1760",
+      "sourceDescription" : "script.js"
+    }
+  } ]
+}

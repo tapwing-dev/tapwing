@@ -1,0 +1,44 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.example",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "passing" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "launchAppCommand" : {
+      "appId" : "com.example.example",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Nesting Test"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "waitForAnimationToEndCommand" : {
+      "optional" : false
+    }
+  }, {
+    "takeScreenshotCommand" : {
+      "optional" : false,
+      "path" : "workspaces/demo_app/screenshots/e2e_take_then_assert_full_screen"
+    }
+  }, {
+    "assertScreenshotCommand" : {
+      "optional" : false,
+      "path" : "workspaces/demo_app/screenshots/e2e_take_then_assert_full_screen.png",
+      "thresholdPercentage" : "95"
+    }
+  } ]
+}

@@ -1,0 +1,157 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.example.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "above" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        },
+        "optional" : false,
+        "rightOf" : {
+          "optional" : false,
+          "textRegex" : "Top Left"
+        }
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "below" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        },
+        "optional" : false,
+        "rightOf" : {
+          "optional" : false,
+          "textRegex" : "Bottom Left"
+        }
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "below" : {
+          "optional" : false,
+          "textRegex" : "Top Left"
+        },
+        "leftOf" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        },
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "below" : {
+          "optional" : false,
+          "textRegex" : "Top Right"
+        },
+        "optional" : false,
+        "rightOf" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        }
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "above" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        },
+        "leftOf" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        },
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "above" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        },
+        "optional" : false,
+        "rightOf" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        }
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "below" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        },
+        "leftOf" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        },
+        "optional" : false
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "below" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        },
+        "optional" : false,
+        "rightOf" : {
+          "optional" : false,
+          "textRegex" : "Middle"
+        }
+      },
+      "waitUntilVisible" : false
+    }
+  } ]
+}

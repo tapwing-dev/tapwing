@@ -1,0 +1,14 @@
+appId: dev.tapwing.sample_app
+name: F2 Endless Animation
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- tapOn:
+    id: "nav_endless_animation"
+- assertVisible: "Pulsing Banner"
+- tapOn: "Pulse action"
+- assertVisible: "Pulse clicks: 1"
+- tapOn: "Pulse action"
+- assertVisible: "Pulse clicks: 2"

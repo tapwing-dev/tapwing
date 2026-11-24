@@ -1,0 +1,223 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "org.wikipedia",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ "android", "passing", "advanced" ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "org.wikipedia",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "launchAppCommand" : {
+          "appId" : "org.wikipedia",
+          "clearState" : true,
+          "optional" : false
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : true,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : true,
+            "textRegex" : "Non existent view"
+          },
+          "waitUntilVisible" : false
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Forward"
+          },
+          "waitUntilVisible" : false
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Forward"
+          },
+          "waitUntilVisible" : false
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Forward"
+          },
+          "waitUntilVisible" : false
+        }
+      }, {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "optional" : false,
+            "textRegex" : "Skip"
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "config" : {
+        "appId" : "org.wikipedia",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "subflows/onboarding-android.yaml"
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Search"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "tapOnElement" : {
+          "longPress" : false,
+          "optional" : false,
+          "retryIfNoChange" : false,
+          "selector" : {
+            "idRegex" : "org.wikipedia:id/touch_outside",
+            "optional" : false
+          },
+          "waitUntilVisible" : false
+        }
+      } ],
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "A Faster way to Search"
+        }
+      },
+      "label" : "Dismiss the search-widget promo sheet, if shown",
+      "optional" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : false,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : false,
+        "textRegex" : "Search Wikipedia"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "tapOnElement" : {
+      "longPress" : false,
+      "optional" : true,
+      "retryIfNoChange" : false,
+      "selector" : {
+        "optional" : true,
+        "textRegex" : "Non existent view"
+      },
+      "waitUntilVisible" : false
+    }
+  }, {
+    "runScriptCommand" : {
+      "env" : { },
+      "optional" : false,
+      "script" : "output.result = 'qwerty';\n",
+      "scriptDir" : "<ROOT>/e2e/workspaces/wikipedia/scripts",
+      "sourceDescription" : "scripts/getSearchQuery.js"
+    }
+  }, {
+    "inputTextCommand" : {
+      "optional" : false,
+      "text" : "${output.result}"
+    }
+  }, {
+    "assertConditionCommand" : {
+      "condition" : {
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "${output.result}"
+        }
+      },
+      "optional" : false
+    }
+  }, {
+    "runFlowCommand" : {
+      "commands" : [ {
+        "applyConfigurationCommand" : {
+          "config" : {
+            "appId" : "org.wikipedia",
+            "ext" : { },
+            "properties" : { },
+            "tags" : [ ]
+          },
+          "optional" : false
+        }
+      }, {
+        "launchAppCommand" : {
+          "appId" : "org.wikipedia",
+          "clearState" : true,
+          "optional" : false
+        }
+      }, {
+        "assertConditionCommand" : {
+          "condition" : {
+            "visible" : {
+              "optional" : false,
+              "textRegex" : "All the world's knowledge"
+            }
+          },
+          "optional" : false
+        }
+      }, {
+        "assertConditionCommand" : {
+          "condition" : {
+            "visible" : {
+              "optional" : false,
+              "textRegex" : "Learn more about Wikipedia"
+            }
+          },
+          "optional" : false
+        }
+      } ],
+      "config" : {
+        "appId" : "org.wikipedia",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false,
+      "sourceDescription" : "subflows/launch-clearstate-android.yaml"
+    }
+  } ]
+}

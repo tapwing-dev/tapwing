@@ -1,0 +1,7 @@
+appId: dev.tapwing.sample_app
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- waitForAnimationToEnd

@@ -1,0 +1,1395 @@
+{
+  "platform": "android",
+  "setupMs": 302.397792,
+  "flows": [
+    {
+      "flow": "F2 Text Clipboard and Keys",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/f2_text_clipboard_keys.yaml",
+      "status": "passed",
+      "totalMs": 7098.1849170000005,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 2676.5970829999997,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "profile",
+              "pid": 10080,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"android_arm64\"",
+              "screen": [
+                0.0,
+                0.0
+              ],
+              "dpr": 1.0,
+              "platform": "android"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 10080,
+            "oldPids": [
+              9927
+            ],
+            "grantedPermissions": 0,
+            "phases": {
+              "stopClearMs": 45,
+              "permissionsMs": 28,
+              "amStartMs": 73,
+              "acceptMs": 516.4912499999999,
+              "rejectedConnections": 0,
+              "configureMs": 3.600625,
+              "waitIdleMs": 1909.5594999999998
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 517.065375,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                84,
+                1335,
+                1356,
+                1503
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 13447,
+              "actUs": 20488,
+              "settleUs": 477810
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1960 tap 720,1419"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: nav_text_keys",
+          "status": "passed",
+          "ms": 490.87975,
+          "driver": {
+            "element": {
+              "id": 19,
+              "accessibilityText": "Text & Keys\ncopy/paste/clipboard, inputRandom*, pressKey",
+              "resource-id": "nav_text_keys",
+              "bounds": [
+                56,
+                901,
+                1384,
+                1153
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 5806,
+              "actUs": 8532,
+              "settleUs": 471239
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "2476 tap 720,1027"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 3,
+          "command": "copyTextFrom",
+          "description": "copyTextFrom",
+          "status": "passed",
+          "ms": 2.6980839999999997,
+          "driver": {
+            "text": "Tapwing-Copy-99"
+          }
+        },
+        {
+          "index": 4,
+          "command": "tapOn",
+          "description": "tapOn id: secret_field",
+          "status": "passed",
+          "ms": 282.883708,
+          "driver": {
+            "element": {
+              "id": 41,
+              "text": "",
+              "hintText": "Secret",
+              "resource-id": "secret_field",
+              "bounds": [
+                56,
+                985,
+                1384,
+                1181
+              ],
+              "clickable": true,
+              "textField": true
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 644,
+              "actUs": 8149,
+              "settleUs": 264234
+            },
+            "ime": {
+              "clientId": 1,
+              "keyboard": true,
+              "log": [
+                "2973 tap 720,1083",
+                "2974 out TextInput.setClient client=1 text=\"\"",
+                "2975 out TextInput.setEditableSizeAndTransform",
+                "2975 out TextInput.setMarkedTextRect",
+                "2975 out TextInput.setStyle",
+                "2975 out TextInput.setEditingState text=\"\"",
+                "2975 out TextInput.show",
+                "2975 out TextInput.requestAutofill",
+                "3008 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 5,
+          "command": "back",
+          "description": "back",
+          "status": "passed",
+          "ms": 137.999334,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 6,
+          "command": "assertVisible",
+          "description": "assertVisible \"Text & Keys\"",
+          "status": "passed",
+          "ms": 4.801875,
+          "driver": {
+            "element": {
+              "id": 48,
+              "accessibilityText": "Text & Keys",
+              "bounds": [
+                252,
+                194,
+                648,
+                292
+              ]
+            }
+          }
+        },
+        {
+          "index": 7,
+          "command": "tapOn",
+          "description": "tapOn id: secret_field",
+          "status": "passed",
+          "ms": 111.3365,
+          "driver": {
+            "element": {
+              "id": 41,
+              "text": "",
+              "hintText": "Secret",
+              "resource-id": "secret_field",
+              "bounds": [
+                56,
+                985,
+                1384,
+                1181
+              ],
+              "clickable": true,
+              "focused": true,
+              "textField": true
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 289,
+              "actUs": 3100,
+              "settleUs": 103667
+            },
+            "ime": {
+              "clientId": 1,
+              "keyboard": true,
+              "log": [
+                "3401 tap 720,1083",
+                "3401 out TextInput.show"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 8,
+          "command": "pressKey",
+          "description": "pressKey",
+          "status": "passed",
+          "ms": 131.208417,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 9,
+          "command": "assertVisible",
+          "description": "assertVisible \"Text & Keys\"",
+          "status": "passed",
+          "ms": 2.257667,
+          "driver": {
+            "element": {
+              "id": 48,
+              "accessibilityText": "Text & Keys",
+              "bounds": [
+                252,
+                194,
+                648,
+                292
+              ]
+            }
+          }
+        },
+        {
+          "index": 10,
+          "command": "tapOn",
+          "description": "tapOn id: field_one",
+          "status": "passed",
+          "ms": 208.26975000000002,
+          "driver": {
+            "element": {
+              "id": 35,
+              "text": "",
+              "hintText": "Field One",
+              "resource-id": "field_one",
+              "bounds": [
+                56,
+                509,
+                1384,
+                705
+              ],
+              "clickable": true,
+              "textField": true
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 286,
+              "actUs": 3541,
+              "settleUs": 200777
+            },
+            "ime": {
+              "clientId": 2,
+              "keyboard": true,
+              "log": [
+                "3654 tap 720,607",
+                "3655 out TextInput.clearClient",
+                "3655 out TextInput.setClient client=2 text=\"\"",
+                "3655 out TextInput.setEditableSizeAndTransform",
+                "3655 out TextInput.setMarkedTextRect",
+                "3655 out TextInput.setStyle",
+                "3656 out TextInput.setEditingState text=\"\"",
+                "3656 out TextInput.show",
+                "3656 out TextInput.requestAutofill",
+                "3677 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 11,
+          "command": "pasteText",
+          "description": "pasteText",
+          "status": "passed",
+          "ms": 53.761292000000005,
+          "driver": {
+            "settle": "idle",
+            "ime": {
+              "usedClient": 2,
+              "clientId": 2,
+              "keyboard": true,
+              "log": [
+                "3865 in  TextInputClient.updateEditingState client=2 text=\"K\"",
+                "3867 in  TextInputClient.updateEditingState client=2 text=\"Ko\"",
+                "3869 in  TextInputClient.updateEditingState client=2 text=\"Kol\"",
+                "3870 in  TextInputClient.updateEditingState client=2 text=\"Koli\"",
+                "3874 in  TextInputClient.updateEditingState client=2 text=\"Tapwi\"",
+                "3886 out TextInput.setMarkedTextRect",
+                "3886 out TextInput.setCaretRect",
+                "3886 in  TextInputClient.updateEditingState client=2 text=\"Tapwir\"",
+                "3893 in  TextInputClient.updateEditingState client=2 text=\"Tapwing\"",
+                "3894 in  TextInputClient.updateEditingState client=2 text=\"Tapwing-\"",
+                "3895 in  TextInputClient.updateEditingState client=2 text=\"Tapwing-C\"",
+                "3896 in  TextInputClient.updateEditingState client=2 text=\"Tapwing-Co\"",
+                "3898 in  TextInputClient.updateEditingState client=2 text=\"Tapwing-Cop\"",
+                "3899 in  TextInputClient.updateEditingState client=2 text=\"Tapwing-Copy\"",
+                "3902 in  TextInputClient.updateEditingState client=2 text=\"Tapwing-Copy-\"",
+                "3902 in  TextInputClient.updateEditingState client=2 text=\"Tapwing-Copy-9\"",
+                "3911 in  TextInputClient.updateEditingState client=2 text=\"Tapwing-Copy-99\"",
+                "3914 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 12,
+          "command": "assertVisible",
+          "description": "assertVisible \"Tapwing-Copy-99\"",
+          "status": "passed",
+          "ms": 3.306083,
+          "driver": {
+            "element": {
+              "id": 35,
+              "text": "Tapwing-Copy-99",
+              "hintText": "Field One",
+              "resource-id": "field_one",
+              "bounds": [
+                56,
+                509,
+                1384,
+                705
+              ],
+              "clickable": true,
+              "focused": true,
+              "textField": true
+            }
+          }
+        },
+        {
+          "index": 13,
+          "command": "pressKey",
+          "description": "pressKey",
+          "status": "passed",
+          "ms": 13.944833000000001,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 14,
+          "command": "assertVisible",
+          "description": "assertVisible \"Tapwing-Copy-9\"",
+          "status": "passed",
+          "ms": 1.8700839999999999,
+          "driver": {
+            "element": {
+              "id": 35,
+              "text": "Tapwing-Copy-9",
+              "hintText": "Field One",
+              "resource-id": "field_one",
+              "bounds": [
+                56,
+                509,
+                1384,
+                705
+              ],
+              "clickable": true,
+              "focused": true,
+              "textField": true
+            }
+          }
+        },
+        {
+          "index": 15,
+          "command": "pressKey",
+          "description": "pressKey",
+          "status": "passed",
+          "ms": 160.156292,
+          "driver": {
+            "settle": "stable"
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 2,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 16,
+          "command": "assertVisible",
+          "description": "assertVisible \"Submitted: Tapwing-Copy-9\"",
+          "status": "passed",
+          "ms": 3.618792,
+          "driver": {
+            "element": {
+              "id": 43,
+              "accessibilityText": "Submitted: Tapwing-Copy-9",
+              "bounds": [
+                56,
+                1223,
+                1384,
+                1293
+              ]
+            }
+          }
+        },
+        {
+          "index": 17,
+          "command": "tapOn",
+          "description": "tapOn id: field_one",
+          "status": "passed",
+          "ms": 208.715125,
+          "driver": {
+            "element": {
+              "id": 35,
+              "text": "Tapwing-Copy-9",
+              "hintText": "Field One",
+              "resource-id": "field_one",
+              "bounds": [
+                56,
+                509,
+                1384,
+                705
+              ],
+              "clickable": true,
+              "textField": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 20608,
+              "actUs": 3333,
+              "settleUs": 180926
+            },
+            "ime": {
+              "clientId": 3,
+              "keyboard": true,
+              "log": [
+                "4139 tap 720,607",
+                "4141 out TextInput.setClient client=3 text=\"\"",
+                "4141 out TextInput.setEditableSizeAndTransform",
+                "4141 out TextInput.setMarkedTextRect",
+                "4141 out TextInput.setCaretRect",
+                "4141 out TextInput.setStyle",
+                "4141 out TextInput.setEditingState text=\"Tapwing-Copy-9\"",
+                "4141 out TextInput.show",
+                "4141 out TextInput.requestAutofill"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 2,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 18,
+          "command": "eraseText",
+          "description": "eraseText",
+          "status": "passed",
+          "ms": 179.804042,
+          "driver": {
+            "settle": "stable"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 19,
+          "command": "setClipboard",
+          "description": "setClipboard",
+          "status": "passed",
+          "ms": 0.0022919999999999998,
+          "driver": {
+            "text": "From-Host-Clipboard"
+          }
+        },
+        {
+          "index": 20,
+          "command": "pasteText",
+          "description": "pasteText",
+          "status": "passed",
+          "ms": 42.818166999999995,
+          "driver": {
+            "settle": "idle",
+            "ime": {
+              "usedClient": 3,
+              "clientId": 3,
+              "keyboard": true,
+              "log": [
+                "4524 in  TextInputClient.updateEditingState client=3 text=\"F\"",
+                "4525 in  TextInputClient.updateEditingState client=3 text=\"Fr\"",
+                "4527 in  TextInputClient.updateEditingState client=3 text=\"Fro\"",
+                "4527 in  TextInputClient.updateEditingState client=3 text=\"From\"",
+                "4528 in  TextInputClient.updateEditingState client=3 text=\"From-\"",
+                "4530 in  TextInputClient.updateEditingState client=3 text=\"From-H\"",
+                "4531 in  TextInputClient.updateEditingState client=3 text=\"From-Ho\"",
+                "4532 in  TextInputClient.updateEditingState client=3 text=\"From-Hos\"",
+                "4532 in  TextInputClient.updateEditingState client=3 text=\"From-Host\"",
+                "4533 in  TextInputClient.updateEditingState client=3 text=\"From-Host-\"",
+                "4534 in  TextInputClient.updateEditingState client=3 text=\"From-Host-C\"",
+                "4536 in  TextInputClient.updateEditingState client=3 text=\"From-Host-Cl\"",
+                "4537 in  TextInputClient.updateEditingState client=3 text=\"From-Host-Cli\"",
+                "4541 in  TextInputClient.updateEditingState client=3 text=\"From-Host-Clip\"",
+                "4545 out TextInput.setMarkedTextRect",
+                "4545 out TextInput.setCaretRect",
+                "4545 in  TextInputClient.updateEditingState client=3 text=\"From-Host-Clipb\"",
+                "4549 in  TextInputClient.updateEditingState client=3 text=\"From-Host-Clipbo\"",
+                "4551 in  TextInputClient.updateEditingState client=3 text=\"From-Host-Clipboa\"",
+                "4553 in  TextInputClient.updateEditingState client=3 text=\"From-Host-Clipboar\"",
+                "4553 in  TextInputClient.updateEditingState client=3 text=\"From-Host-Clipboard\"",
+                "4559 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 21,
+          "command": "assertVisible",
+          "description": "assertVisible \"From-Host-Clipboard\"",
+          "status": "passed",
+          "ms": 3.484042,
+          "driver": {
+            "element": {
+              "id": 35,
+              "text": "From-Host-Clipboard",
+              "hintText": "Field One",
+              "resource-id": "field_one",
+              "bounds": [
+                56,
+                509,
+                1384,
+                705
+              ],
+              "clickable": true,
+              "focused": true,
+              "textField": true
+            }
+          }
+        },
+        {
+          "index": 22,
+          "command": "pressKey",
+          "description": "pressKey",
+          "status": "passed",
+          "ms": 104.408083,
+          "driver": {
+            "settle": "stable"
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 5,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 23,
+          "command": "inputText",
+          "description": "inputText \"TabTarget\"",
+          "status": "passed",
+          "ms": 66.032833,
+          "driver": {
+            "settle": "stable",
+            "ime": {
+              "usedClient": 4,
+              "clientId": 4,
+              "keyboard": true,
+              "log": [
+                "4682 in  TextInputClient.updateEditingState client=4 text=\"T\"",
+                "4683 in  TextInputClient.updateEditingState client=4 text=\"Ta\"",
+                "4686 in  TextInputClient.updateEditingState client=4 text=\"Tab\"",
+                "4689 in  TextInputClient.updateEditingState client=4 text=\"TabT\"",
+                "4694 out TextInput.setMarkedTextRect",
+                "4694 out TextInput.setCaretRect",
+                "4694 in  TextInputClient.updateEditingState client=4 text=\"TabTa\"",
+                "4696 in  TextInputClient.updateEditingState client=4 text=\"TabTar\"",
+                "4697 in  TextInputClient.updateEditingState client=4 text=\"TabTarg\"",
+                "4698 in  TextInputClient.updateEditingState client=4 text=\"TabTarge\"",
+                "4700 in  TextInputClient.updateEditingState client=4 text=\"TabTarget\"",
+                "4712 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 5,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 24,
+          "command": "assertVisible",
+          "description": "assertVisible \"TabTarget\"",
+          "status": "passed",
+          "ms": 4.589,
+          "driver": {
+            "element": {
+              "id": 38,
+              "text": "TabTarget",
+              "hintText": "Field Two",
+              "resource-id": "field_two",
+              "bounds": [
+                56,
+                747,
+                1384,
+                943
+              ],
+              "clickable": true,
+              "focused": true,
+              "textField": true
+            }
+          }
+        },
+        {
+          "index": 25,
+          "command": "eraseText",
+          "description": "eraseText",
+          "status": "passed",
+          "ms": 38.334834,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 26,
+          "command": "inputRandom",
+          "description": "inputRandom",
+          "status": "passed",
+          "ms": 27.486832999999997,
+          "driver": {
+            "settle": "idle",
+            "ime": {
+              "usedClient": 4,
+              "clientId": 4,
+              "keyboard": true,
+              "log": [
+                "4801 in  TextInputClient.updateEditingState client=4 text=\"A\"",
+                "4802 in  TextInputClient.updateEditingState client=4 text=\"AX\"",
+                "4803 in  TextInputClient.updateEditingState client=4 text=\"AXc\"",
+                "4805 in  TextInputClient.updateEditingState client=4 text=\"AXcK\"",
+                "4808 out TextInput.setMarkedTextRect",
+                "4808 out TextInput.setCaretRect",
+                "4809 in  TextInputClient.updateEditingState client=4 text=\"AXcKq\"",
+                "4810 in  TextInputClient.updateEditingState client=4 text=\"AXcKqm\"",
+                "4823 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 27,
+          "command": "assertVisible",
+          "description": "assertVisible \".{6}\"",
+          "status": "passed",
+          "ms": 5.461541,
+          "driver": {
+            "element": {
+              "id": 38,
+              "text": "AXcKqm",
+              "hintText": "Field Two",
+              "resource-id": "field_two",
+              "bounds": [
+                56,
+                747,
+                1384,
+                943
+              ],
+              "clickable": true,
+              "focused": true,
+              "textField": true
+            }
+          }
+        },
+        {
+          "index": 28,
+          "command": "eraseText",
+          "description": "eraseText",
+          "status": "passed",
+          "ms": 22.086458,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 29,
+          "command": "inputRandom",
+          "description": "inputRandom",
+          "status": "passed",
+          "ms": 17.3945,
+          "driver": {
+            "settle": "idle",
+            "ime": {
+              "usedClient": 4,
+              "clientId": 4,
+              "keyboard": true,
+              "log": [
+                "4867 in  TextInputClient.updateEditingState client=4 text=\"8\"",
+                "4868 in  TextInputClient.updateEditingState client=4 text=\"86\"",
+                "4868 in  TextInputClient.updateEditingState client=4 text=\"869\"",
+                "4870 in  TextInputClient.updateEditingState client=4 text=\"8694\"",
+                "4871 in  TextInputClient.updateEditingState client=4 text=\"86949\"",
+                "4876 out TextInput.setMarkedTextRect",
+                "4876 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 30,
+          "command": "assertVisible",
+          "description": "assertVisible \"[0-9]{5}\"",
+          "status": "passed",
+          "ms": 10.021708,
+          "driver": {
+            "element": {
+              "id": 38,
+              "text": "86949",
+              "hintText": "Field Two",
+              "resource-id": "field_two",
+              "bounds": [
+                56,
+                747,
+                1384,
+                943
+              ],
+              "clickable": true,
+              "focused": true,
+              "textField": true
+            }
+          }
+        },
+        {
+          "index": 31,
+          "command": "eraseText",
+          "description": "eraseText",
+          "status": "passed",
+          "ms": 15.367,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 32,
+          "command": "inputRandom",
+          "description": "inputRandom",
+          "status": "passed",
+          "ms": 43.569292000000004,
+          "driver": {
+            "settle": "idle",
+            "ime": {
+              "usedClient": 4,
+              "clientId": 4,
+              "keyboard": true,
+              "log": [
+                "4919 in  TextInputClient.updateEditingState client=4 text=\"l\"",
+                "4920 in  TextInputClient.updateEditingState client=4 text=\"li\"",
+                "4922 in  TextInputClient.updateEditingState client=4 text=\"lia\"",
+                "4926 out TextInput.setMarkedTextRect",
+                "4926 out TextInput.setCaretRect",
+                "4927 in  TextInputClient.updateEditingState client=4 text=\"liam\"",
+                "4930 in  TextInputClient.updateEditingState client=4 text=\"liam.\"",
+                "4931 in  TextInputClient.updateEditingState client=4 text=\"liam.c\"",
+                "4931 in  TextInputClient.updateEditingState client=4 text=\"liam.cl\"",
+                "4932 in  TextInputClient.updateEditingState client=4 text=\"liam.cla\"",
+                "4933 in  TextInputClient.updateEditingState client=4 text=\"liam.clar\"",
+                "4933 in  TextInputClient.updateEditingState client=4 text=\"liam.clark\"",
+                "4938 in  TextInputClient.updateEditingState client=4 text=\"liam.clark9\"",
+                "4940 in  TextInputClient.updateEditingState client=4 text=\"liam.clark98\"",
+                "4944 out TextInput.setCaretRect",
+                "4945 in  TextInputClient.updateEditingState client=4 text=\"liam.clark983\"",
+                "4947 in  TextInputClient.updateEditingState client=4 text=\"liam.clark983@\"",
+                "4948 in  TextInputClient.updateEditingState client=4 text=\"liam.clark983@t\"",
+                "4949 in  TextInputClient.updateEditingState client=4 text=\"liam.clark983@te\"",
+                "4950 in  TextInputClient.updateEditingState client=4 text=\"liam.clark983@tes\"",
+                "4950 in  TextInputClient.updateEditingState client=4 text=\"liam.clark983@test\"",
+                "4950 in  TextInputClient.updateEditingState client=4 text=\"liam.clark983@test.\"",
+                "4952 in  TextInputClient.updateEditingState client=4 text=\"liam.clark983@test.o\"",
+                "4952 in  TextInputClient.updateEditingState client=4 text=\"liam.clark983@test.or\"",
+                "4953 in  TextInputClient.updateEditingState client=4 text=\"liam.clark983@test.org\"",
+                "4958 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 33,
+          "command": "assertVisible",
+          "description": "assertVisible \".+@.+\\..+\"",
+          "status": "passed",
+          "ms": 3.779,
+          "driver": {
+            "element": {
+              "id": 38,
+              "text": "liam.clark983@test.org",
+              "hintText": "Field Two",
+              "resource-id": "field_two",
+              "bounds": [
+                56,
+                747,
+                1384,
+                943
+              ],
+              "clickable": true,
+              "focused": true,
+              "textField": true
+            }
+          }
+        },
+        {
+          "index": 34,
+          "command": "eraseText",
+          "description": "eraseText",
+          "status": "passed",
+          "ms": 43.2945,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 35,
+          "command": "inputRandom",
+          "description": "inputRandom",
+          "status": "passed",
+          "ms": 28.946417,
+          "driver": {
+            "settle": "idle",
+            "ime": {
+              "usedClient": 4,
+              "clientId": 4,
+              "keyboard": true,
+              "log": [
+                "5018 in  TextInputClient.updateEditingState client=4 text=\"O\"",
+                "5019 in  TextInputClient.updateEditingState client=4 text=\"Ow\"",
+                "5020 in  TextInputClient.updateEditingState client=4 text=\"Owe\"",
+                "5022 in  TextInputClient.updateEditingState client=4 text=\"Owen\"",
+                "5028 out TextInput.setMarkedTextRect",
+                "5028 out TextInput.setCaretRect",
+                "5029 in  TextInputClient.updateEditingState client=4 text=\"Owen \"",
+                "5030 in  TextInputClient.updateEditingState client=4 text=\"Owen A\"",
+                "5031 in  TextInputClient.updateEditingState client=4 text=\"Owen Ad\"",
+                "5032 in  TextInputClient.updateEditingState client=4 text=\"Owen Ada\"",
+                "5032 in  TextInputClient.updateEditingState client=4 text=\"Owen Adam\"",
+                "5033 in  TextInputClient.updateEditingState client=4 text=\"Owen Adams\"",
+                "5043 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 36,
+          "command": "eraseText",
+          "description": "eraseText",
+          "status": "passed",
+          "ms": 26.35175,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 37,
+          "command": "inputRandom",
+          "description": "inputRandom",
+          "status": "passed",
+          "ms": 12.921166,
+          "driver": {
+            "settle": "idle",
+            "ime": {
+              "usedClient": 4,
+              "clientId": 4,
+              "keyboard": true,
+              "log": [
+                "5081 in  TextInputClient.updateEditingState client=4 text=\"D\"",
+                "5082 in  TextInputClient.updateEditingState client=4 text=\"De\"",
+                "5082 in  TextInputClient.updateEditingState client=4 text=\"Den\"",
+                "5083 in  TextInputClient.updateEditingState client=4 text=\"Denv\"",
+                "5084 in  TextInputClient.updateEditingState client=4 text=\"Denve\"",
+                "5085 in  TextInputClient.updateEditingState client=4 text=\"Denver\"",
+                "5090 out TextInput.setMarkedTextRect",
+                "5090 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 38,
+          "command": "eraseText",
+          "description": "eraseText",
+          "status": "passed",
+          "ms": 30.742292000000003,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 39,
+          "command": "inputRandom",
+          "description": "inputRandom",
+          "status": "passed",
+          "ms": 20.92225,
+          "driver": {
+            "settle": "idle",
+            "ime": {
+              "usedClient": 4,
+              "clientId": 4,
+              "keyboard": true,
+              "log": [
+                "5141 in  TextInputClient.updateEditingState client=4 text=\"B\"",
+                "5143 in  TextInputClient.updateEditingState client=4 text=\"Be\"",
+                "5145 in  TextInputClient.updateEditingState client=4 text=\"Bel\"",
+                "5146 in  TextInputClient.updateEditingState client=4 text=\"Belg\"",
+                "5146 in  TextInputClient.updateEditingState client=4 text=\"Belgi\"",
+                "5148 in  TextInputClient.updateEditingState client=4 text=\"Belgiu\"",
+                "5148 in  TextInputClient.updateEditingState client=4 text=\"Belgium\"",
+                "5156 out TextInput.setMarkedTextRect",
+                "5156 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 40,
+          "command": "eraseText",
+          "description": "eraseText",
+          "status": "passed",
+          "ms": 17.981165999999998,
+          "driver": {
+            "settle": "idle"
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 41,
+          "command": "inputRandom",
+          "description": "inputRandom",
+          "status": "passed",
+          "ms": 24.215708,
+          "driver": {
+            "settle": "idle",
+            "ime": {
+              "usedClient": 4,
+              "clientId": 4,
+              "keyboard": true,
+              "log": [
+                "5187 in  TextInputClient.updateEditingState client=4 text=\"c\"",
+                "5189 in  TextInputClient.updateEditingState client=4 text=\"cy\"",
+                "5191 in  TextInputClient.updateEditingState client=4 text=\"cya\"",
+                "5192 in  TextInputClient.updateEditingState client=4 text=\"cyan\"",
+                "5207 out TextInput.setMarkedTextRect",
+                "5207 out TextInput.setCaretRect"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 42,
+          "command": "tapOn",
+          "description": "tapOn \"Open Key Dialog\"",
+          "status": "passed",
+          "ms": 226.614417,
+          "driver": {
+            "element": {
+              "id": 51,
+              "accessibilityText": "Open Key Dialog",
+              "bounds": [
+                56,
+                1349,
+                1384,
+                1517
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 521,
+              "actUs": 1661,
+              "settleUs": 220964
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "5217 tap 720,1433",
+                "5231 out TextInput.clearClient",
+                "5232 out TextInput.hide"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 43,
+          "command": "assertVisible",
+          "description": "assertVisible \"Key Dialog\"",
+          "status": "passed",
+          "ms": 3.3221249999999998,
+          "driver": {
+            "element": {
+              "id": 58,
+              "accessibilityText": "Key Dialog",
+              "bounds": [
+                314,
+                1346,
+                1126,
+                1458
+              ]
+            }
+          }
+        },
+        {
+          "index": 44,
+          "command": "pressKey",
+          "description": "pressKey",
+          "status": "passed",
+          "ms": 209.58279199999998,
+          "driver": {
+            "settle": "stable"
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 45,
+          "command": "assertNotVisible",
+          "description": "assertNotVisible \"Key Dialog\"",
+          "status": "passed",
+          "ms": 2.481833,
+          "driver": true
+        },
+        {
+          "index": 46,
+          "command": "tapOn",
+          "description": "tapOn \"Open Key Dialog\"",
+          "status": "passed",
+          "ms": 227.68612499999998,
+          "driver": {
+            "element": {
+              "id": 51,
+              "accessibilityText": "Open Key Dialog",
+              "bounds": [
+                56,
+                1349,
+                1384,
+                1517
+              ],
+              "clickable": true
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 40324,
+              "actUs": 1965,
+              "settleUs": 182388
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "5707 tap 720,1433",
+                "5724 out TextInput.clearClient",
+                "5724 out TextInput.hide"
+              ]
+            }
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 3,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 47,
+          "command": "assertVisible",
+          "description": "assertVisible \"Key Dialog\"",
+          "status": "passed",
+          "ms": 3.720958,
+          "driver": {
+            "element": {
+              "id": 68,
+              "accessibilityText": "Key Dialog",
+              "bounds": [
+                314,
+                1346,
+                1126,
+                1458
+              ]
+            }
+          }
+        },
+        {
+          "index": 48,
+          "command": "pressKey",
+          "description": "pressKey",
+          "status": "passed",
+          "ms": 220.730542,
+          "driver": {
+            "settle": "stable"
+          },
+          "busyAfter": {
+            "framesIdle": false,
+            "loadingIdle": true,
+            "transientCallbacks": 1,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 49,
+          "command": "assertNotVisible",
+          "description": "assertNotVisible \"Key Dialog\"",
+          "status": "passed",
+          "ms": 3.57375,
+          "driver": true
+        },
+        {
+          "index": 50,
+          "command": "pressKey",
+          "description": "pressKey",
+          "status": "passed",
+          "ms": 226.778584,
+          "driver": {
+            "keycode": 24,
+            "idle": {
+              "state": "idle"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

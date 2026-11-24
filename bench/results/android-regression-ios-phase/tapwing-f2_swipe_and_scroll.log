@@ -1,0 +1,31 @@
+device emulator-5554 · setup 306 ms
+
+▶ F2 Swipe and Scroll
+  ✓  1587.4 ms  launchApp (clearState)
+  ✓   534.3 ms  tapOn id: playground_button
+  ✓   496.6 ms  tapOn id: nav_swipe_scroll
+  ✓   497.4 ms  swipe
+  ✓     1.6 ms  assertVisible "Dismiss A done"
+  ✓   427.9 ms  swipe
+  ✓     2.3 ms  assertVisible "Dismiss B done"
+  ✓   464.2 ms  scroll
+  ✓   562.7 ms  swipe
+  ✓   195.0 ms  swipe
+  ✓    64.9 ms  swipe
+  ✓     4.2 ms  scrollUntilVisible "VRow 35"
+  ✓     2.3 ms  assertVisible "VRow 35"
+  ✓  1304.5 ms  scrollUntilVisible "VRow 1"
+  ✓     3.4 ms  assertVisible "VRow 1"
+  ✓    91.8 ms  tapOn "Horizontal mode"
+  ✓  1628.3 ms  scrollUntilVisible "HCard 10"
+  ✓     3.3 ms  assertVisible "HCard 10"
+  ✓  1647.4 ms  scrollUntilVisible "HCard 1"
+  ✓     2.5 ms  assertVisible "HCard 1"
+  ✓    56.8 ms  tapOn "PageView mode"
+  ✓     2.6 ms  assertVisible "Snap Page 1"
+  ✓  1460.0 ms  scrollUntilVisible "Snap Page 3"
+  ✓     2.2 ms  assertVisible "Snap Page 3"
+  ✓   662.3 ms  swipe
+  ✓     2.1 ms  assertVisible "Snap Page 2"
+PASSED F2 Swipe and Scroll in 11770 ms
+settle check (v2): 0 violation(s)

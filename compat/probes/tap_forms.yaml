@@ -1,0 +1,8 @@
+appId: a
+---
+- tapOn: {}
+- tapOn: 123
+- tapOn: true
+- tapOn:
+    index: 1
+    text: 5

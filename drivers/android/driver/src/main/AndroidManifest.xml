@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Tapwing's Android native-lane driver: one APK whose instrumentation targets
+  itself (so it runs in this package's process) and serves Maestro's
+  `maestro_android.proto` gRPC API over UiAutomator.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission
+        android:name="android.permission.ACCESS_MOCK_LOCATION"
+        tools:ignore="MockLocation,ProtectedPermissions" />
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <application
+        android:allowBackup="false"
+        android:label="Tapwing Driver"
+        tools:ignore="MissingApplicationIcon">
+
+        <!-- Fallback only: used for Unicode text when the focused editor does
+             not accept ACTION_SET_TEXT (see input/UnicodeTextInput.kt). The
+             system binds it into this process, next to the instrumentation. -->
+        <service
+            android:name=".input.TapwingInputMethodService"
+            android:exported="true"
+            android:label="Tapwing Driver Input"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/tapwing_input_method" />
+        </service>
+    </application>
+
+    <instrumentation
+        android:name=".TapwingDriverInstrumentation"
+        android:label="Tapwing Driver"
+        android:targetPackage="dev.tapwing.driver" />
+</manifest>

@@ -1,0 +1,28 @@
+{
+  "commands" : [ {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "com.other.app",
+        "ext" : { },
+        "properties" : { },
+        "tags" : [ ]
+      },
+      "optional" : false
+    }
+  }, {
+    "runScriptCommand" : {
+      "condition" : {
+        "scriptCondition" : "${ 1 + 1 != 2 }",
+        "visible" : {
+          "optional" : false,
+          "textRegex" : "Click me"
+        }
+      },
+      "env" : { },
+      "optional" : false,
+      "script" : "console.log('Log from runScript')",
+      "scriptDir" : "<ROOT>/maestro-test",
+      "sourceDescription" : "098_runScript.js"
+    }
+  } ]
+}

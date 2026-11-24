@@ -1,0 +1,4 @@
+maestro  inputText   466 ms  field=""  ime unchanged
+tapwing  inputText   385 ms  field=""  ime unchanged
+maestro  inputText   465 ms  field=""  ime unchanged
+tapwing  inputText   389 ms  field=""  ime unchanged

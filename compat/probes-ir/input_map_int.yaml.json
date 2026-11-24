@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Parsing Failed at <ROOT>/input_map_int.yaml:5:1",
+    "type" : "SyntaxError"
+  }
+}

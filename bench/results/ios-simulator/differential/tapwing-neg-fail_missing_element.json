@@ -1,0 +1,68 @@
+{
+  "platform": "ios",
+  "setupMs": 177.034042,
+  "flows": [
+    {
+      "flow": "Negative Missing Element",
+      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/negative/fail_missing_element.yaml",
+      "status": "failed",
+      "totalMs": 3904.403458,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 2893.891833,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 51854,
+              "dart": "3.13.4 (stable) (Tue Sep 15 01:01:15 2026 -0700) on \"ios_arm64\"",
+              "screen": [
+                1206.0,
+                2622.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 51854,
+            "oldPids": [],
+            "grantedPermissions": 2,
+            "phases": {
+              "stopClearMs": 826,
+              "permissionsMs": 306,
+              "simctlLaunchMs": 314,
+              "acceptMs": 1269.4714170000002,
+              "rejectedConnections": 1,
+              "configureMs": 174.626666,
+              "waitIdleMs": 2.88225
+            }
+          },
+          "busyAfter": {
+            "framesIdle": true,
+            "loadingIdle": true,
+            "transientCallbacks": 0,
+            "httpInFlight": 0,
+            "pendingImages": 0,
+            "animations": []
+          }
+        },
+        {
+          "index": 1,
+          "command": "extendedWaitUntil",
+          "description": "extendedWaitUntil \"Definitely Does Not Exist\"",
+          "status": "failed",
+          "ms": 1004.7549170000001,
+          "error": "Element not found: Text matching regex: Definitely Does Not Exist"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "error" : {
+    "message" : "Parsing Failed at <ROOT>/runflow_both.yaml:3:3",
+    "type" : "SyntaxError"
+  }
+}
