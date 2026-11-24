@@ -13,10 +13,20 @@
 //! would fail. A client given a [`RestartFn`] ([`IosNativeClient::set_restart`])
 //! notices that, tears the dead runner down, starts a new one through the
 //! [`RestartFn`] (`xcodebuild`, port, `/status` readiness probe) and repeats the
-//! call, at most [`MAX_RESTARTS`] times per run. Only transport failures count:
-//! an HTTP answer, including an error status, never restarts, and neither does
-//! a timeout while the runner process is still alive. If the restart itself
-//! fails the original error is kept and the lane stays down.
+//! call, at most [`MAX_RESTARTS`] times per run. An ordinary HTTP answer,
+//! including an error status, never restarts. If the restart itself fails the
+//! original error is kept and the lane stays down.
+//!
+//! **Stalls.** A runner can also be alive and wedged: a private XCTest call that
+//! never returns holds its request gate, so every call times out against a
+//! process that never exits. Each call sends its time budget
+//! ([`DEADLINE_HEADER`]); the runner answers a request that ran out of it with
+//! `deadlineExceeded` (the handler is still running) or `runnerBusy` (the
+//! request was never started). Such an answer, like a plain host-side timeout
+//! of a live runner (a runner built before the deadline existed), is a stall.
+//! One stall only fails its call; [`STALLS_BEFORE_RESTART`] in a row restart
+//! the runner, within the same [`MAX_RESTARTS`] budget. Any other answer
+//! resets the count.
 
 use std::time::Duration;
 
@@ -32,9 +42,22 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 /// Largest accepted response body (a hierarchy / @3x PNG screenshot).
 const MAX_BODY: u64 = 64 * 1024 * 1024;
 
-/// How many times one client restarts its runner after a transport failure.
-/// A runner that keeps dying is a real problem, not a blip to hide.
+/// How many times one client restarts its runner (after a transport failure
+/// or a stall). A runner that keeps dying is a real problem, not a blip to hide.
 pub const MAX_RESTARTS: u32 = 3;
+
+/// Consecutive stalled calls after which a live runner is restarted. One slow
+/// call (a huge hierarchy) is not proof of a wedged runner; two in a row are.
+pub const STALLS_BEFORE_RESTART: u32 = 2;
+
+/// Request header with the time this call may still take, in milliseconds. The
+/// runner answers before it runs out, so its timeout is an answer the host can
+/// classify instead of a silent socket timeout. Older runners ignore it.
+pub const DEADLINE_HEADER: &str = "X-Tapwing-Deadline-Ms";
+/// `errorCode` of a runner whose handler ran past the deadline and still runs.
+const CODE_DEADLINE_EXCEEDED: &str = "deadlineExceeded";
+/// `errorCode` of a request the runner never started (busy or wedged).
+const CODE_RUNNER_BUSY: &str = "runnerBusy";
 
 /// Starts a replacement runner (the old one is already torn down) and returns
 /// its client, whose own recovery is left unset.
@@ -113,6 +136,51 @@ fn classify(e: &ureq::Error) -> Fault {
     }
 }
 
+/// What a restart is curing; picks the wording of its messages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Trouble {
+    /// The transport broke: the runner process is gone.
+    Lost,
+    /// [`STALLS_BEFORE_RESTART`] calls in a row timed out against a live runner.
+    Stalled,
+}
+
+impl Trouble {
+    /// "the iOS driver {..}".
+    fn happened(self) -> &'static str {
+        match self {
+            Self::Lost => "lost its connection",
+            Self::Stalled => "stopped answering",
+        }
+    }
+
+    /// "restarted after {..}".
+    fn after(self) -> &'static str {
+        match self {
+            Self::Lost => "losing its connection",
+            Self::Stalled => "it stopped answering",
+        }
+    }
+
+    fn notice(self) -> &'static str {
+        match self {
+            Self::Lost => "connection lost",
+            Self::Stalled => "stopped answering",
+        }
+    }
+}
+
+/// A failed attempt that a restart may cure.
+struct Failed {
+    trouble: Trouble,
+    /// The user-facing error of the attempt.
+    error: anyhow::Error,
+    /// For the restart notice.
+    cause: String,
+    /// The request provably never ran on the runner, so even input may be repeated.
+    never_ran: bool,
+}
+
 /// The runner answered with an HTTP error status (its own, readable message): the
 /// opposite of a transport or timeout failure, which says nothing about its answer.
 #[derive(Debug)]
@@ -147,6 +215,9 @@ pub struct IosNativeClient {
     recovery: Option<RestartFn>,
     restarts: u32,
     restart_notices: Vec<String>,
+    call_timeout: Duration,
+    /// Stalled calls in a row (see the module docs).
+    stalls: u32,
 }
 
 impl IosNativeClient {
@@ -172,6 +243,8 @@ impl IosNativeClient {
             recovery: None,
             restarts: 0,
             restart_notices: Vec::new(),
+            call_timeout,
+            stalls: 0,
         }
     }
 
@@ -206,17 +279,36 @@ impl IosNativeClient {
         let url = self.url(path);
         let resp = match body {
             None => {
-                let req = self.agent.get(url);
+                let req = self.agent.get(url).header(DEADLINE_HEADER, self.deadline_header());
                 match timeout {
                     Some(t) => req.config().timeout_global(Some(t)).build().call()?,
                     None => req.call()?,
                 }
             }
-            Some(payload) => self.agent.post(url).header("Content-Type", "application/json").send(payload)?,
+            Some(payload) => self
+                .agent
+                .post(url)
+                .header("Content-Type", "application/json")
+                .header(DEADLINE_HEADER, self.deadline_header())
+                .send(payload)?,
         };
         let status = resp.status().as_u16();
         let body = resp.into_body().with_config().limit(MAX_BODY).read_to_vec()?;
         Ok(Answer { status, body })
+    }
+
+    /// The whole call budget in milliseconds; the runner keeps its own margin below it.
+    fn deadline_header(&self) -> String {
+        self.call_timeout.as_millis().to_string()
+    }
+
+    /// The runner's own message for an HTTP error status.
+    fn error_detail(answer: &Answer) -> String {
+        let raw = String::from_utf8_lossy(&answer.body);
+        match serde_json::from_str::<ErrorBody>(&raw) {
+            Ok(e) if !e.error_message.is_empty() => format!("{} ({})", e.error_message, e.error_code),
+            _ => raw.trim().to_string(),
+        }
     }
 
     /// Turns an HTTP error status into the runner's own message.
@@ -225,12 +317,30 @@ impl IosNativeClient {
         if (200..300).contains(&status) {
             return Ok(answer.body);
         }
-        let raw = String::from_utf8_lossy(&answer.body);
-        let detail = match serde_json::from_str::<ErrorBody>(&raw) {
-            Ok(e) if !e.error_message.is_empty() => format!("{} ({})", e.error_message, e.error_code),
-            _ => raw.trim().to_string(),
-        };
+        let detail = Self::error_detail(&answer);
         Err(RunnerAnswerError(format!("iOS driver `{what}` failed: HTTP {status}: {detail}")).into())
+    }
+
+    /// A runner-side timeout answer as a stall: `deadlineExceeded` (the handler
+    /// may have applied the request and still runs) or `runnerBusy` (it never
+    /// started). Not a [`RunnerAnswerError`]: the runner is hung, not answering.
+    fn stall_answer(what: &str, answer: &Answer) -> Option<Failed> {
+        if (200..300).contains(&answer.status) {
+            return None;
+        }
+        let code = serde_json::from_slice::<ErrorBody>(&answer.body).ok()?.error_code;
+        let never_ran = match code.as_str() {
+            CODE_DEADLINE_EXCEEDED => false,
+            CODE_RUNNER_BUSY => true,
+            _ => return None,
+        };
+        let detail = Self::error_detail(answer);
+        Some(Failed {
+            trouble: Trouble::Stalled,
+            error: anyhow!("iOS driver `{what}` timed out in the runner: {detail}"),
+            cause: format!("`{what}`: {detail}"),
+            never_ran,
+        })
     }
 
     fn describe(what: &str, e: &ureq::Error) -> anyhow::Error {
@@ -248,43 +358,88 @@ impl IosNativeClient {
         }
     }
 
-    /// Runs one call. On a transport failure restarts the runner (when this
-    /// client can) and, if `replay` allows, repeats the call once.
-    fn call(&mut self, what: &str, replay: Replay, path: &str, body: Option<&Value>) -> Result<Vec<u8>> {
-        let payload = body.map(serde_json::to_vec).transpose().context("encoding the iOS driver request")?;
-        let err = match self.exchange(path, payload.as_deref(), None) {
-            Ok(answer) => return Self::finish(what, answer),
+    /// One attempt of a call. `Err(Ok(failed))` is a failure a restart may
+    /// cure; `Err(Err(e))` is final (an ordinary error answer, a bad request).
+    fn attempt(&mut self, what: &str, path: &str, payload: Option<&[u8]>) -> Result<Vec<u8>, Result<Failed>> {
+        let err = match self.exchange(path, payload, None) {
+            Ok(answer) => {
+                return match Self::stall_answer(what, &answer) {
+                    Some(stalled) => Err(Ok(stalled)),
+                    None => {
+                        self.stalls = 0;
+                        Self::finish(what, answer).map_err(Err)
+                    }
+                };
+            }
             Err(e) => e,
         };
-        crate::interrupt::check()?;
         let fault = self.fault(&err);
-        if fault == Fault::None || self.recovery.is_none() {
-            return Err(Self::describe(what, &err));
+        let error = Self::describe(what, &err);
+        let cause = format!("`{what}`: {err}");
+        match fault {
+            // The runner process is alive and did not answer in time.
+            Fault::None if matches!(err, ureq::Error::Timeout(_)) => {
+                Err(Ok(Failed { trouble: Trouble::Stalled, error, cause, never_ran: false }))
+            }
+            Fault::None => Err(Err(error)),
+            Fault::Refused | Fault::Broken => {
+                Err(Ok(Failed { trouble: Trouble::Lost, error, cause, never_ran: fault == Fault::Refused }))
+            }
         }
+    }
+
+    /// Runs one call. On a transport failure, or on the
+    /// [`STALLS_BEFORE_RESTART`]-th stall in a row, restarts the runner (when
+    /// this client can) and, if `replay` allows, repeats the call once.
+    fn call(&mut self, what: &str, replay: Replay, path: &str, body: Option<&Value>) -> Result<Vec<u8>> {
+        let payload = body.map(serde_json::to_vec).transpose().context("encoding the iOS driver request")?;
+        let failed = match self.attempt(what, path, payload.as_deref()) {
+            Ok(bytes) => return Ok(bytes),
+            Err(failed) => failed,
+        };
+        crate::interrupt::check()?;
+        let Failed { trouble, error, cause, never_ran } = failed?;
+        if trouble == Trouble::Stalled {
+            self.stalls += 1;
+            if self.stalls < STALLS_BEFORE_RESTART {
+                return Err(error);
+            }
+        }
+        if self.recovery.is_none() {
+            return Err(error);
+        }
+        let happened = trouble.happened();
         if self.restarts >= MAX_RESTARTS {
-            return Err(Self::describe(what, &err).context(format!(
-                "the iOS driver lost its connection again after {MAX_RESTARTS} restarts; giving up"
+            return Err(
+                error.context(format!("the iOS driver {happened} again after {MAX_RESTARTS} restarts; giving up"))
+            );
+        }
+        if let Err(e) = self.restart(trouble, &cause) {
+            return Err(error.context(format!("the iOS driver {happened} and could not be restarted: {e:#}")));
+        }
+        if replay == Replay::IfNotSent && !never_ran {
+            return Err(error.context(format!(
+                "the iOS driver {happened} while handling this request and was restarted; the request was not \
+                 repeated because it may already have been applied"
             )));
         }
-        self.restart(&format!("`{what}`: {err}")).map_err(|e| {
-            Self::describe(what, &err)
-                .context(format!("the iOS driver lost its connection and could not be restarted: {e:#}"))
-        })?;
-        if replay == Replay::IfNotSent && fault != Fault::Refused {
-            return Err(Self::describe(what, &err).context(
-                "the iOS driver lost its connection while sending this request and was restarted; the request \
-                 was not repeated because it may already have been applied",
-            ));
-        }
-        match self.exchange(path, payload.as_deref(), None) {
-            Ok(answer) => Self::finish(what, answer),
-            Err(e) => Err(Self::describe(what, &e)
-                .context("the iOS driver was restarted after losing its connection, but the request failed again")),
+        match self.attempt(what, path, payload.as_deref()) {
+            Ok(bytes) => Ok(bytes),
+            Err(again) => {
+                let again = match again {
+                    Ok(failed) => failed.error,
+                    Err(e) => e,
+                };
+                Err(again.context(format!(
+                    "the iOS driver was restarted after {}, but the request failed again",
+                    trouble.after()
+                )))
+            }
         }
     }
 
     /// Replaces the dead runner with a freshly started one.
-    fn restart(&mut self, cause: &str) -> Result<()> {
+    fn restart(&mut self, trouble: Trouble, cause: &str) -> Result<()> {
         let mut recovery = self.recovery.take().ok_or_else(|| anyhow!("this client cannot restart"))?;
         // Tear the dead runner down first: its `simctl terminate` would otherwise
         // kill the new runner (same bundle id), and a fixed port would stay taken.
@@ -296,7 +451,8 @@ impl IosNativeClient {
         fresh.restarts = self.restarts + 1;
         fresh.restart_notices = std::mem::take(&mut self.restart_notices);
         fresh.restart_notices.push(format!(
-            "iOS native driver connection lost ({cause}); restarted it (restart {}/{MAX_RESTARTS})",
+            "iOS native driver {} ({cause}); restarted it (restart {}/{MAX_RESTARTS})",
+            trouble.notice(),
             fresh.restarts
         ));
         // The new runner starts with its screen size uncached.
@@ -479,12 +635,22 @@ pub(crate) mod mock {
         pub method: String,
         /// Path with query string, e.g. `/screenshot?compressed=false`.
         pub target: String,
+        /// The request line and headers, as sent.
+        pub head: String,
         pub body: String,
     }
 
     impl Req {
         pub fn path(&self) -> &str {
             self.target.split('?').next().unwrap_or("")
+        }
+        /// Value of the header `name` (case-insensitive), if sent.
+        pub fn header(&self, name: &str) -> Option<&str> {
+            self.head
+                .lines()
+                .skip(1)
+                .filter_map(|l| l.split_once(':'))
+                .find_map(|(k, v)| k.trim().eq_ignore_ascii_case(name).then_some(v.trim()))
         }
         pub fn json(&self) -> serde_json::Value {
             serde_json::from_str(&self.body).unwrap_or(serde_json::Value::Null)
@@ -604,7 +770,7 @@ pub(crate) mod mock {
             }
             let body = String::from_utf8_lossy(&buf[head_end..head_end + len]).into_owned();
             buf.drain(..head_end + len);
-            let req = Req { method, target, body };
+            let req = Req { method, target, head, body };
             requests.lock().unwrap().push(req.clone());
             let resp = (handler.lock().unwrap())(&req);
             let head = format!(
@@ -1075,6 +1241,177 @@ mod tests {
         assert_eq!(*restarts.lock().unwrap(), 0);
         assert!(log.lock().unwrap().is_empty(), "a live runner is not torn down");
         assert!(c.take_restart_notices().is_empty());
+    }
+
+    // ---- Stalls: a live runner that stopped answering ---------------------------------------
+
+    fn timeout_answer(code: &str, message: &str) -> Resp {
+        Resp {
+            status: 408,
+            content_type: "application/json",
+            body: format!(r#"{{"errorMessage":"{message}","errorCode":"{code}","code":"{code}"}}"#).into_bytes(),
+        }
+    }
+
+    /// A runner wedged in its first request: that one runs out of its deadline
+    /// (`first`), every later one is refused unstarted. `/status` still answers.
+    fn wedged_runner(first: &'static str) -> MockRunner {
+        let seen = std::sync::atomic::AtomicUsize::new(0);
+        MockRunner::start(Box::new(move |req| {
+            if req.path() == "/status" {
+                return Resp::json(r#"{"status":"wedged","wedged":true}"#);
+            }
+            if seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 0 {
+                timeout_answer(first, "`POST /viewHierarchy` did not finish within 28.0 s")
+            } else {
+                timeout_answer("runnerBusy", "not started: the runner is wedged in `POST /viewHierarchy`")
+            }
+        }))
+    }
+
+    #[test]
+    fn every_call_sends_its_time_budget() {
+        let r = runner();
+        let mut c = IosNativeClient::connect(r.port);
+        c.device_info().unwrap();
+        c.touch(1.0, 2.0, None).unwrap();
+        assert_eq!(r.calls("deviceInfo")[0].header(DEADLINE_HEADER), Some("30000"));
+        assert_eq!(r.calls("touch")[0].header("x-tapwing-deadline-ms"), Some("30000"));
+        assert!(CALL_TIMEOUT.as_millis() == 30_000);
+    }
+
+    #[test]
+    fn one_stall_fails_its_call_and_the_second_in_a_row_restarts_the_runner() {
+        let wedged = wedged_runner("deadlineExceeded");
+        let fresh = runner();
+        let restarts = Arc::new(Mutex::new(0));
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let mut c = IosNativeClient::connect(wedged.port);
+        c.set_runner(Box::new(FakeRunner { name: "wedged", log: log.clone(), exited: false }));
+        c.set_restart(restart_to(fresh.port, &restarts));
+
+        // The first timeout may be one slow call: it fails, nothing is restarted.
+        let first = c.view_hierarchy(&apps(), false).unwrap_err();
+        let text = format!("{first:#}");
+        assert!(text.contains("`viewHierarchy` timed out in the runner"), "{text}");
+        assert!(text.contains("did not finish within 28.0 s") && text.contains("deadlineExceeded"), "{text}");
+        assert!(!is_runner_answer(&first), "a hung runner is not an answering one");
+        assert_eq!(*restarts.lock().unwrap(), 0);
+        assert!(log.lock().unwrap().is_empty());
+
+        // The second one in a row proves the runner is wedged: it is replaced and the read repeated.
+        assert_eq!(c.view_hierarchy(&apps(), false).unwrap()["depth"], 1);
+        assert_eq!(*restarts.lock().unwrap(), 1);
+        assert_eq!(*log.lock().unwrap(), ["teardown wedged"], "the live but wedged runner is torn down");
+        assert_eq!(wedged.calls("viewHierarchy").len(), 2);
+        assert_eq!(fresh.calls("viewHierarchy").len(), 1);
+        let notices = c.take_restart_notices();
+        assert_eq!(notices.len(), 1, "{notices:?}");
+        assert!(notices[0].contains("iOS native driver stopped answering"), "{notices:?}");
+        assert!(
+            notices[0].contains("wedged in `POST /viewHierarchy`") && notices[0].contains("restart 1/3"),
+            "{notices:?}"
+        );
+
+        // The replacement starts with a clean count.
+        c.view_hierarchy(&apps(), false).unwrap();
+        assert_eq!(*restarts.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn input_refused_unstarted_is_repeated_after_the_restart_but_input_in_flight_is_not() {
+        // `runnerBusy`: the wedged runner never started the tap, so it is safe to send again.
+        let wedged = wedged_runner("deadlineExceeded");
+        let fresh = runner();
+        let restarts = Arc::new(Mutex::new(0));
+        let mut c = IosNativeClient::connect(wedged.port);
+        c.set_restart(restart_to(fresh.port, &restarts));
+        assert!(c.view_hierarchy(&apps(), false).is_err());
+        c.touch(10.0, 20.0, None).unwrap();
+        assert_eq!(*restarts.lock().unwrap(), 1);
+        assert_eq!(fresh.calls("touch").len(), 1, "the tap ran exactly once");
+
+        // `deadlineExceeded` twice: the second tap may have been applied, so it is not repeated.
+        let stuck = MockRunner::start(Box::new(|_| timeout_answer("deadlineExceeded", "did not finish")));
+        let fresh = runner();
+        let restarts = Arc::new(Mutex::new(0));
+        let mut c = IosNativeClient::connect(stuck.port);
+        c.set_restart(restart_to(fresh.port, &restarts));
+        assert!(c.touch(10.0, 20.0, None).is_err());
+        let err = format!("{:#}", c.touch(10.0, 20.0, None).unwrap_err());
+        assert!(err.contains("stopped answering while handling this request and was restarted"), "{err}");
+        assert!(err.contains("not repeated because it may already have been applied"), "{err}");
+        assert_eq!(*restarts.lock().unwrap(), 1);
+        assert!(fresh.calls("touch").is_empty());
+        // The lane is usable again.
+        c.touch(10.0, 20.0, None).unwrap();
+        assert_eq!(*restarts.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn an_answer_between_two_stalls_resets_the_count() {
+        // Every other call stalls: slow, but the runner keeps answering in between.
+        let n = std::sync::atomic::AtomicUsize::new(0);
+        let r = MockRunner::start(Box::new(move |_| {
+            if n.fetch_add(1, std::sync::atomic::Ordering::Relaxed).is_multiple_of(2) {
+                timeout_answer("deadlineExceeded", "did not finish")
+            } else {
+                Resp { status: 500, content_type: "application/json", body: Vec::new() }
+            }
+        }));
+        let restarts = Arc::new(Mutex::new(0));
+        let mut c = IosNativeClient::connect(r.port);
+        c.set_restart(restart_to(dead_port(), &restarts));
+        for _ in 0..3 {
+            assert!(c.is_screen_static().is_err(), "stall");
+            assert!(c.is_screen_static().is_err(), "an HTTP 500 is an answer");
+        }
+        assert_eq!(*restarts.lock().unwrap(), 0);
+    }
+
+    #[test]
+    fn host_side_timeouts_of_a_live_runner_without_deadlines_count_as_stalls() {
+        // A runner built before the deadline existed never answers a wedged call.
+        let fresh = runner();
+        let restarts = Arc::new(Mutex::new(0));
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let mut c = IosNativeClient::connect_with_timeout(raw_server(hang), Duration::from_millis(150));
+        c.set_runner(Box::new(FakeRunner { name: "old", log: log.clone(), exited: false }));
+        c.set_restart(restart_to(fresh.port, &restarts));
+        let err = c.view_hierarchy(&apps(), false).unwrap_err().to_string();
+        assert!(err.contains("timeout"), "{err}");
+        assert_eq!(*restarts.lock().unwrap(), 0);
+        assert_eq!(c.view_hierarchy(&apps(), false).unwrap()["depth"], 1);
+        assert_eq!(*restarts.lock().unwrap(), 1);
+        assert_eq!(*log.lock().unwrap(), ["teardown old"]);
+        assert!(c.take_restart_notices()[0].contains("stopped answering"));
+    }
+
+    #[test]
+    fn stall_restarts_share_the_restart_budget_and_need_a_restart_function() {
+        // Without a restart function the calls just keep failing.
+        let stuck = MockRunner::start(Box::new(|_| timeout_answer("runnerBusy", "wedged")));
+        let mut c = IosNativeClient::connect(stuck.port);
+        for _ in 0..4 {
+            assert!(c.view_hierarchy(&apps(), false).is_err());
+        }
+        assert_eq!(c.restarts(), 0);
+
+        // Every replacement is wedged again: the budget of restarts ends the loop.
+        let restarts = Arc::new(Mutex::new(0));
+        let mut c = IosNativeClient::connect(stuck.port);
+        c.set_restart(restart_to(stuck.port, &restarts));
+        assert!(c.view_hierarchy(&apps(), false).is_err(), "first stall");
+        let mut last = String::new();
+        for _ in 0..20 {
+            last = format!("{:#}", c.view_hierarchy(&apps(), false).unwrap_err());
+            if last.contains("giving up") {
+                break;
+            }
+        }
+        assert!(last.contains("stopped answering again after 3 restarts; giving up"), "{last}");
+        assert_eq!(*restarts.lock().unwrap(), MAX_RESTARTS);
+        assert_eq!(c.restarts(), MAX_RESTARTS);
     }
 
     #[test]

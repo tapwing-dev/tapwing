@@ -1,4 +1,6 @@
-// Dispatches all 14 HTTP routes consumed by `crates/tapwing/src/ios_native_lane/client.rs`.
+// Dispatches the HTTP routes consumed by `crates/tapwing/src/ios_native_lane/client.rs`.
+// `GET /status` is not here: `HttpServer` answers it off the main thread, so it
+// keeps working while a handler below is wedged.
 
 import Foundation
 
@@ -8,8 +10,6 @@ final class Router {
 
     func handle(_ request: HttpRequest) async -> HttpResponse {
         switch (request.method, request.path) {
-        case ("GET", "/status"):
-            return ScreenProbe.status()
         case ("GET", "/deviceInfo"):
             return ScreenProbe.deviceInfo()
         case ("POST", "/viewHierarchy"):

@@ -13,6 +13,12 @@ public enum AppErrorType: String, Codable, Equatable, Sendable {
     case precondition
     case timeout
     case notFound
+    /// The handler ran past the request deadline and is still running; the
+    /// request may or may not have been applied (see `RequestGate`).
+    case deadlineExceeded
+    /// The request was never started: the runner was busy until the request
+    /// deadline, or is wedged in an overdue handler.
+    case runnerBusy
 }
 
 public struct AppError: Error, Codable, Equatable, Sendable {
@@ -28,7 +34,7 @@ public struct AppError: Error, Codable, Equatable, Sendable {
         switch type {
         case .internal: return 500
         case .precondition: return 400
-        case .timeout: return 408
+        case .timeout, .deadlineExceeded, .runnerBusy: return 408
         case .notFound: return 404
         }
     }
@@ -173,10 +179,22 @@ public struct ViewHierarchyResponse: Codable, Equatable, Sendable {
 
 // MARK: - Request / Response DTOs for all 14 routes
 
+/// `GET /status`. Only `status` is always present; the optional fields are
+/// omitted when nil, so an idle runner still answers `{"status":"ok"}`.
 public struct StatusResponse: Codable, Equatable, Sendable {
+    /// `"ok"`, or `"wedged"` while a handler is past its deadline and still running.
     public let status: String
-    public init(status: String = "ok") {
+    /// Label of the handler holding the request gate (`"POST /viewHierarchy"`).
+    public let busy: String?
+    /// How long that handler has been running, in milliseconds.
+    public let busyMs: Int?
+    public let wedged: Bool?
+
+    public init(status: String = "ok", busy: String? = nil, busyMs: Int? = nil, wedged: Bool? = nil) {
         self.status = status
+        self.busy = busy
+        self.busyMs = busyMs
+        self.wedged = wedged
     }
 }
 

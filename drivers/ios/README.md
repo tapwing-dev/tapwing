@@ -44,8 +44,34 @@ Served routes (all 14 consumed by `ios_native_lane/client.rs`):
   - Zero third-party Swift packages (no FlyingFox, no MaestroDriverLib
     framework): uses a ~150-line `Network.framework` (`NWListener`) keep-alive
     HTTP/1.1 server with `TCP_NODELAY`.
+  - Per-request deadline and a wedge-proof `/status` (not in Maestro): see
+    [Threading and deadlines](#threading-and-deadlines).
   - No dumped Apple private header tree: uses one self-contained Objective-C
     runtime bridge (`UITests/XCTestPrivate/XCTestRuntimeBridge.{h,m}`) with ARC
     memory management and a single unified `defaultParameters` swizzle.
   - Unused Maestro routes (`launchApp`, `terminateApp`, `setPermissions`,
     `setAppearance`, `swipe` v1, `eraseAllText`) are omitted.
+
+## Threading and deadlines
+
+XCUITest calls run on the main thread and cannot be cancelled, so the runner
+never pretends to stop one. It keeps answering instead, and leaves the actual
+recovery (a restart of the runner process) to the host.
+
+- **Server queue** (`dev.tapwing.ios-runner.http`, serial): accepts connections,
+  parses requests, sends every response, runs the deadline watchdogs and
+  answers `GET /status` itself. It never waits for the main thread.
+- **Main actor**: runs one route handler at a time, in arrival order, behind
+  `RequestGate` (`Core/RequestGate.swift`).
+- **Deadline**: the host sends its request budget in `X-Tapwing-Deadline-Ms`;
+  the runner keeps a 2 s margin below it (25 s when the header is missing).
+  When it passes, the watchdog answers HTTP 408 with `errorCode`
+  `deadlineExceeded` (the handler is still running and may have applied the
+  request) or `runnerBusy` (the request never started). The overdue handler
+  keeps the gate until it returns, so XCUITest operations never interleave.
+- **Wedged**: while an overdue handler is still running, new requests are
+  refused at once with `runnerBusy` and `/status` answers
+  `{"status":"wedged","busy":"POST /viewHierarchy","busyMs":31000,"wedged":true}`
+  (still HTTP 200). If the handler does return, the gate heals by itself.
+- **Dead requests**: a queued request whose client hung up, or whose deadline
+  passed while it waited, is never started.

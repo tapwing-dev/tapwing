@@ -1,4 +1,4 @@
-// Device state and screen-capture route handlers: status, deviceInfo,
+// Device state and screen-capture route handlers: deviceInfo,
 // isScreenStatic, runningApp, keyboard, screenshot.
 // Ported from Maestro 2.12.1 (`Routes/Handlers/{StatusHandler,DeviceInfoHandler,
 // ScreenDiffHandler,RunningAppRouteHandler,KeyboardRouteHandler,
@@ -12,10 +12,6 @@ import XCTest
 
 @MainActor
 enum ScreenProbe {
-    static func status() -> HttpResponse {
-        HttpResponse.json(StatusResponse())
-    }
-
     static func deviceInfo() -> HttpResponse {
         let (width, height, _) = ScreenSizeHelper.actualScreenSize()
         let scale = Double(UIScreen.main.scale)
