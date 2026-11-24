@@ -209,6 +209,94 @@ fn check_dump_ir_prints_valid_json_with_the_parsed_commands() {
 }
 
 #[test]
+fn check_dump_ir_keeps_stdout_pure_json_and_sends_status_to_stderr() {
+    let tmp = TempDir::new("check_ir_status");
+    tmp.write("a.yaml", VALID_FLOW);
+    tmp.write("config.yaml", "flows:\n  - '*'\n");
+    let out = tapwing(&["check", "--dump-ir", tmp.path().to_str().unwrap()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(!text.contains('✓'), "status line on stdout:\n{text}");
+    serde_json::from_str::<serde_json::Value>(&text).expect("stdout is exactly one JSON document");
+    let err = stderr(&out);
+    assert!(err.contains("(workspace config)"), "{err}");
+    assert!(err.contains("1 valid, 0 invalid"), "{err}");
+}
+
+#[test]
+fn check_dump_ir_of_several_flows_is_one_json_array() {
+    let tmp = TempDir::new("check_ir_many");
+    let a = tmp.write("a.yaml", VALID_FLOW);
+    let b = tmp.write("nested/b.yaml", "appId: com.example.app\n---\n- back\n");
+
+    // A directory: an array, one `{path, commands}` object per valid flow, in walk order.
+    let out = tapwing(&["check", "--dump-ir", tmp.path().to_str().unwrap()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let ir: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("one JSON document");
+    let flows = ir.as_array().expect("an array for a directory");
+    assert_eq!(flows.len(), 2, "{ir}");
+    assert!(flows[0]["path"].as_str().unwrap().ends_with("a.yaml"), "{ir}");
+    assert!(flows[1]["path"].as_str().unwrap().ends_with("b.yaml"), "{ir}");
+    assert_eq!(flows[0]["commands"].as_array().unwrap().len(), 4, "{ir}");
+    assert!(flows[1]["commands"][1].get("backPressCommand").is_some(), "{ir}");
+
+    // Several file arguments: the same array, and an invalid flow fails the run without breaking the JSON.
+    let bad = tmp.write("bad/c.yaml", "appId: x\n---\n- bogusCommand\n");
+    let out = tapwing(&["check", "--dump-ir", a.to_str().unwrap(), bad.to_str().unwrap(), b.to_str().unwrap()]);
+    assert_eq!(code(&out), 1, "{}", stderr(&out));
+    let ir: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("one JSON document");
+    assert_eq!(ir.as_array().expect("an array for several paths").len(), 2, "{ir}");
+    assert!(stderr(&out).contains("2 valid, 1 invalid"), "{}", stderr(&out));
+
+    // A directory holding a single flow is still an array: the shape follows the arguments.
+    let out = tapwing(&["check", "--dump-ir", tmp.path().join("nested").to_str().unwrap()]);
+    let ir: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("one JSON document");
+    assert_eq!(ir.as_array().expect("an array for a directory").len(), 1, "{ir}");
+}
+
+#[test]
+fn check_fails_on_a_directory_without_flows() {
+    let tmp = TempDir::new("check_empty");
+    tmp.write("empty/README.md", "# no flows here\n");
+    tmp.write("empty/config.yaml", "flows:\n  - '*'\n");
+    let empty = tmp.path().join("empty");
+    let out = tapwing(&["check", empty.to_str().unwrap()]);
+    assert_eq!(code(&out), 1, "{}{}", stdout(&out), stderr(&out));
+    let err = stderr(&out);
+    assert!(err.contains(&format!("✗ {}: no flow files found", empty.display())), "{err}");
+    assert!(err.contains("0 valid, 0 invalid"), "{err}");
+
+    // An empty directory next to a good one still fails, and the good flows are still checked.
+    let good = tmp.write("good/a.yaml", VALID_FLOW);
+    let out = tapwing(&["check", good.parent().unwrap().to_str().unwrap(), empty.to_str().unwrap()]);
+    assert_eq!(code(&out), 1, "{}{}", stdout(&out), stderr(&out));
+    assert!(stdout(&out).contains("a.yaml (4 commands)"), "{}", stdout(&out));
+    assert!(stderr(&out).contains("no flow files found"), "{}", stderr(&out));
+
+    // With --dump-ir the document is still valid JSON.
+    let out = tapwing(&["check", "--dump-ir", empty.to_str().unwrap()]);
+    assert_eq!(code(&out), 1, "{}", stderr(&out));
+    assert_eq!(stdout(&out).trim(), "[]");
+}
+
+#[cfg(unix)]
+#[test]
+fn check_walks_a_symlink_loop_once() {
+    let tmp = TempDir::new("check_symlink_loop");
+    tmp.write("a.yaml", VALID_FLOW);
+    tmp.write("nested/b.yaml", VALID_FLOW);
+    // `nested/up` leads back to the root and `self` to its own directory.
+    std::os::unix::fs::symlink(tmp.path(), tmp.path().join("nested/up")).unwrap();
+    std::os::unix::fs::symlink(tmp.path().join("nested"), tmp.path().join("nested/self")).unwrap();
+    let out = tapwing(&["check", tmp.path().to_str().unwrap()]);
+    assert_eq!(code(&out), 0, "{}{}", stdout(&out), stderr(&out));
+    let text = stdout(&out);
+    assert_eq!(text.matches("a.yaml (4 commands)").count(), 1, "{text}");
+    assert_eq!(text.matches("b.yaml (4 commands)").count(), 1, "{text}");
+    assert!(stderr(&out).contains("2 valid, 0 invalid (2 files"), "{}", stderr(&out));
+}
+
+#[test]
 fn check_rejects_an_unknown_command_with_an_actionable_message() {
     let tmp = TempDir::new("check_unknown");
     let flow = tmp.write("bad.yaml", "appId: x\n---\n- launchApp\n- bogusCommand\n");

@@ -11,6 +11,10 @@ tapwing check .maestro
 tapwing check .maestro/login.yaml --dump-ir   # print Maestro-format JSON IR
 ```
 
+A directory is walked recursively (each directory once, so symlinks that lead back into the tree are safe). `check` exits non-zero when a flow is invalid and also when a directory you passed contains no flow files, so a wrong path cannot pass in CI.
+
+With `--dump-ir`, stdout carries exactly one JSON document and all status lines go to stderr, so the output can be piped into `jq`. A single flow file prints one `{ "path", "commands" }` object; a directory or several paths print an array of those objects, with invalid flows left out (their errors are on stderr).
+
 Every Maestro command, shorthand syntax, `runFlow`, `retry`, `repeat`, `when`/`while`, `runScript`, `onFlowStart`/`onFlowComplete`, `env`, `label`, and `optional` is supported. Parsing 544 flows takes ~33 ms (compared to ~2.6 s for a single file in Maestro due to JVM startup).
 
 ## Flow execution and JavaScript

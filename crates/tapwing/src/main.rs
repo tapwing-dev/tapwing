@@ -1,7 +1,7 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use clap::{Args, Parser, Subcommand};
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -191,7 +191,8 @@ enum Cmd {
         /// Flow files or directories (searched for *.yaml / *.yml).
         #[arg(required = true)]
         paths: Vec<PathBuf>,
-        /// Print the parsed commands (Maestro's IR) as JSON.
+        /// Print the parsed commands (Maestro's IR) as one JSON document on stdout: an object for a single
+        /// flow file, an array of objects for a directory or several paths.
         #[arg(long)]
         dump_ir: bool,
     },
@@ -381,51 +382,7 @@ fn run(cli: Cli) -> Result<bool> {
                 trace: args.trace.then_some(TraceOpts { screenshots: args.trace_screenshots }),
             })
         }
-        Cmd::Check { paths, dump_ir } => {
-            let mut files = Vec::new();
-            let mut config_errors = 0;
-            for p in &paths {
-                if p.is_dir()
-                    && let Some(cfg) = workspace::find_config_file(p)
-                {
-                    match workspace::config::read(&cfg) {
-                        Ok(_) => println!("✓ {} (workspace config)", cfg.display()),
-                        Err(e) => {
-                            config_errors += 1;
-                            eprint!("✗ {}", e.render());
-                        }
-                    }
-                }
-                collect_yaml(p, &mut files)?;
-            }
-            let t0 = Instant::now();
-            let (mut ok, mut failed) = (0, 0);
-            for file in &files {
-                match flow::parse_file(file) {
-                    Ok(f) => {
-                        ok += 1;
-                        if dump_ir {
-                            println!(
-                                "{}",
-                                serde_json::to_string_pretty(&json!({ "path": f.path, "commands": f.commands }))?
-                            );
-                        } else {
-                            println!("✓ {} ({} commands)", file.display(), f.commands.len());
-                        }
-                    }
-                    Err(e) => {
-                        failed += 1;
-                        eprint!("✗ {}", e.render());
-                    }
-                }
-            }
-            eprintln!(
-                "{ok} valid, {failed} invalid ({} files in {:.1} ms)",
-                files.len(),
-                t0.elapsed().as_secs_f64() * 1000.0
-            );
-            Ok(failed == 0 && config_errors == 0)
-        }
+        Cmd::Check { paths, dump_ir } => check(&paths, dump_ir),
         Cmd::Hierarchy { app_id } => {
             let mut dev = Device::select(global_device.as_deref(), global_platform)?;
             let mut drv = Driver::listen(global_port)?;
@@ -484,16 +441,87 @@ fn run(cli: Cli) -> Result<bool> {
     }
 }
 
+/// `tapwing check`: validates flows offline; `Ok(false)` if anything is invalid.
+///
+/// With `--dump-ir` stdout carries exactly one JSON document and every status
+/// line goes to stderr, so the output can be piped into a JSON tool.
+fn check(paths: &[PathBuf], dump_ir: bool) -> Result<bool> {
+    let mut files = Vec::new();
+    let mut path_errors = 0;
+    for p in paths {
+        if p.is_dir()
+            && let Some(cfg) = workspace::find_config_file(p)
+        {
+            match workspace::config::read(&cfg) {
+                Ok(_) if dump_ir => eprintln!("✓ {} (workspace config)", cfg.display()),
+                Ok(_) => println!("✓ {} (workspace config)", cfg.display()),
+                Err(e) => {
+                    path_errors += 1;
+                    eprint!("✗ {}", e.render());
+                }
+            }
+        }
+        let before = files.len();
+        collect_yaml(p, &mut files, &mut HashSet::new())?;
+        if files.len() == before {
+            // Only a directory can contribute nothing; passing CI on it would
+            // hide a wrong path or an emptied flow folder.
+            path_errors += 1;
+            eprintln!("✗ {}: no flow files found", p.display());
+        }
+    }
+    let t0 = Instant::now();
+    let (mut ok, mut failed) = (0, 0);
+    let mut ir = Vec::new();
+    for file in &files {
+        match flow::parse_file(file) {
+            Ok(f) => {
+                ok += 1;
+                if dump_ir {
+                    ir.push(json!({ "path": f.path, "commands": f.commands }));
+                } else {
+                    println!("✓ {} ({} commands)", file.display(), f.commands.len());
+                }
+            }
+            Err(e) => {
+                failed += 1;
+                eprint!("✗ {}", e.render());
+            }
+        }
+    }
+    if dump_ir {
+        // One flow file argument keeps the original `{path, commands}` object;
+        // a directory or several paths give an array of those objects, so the
+        // shape follows from the command line, not from what a folder holds.
+        let single_file = matches!(paths, [only] if !only.is_dir());
+        match ir.as_slice() {
+            _ if !single_file => println!("{}", serde_json::to_string_pretty(&ir)?),
+            [flow] => println!("{}", serde_json::to_string_pretty(flow)?),
+            _ => {}
+        }
+    }
+    eprintln!("{ok} valid, {failed} invalid ({} files in {:.1} ms)", files.len(), t0.elapsed().as_secs_f64() * 1000.0);
+    Ok(failed == 0 && path_errors == 0)
+}
+
 /// Files `tapwing check` validates: explicit paths as given; inside
 /// directories every flow file, including sub-flows in sub-folders, but not
 /// workspace configs or other non-flow YAML (`workspace::is_flow_file`).
-fn collect_yaml(p: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+///
+/// `visited` holds the canonical path of every directory walked so far: a
+/// symlink that leads back into the tree is entered once instead of forever.
+fn collect_yaml(p: &Path, out: &mut Vec<PathBuf>, visited: &mut HashSet<PathBuf>) -> Result<()> {
     if p.is_dir() {
-        let mut entries: Vec<PathBuf> = std::fs::read_dir(p)?.flatten().map(|e| e.path()).collect();
+        let canonical = p.canonicalize().with_context(|| format!("resolving {}", p.display()))?;
+        if !visited.insert(canonical) {
+            return Ok(());
+        }
+        let listing = std::fs::read_dir(p).with_context(|| format!("reading {}", p.display()))?;
+        let mut entries: Vec<PathBuf> = listing.flatten().map(|e| e.path()).collect();
         entries.sort();
         for e in entries {
             if e.is_dir() {
-                collect_yaml(&e, out)?;
+                collect_yaml(&e, out, visited)?;
             } else if workspace::is_flow_file(&e, None) {
                 out.push(e);
             }
