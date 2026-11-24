@@ -1,4 +1,9 @@
-<h1 align="center">Tapwing</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/tapwing-logo-white.svg">
+    <img alt="Tapwing" src="docs/brand/tapwing-logo-black.svg" height="56">
+  </picture>
+</h1>
 
 <p align="center">
   <b>Fast, black-box end-to-end testing for Flutter apps.</b><br>
