@@ -40,10 +40,15 @@ bool isDriverEnabled({
 class TapwingServer {
   /// Creates a server dialing a fixed [port] (or, when `null`, the port
   /// resolved by [resolvePort] before every dial) and serving commands via
-  /// [context].
-  TapwingServer({int? port, DriverContext? context})
-    : _fixedPort = port,
-      _session = RpcSession(CommandDispatcher(context ?? DriverContext()));
+  /// [context]. Tests pass [transportFactory] to observe what is written to
+  /// each connection.
+  TapwingServer({
+    int? port,
+    DriverContext? context,
+    @visibleForTesting RpcTransport Function(Socket socket)? transportFactory,
+  }) : _fixedPort = port,
+       _transportFactory = transportFactory ?? SocketRpcTransport.new,
+       _session = RpcSession(CommandDispatcher(context ?? DriverContext()));
 
   /// Name of the port handoff file the host CLI writes into the app's
   /// temporary directory (`<simulator data container>/tmp/tapwing_port`).
@@ -104,6 +109,7 @@ class TapwingServer {
       withoutHost < _fastRetryWindow ? _reconnectDelay : _idleReconnectDelay;
 
   final int? _fixedPort;
+  final RpcTransport Function(Socket socket) _transportFactory;
 
   /// Loopback port dialed next to reach the host CLI.
   int get port => _fixedPort ?? resolvePort();
@@ -148,7 +154,7 @@ class TapwingServer {
         _activeSocket = socket;
         try {
           socket.setOption(SocketOption.tcpNoDelay, true);
-          await _session.serve(SocketRpcTransport(socket));
+          await _session.serve(_transportFactory(socket));
         } finally {
           if (identical(_activeSocket, socket)) {
             _activeSocket = null;
