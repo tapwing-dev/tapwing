@@ -69,6 +69,11 @@ pub enum FlowStatus {
     Success,
     Error,
     Warning,
+    /// The flow was running when `SIGINT`/`SIGTERM` arrived (Maestro's `STOPPED`).
+    Interrupted,
+    /// The flow never started because the run was interrupted first
+    /// (Maestro's `CANCELED`). Neither passed nor failed.
+    NotRun,
 }
 
 impl FlowStatus {
@@ -77,6 +82,8 @@ impl FlowStatus {
             Self::Success => "SUCCESS",
             Self::Error => "ERROR",
             Self::Warning => "WARNING",
+            Self::Interrupted => "STOPPED",
+            Self::NotRun => "CANCELED",
         }
     }
 }
@@ -122,7 +129,17 @@ pub struct FlowRunRecord {
 
 impl FlowRunRecord {
     pub fn passed(&self) -> bool {
-        self.status != FlowStatus::Error
+        matches!(self.status, FlowStatus::Success | FlowStatus::Warning)
+    }
+
+    /// Failed, errored with its shard, or interrupted while running.
+    pub fn failed(&self) -> bool {
+        matches!(self.status, FlowStatus::Error | FlowStatus::Interrupted)
+    }
+
+    /// Never started because the run was interrupted first.
+    pub fn not_run(&self) -> bool {
+        self.status == FlowStatus::NotRun
     }
 }
 
@@ -139,6 +156,10 @@ pub struct SuiteResult {
     pub start_epoch_ms: u64,
     /// Number of sequential flows skipped after a failure with `continueOnFailure: false`.
     pub skipped_count: usize,
+    /// Why the shard could not run all of its flows (device or driver setup
+    /// error, or a panic). The flows it did not finish are recorded in `flows`
+    /// as errored with this message.
+    pub error: Option<String>,
     pub flows: Vec<FlowRunRecord>,
 }
 
@@ -148,11 +169,16 @@ impl SuiteResult {
     }
 
     pub fn failed_count(&self) -> usize {
-        self.flows.iter().filter(|f| !f.passed()).count()
+        self.flows.iter().filter(|f| f.failed()).count()
+    }
+
+    /// Flows recorded but never started because the run was interrupted.
+    pub fn not_run_count(&self) -> usize {
+        self.flows.iter().filter(|f| f.not_run()).count()
     }
 
     pub fn total_executed(&self) -> usize {
-        self.flows.len()
+        self.flows.len() - self.not_run_count()
     }
 }
 
@@ -164,6 +190,10 @@ pub struct TestExecutionSummary {
     pub input_mode: String,
     pub total_ms: f64,
     pub utc_offset_secs: i32,
+    /// The signal (`SIGINT` = 2, `SIGTERM` = 15) that interrupted the run, if
+    /// any. The report is then partial: see [`FlowStatus::Interrupted`] and
+    /// [`FlowStatus::NotRun`].
+    pub interrupted: Option<i32>,
     pub suites: Vec<SuiteResult>,
 }
 
@@ -180,8 +210,28 @@ impl TestExecutionSummary {
         self.suites.iter().map(|s| s.skipped_count).sum()
     }
 
+    pub fn not_run_count(&self) -> usize {
+        self.suites.iter().map(SuiteResult::not_run_count).sum()
+    }
+
     pub fn total_executed(&self) -> usize {
         self.suites.iter().map(SuiteResult::total_executed).sum()
+    }
+
+    /// One message per shard that errored, prefixed with `[shard N] ` on sharded runs.
+    pub fn shard_errors(&self) -> Vec<String> {
+        self.suites
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, suite)| {
+                let error = suite.error.as_deref()?;
+                Some(match suite.shard_index {
+                    Some(shard) => format!("[shard {}] {error}", shard + 1),
+                    None if self.suites.len() > 1 => format!("[shard {}] {error}", idx + 1),
+                    None => error.to_string(),
+                })
+            })
+            .collect()
     }
 }
 
@@ -302,15 +352,22 @@ pub fn cwd_relative_path(path: &Path) -> Option<String> {
 ///   or `"mixed"`), `inputMode`, `setupMs` (max), flattened `flows` (enriched
 ///   with `shardIndex`, `shardId`, `device`, `platform`), plus `"shards"` and
 ///   `"summary"`.
+///
+/// Abnormal runs add fields and never change the ones above: `interrupted` +
+/// `interruptSignal` (partial report after `SIGINT`/`SIGTERM`), `shardErrors`
+/// and per-shard `error` (a shard that could not run its flows), and
+/// `notRunCount` (flows not started before an interrupt).
 pub fn render_json_report(summary: &TestExecutionSummary) -> Result<String> {
     if let [single] = summary.suites.as_slice() {
         let flows: Vec<&Value> = single.flows.iter().map(|f| &f.raw_json).collect();
-        return Ok(serde_json::to_string_pretty(&json!({
+        let mut doc = json!({
             "platform": single.platform,
             "inputMode": summary.input_mode,
             "setupMs": single.setup_ms,
             "flows": flows,
-        }))?);
+        });
+        add_abnormal_run_fields(&mut doc, summary);
+        return Ok(serde_json::to_string_pretty(&doc)?);
     }
 
     let first_platform = summary.suites.first().map(|s| s.platform.as_str()).unwrap_or("android");
@@ -335,7 +392,7 @@ pub fn render_json_report(summary: &TestExecutionSummary) -> Result<String> {
             flat_flows.push(obj.clone());
             shard_flows.push(obj);
         }
-        shards_json.push(json!({
+        let mut shard_json = json!({
             "shardIndex": shard_idx,
             "shardId": shard_id,
             "device": suite.device_id,
@@ -347,10 +404,17 @@ pub fn render_json_report(summary: &TestExecutionSummary) -> Result<String> {
             "failedCount": suite.failed_count(),
             "skippedCount": suite.skipped_count,
             "flows": shard_flows,
-        }));
+        });
+        if let Some(error) = &suite.error {
+            shard_json["error"] = json!(error);
+        }
+        if suite.not_run_count() > 0 {
+            shard_json["notRunCount"] = json!(suite.not_run_count());
+        }
+        shards_json.push(shard_json);
     }
 
-    Ok(serde_json::to_string_pretty(&json!({
+    let mut doc = json!({
         "platform": platform,
         "inputMode": summary.input_mode,
         "setupMs": max_setup_ms,
@@ -365,7 +429,39 @@ pub fn render_json_report(summary: &TestExecutionSummary) -> Result<String> {
             "totalCount": summary.total_executed(),
             "totalMs": summary.total_ms,
         }
-    }))?)
+    });
+    if summary.not_run_count() > 0 {
+        doc["summary"]["notRunCount"] = json!(summary.not_run_count());
+    }
+    add_abnormal_run_fields(&mut doc, summary);
+    Ok(serde_json::to_string_pretty(&doc)?)
+}
+
+/// Top-level markers of a run that did not finish normally. Absent on a
+/// normal run, so its JSON is unchanged.
+fn add_abnormal_run_fields(doc: &mut Value, summary: &TestExecutionSummary) {
+    if let Some(signal) = summary.interrupted {
+        doc["interrupted"] = json!(true);
+        doc["interruptSignal"] = json!(crate::interrupt::signal_name(signal));
+    }
+    let shard_errors: Vec<Value> = summary
+        .suites
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, suite)| {
+            let error = suite.error.as_deref()?;
+            let shard_idx = suite.shard_index.unwrap_or(idx);
+            Some(json!({
+                "shardIndex": shard_idx,
+                "shardId": shard_idx + 1,
+                "device": suite.device_id,
+                "error": error,
+            }))
+        })
+        .collect();
+    if !shard_errors.is_empty() {
+        doc["shardErrors"] = Value::Array(shard_errors);
+    }
 }
 
 /// Writes `contents` to `path` atomically (see [`crate::atomic_write`]),

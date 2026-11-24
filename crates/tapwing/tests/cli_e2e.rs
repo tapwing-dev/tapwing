@@ -550,6 +550,7 @@ mod signal_cleanup {
         tmp.write("config.yaml", "flows:\n  - '*'\nplatform:\n  android:\n    disableAnimations: true\n");
         tmp.write("flow.yaml", VALID_FLOW);
         let report_path = tmp.path().join("report.json");
+        let junit_path = tmp.path().join("report.xml");
 
         let child = Command::new(env!("CARGO_BIN_EXE_tapwing"))
             .args([
@@ -563,6 +564,10 @@ mod signal_cleanup {
                 "flutter",
                 "--report",
                 report_path.to_str().unwrap(),
+                "--format",
+                "junit",
+                "--output",
+                junit_path.to_str().unwrap(),
             ])
             .env("ANDROID_ADB_SERVER_PORT", adb_port.to_string())
             .env("NO_COLOR", "1")
@@ -591,7 +596,25 @@ mod signal_cleanup {
             "missing cleanup notice on stderr:\n{}",
             stderr(&out)
         );
-        assert!(!report_path.exists(), "interrupted run must not write a partial JSON report");
+
+        // The interrupted run still writes its reports, marked as partial.
+        let signal_name = if expected_code == 130 { "SIGINT" } else { "SIGTERM" };
+        let report: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&report_path).expect("partial JSON report"))
+                .expect("valid JSON");
+        assert_eq!(report["interrupted"], true, "{report}");
+        assert_eq!(report["interruptSignal"], signal_name, "{report}");
+        assert_eq!(report["flows"][0]["status"], "interrupted", "{report}");
+        let junit = std::fs::read_to_string(&junit_path).expect("partial JUnit report");
+        assert!(junit.contains("tests=\"1\" failures=\"1\"") && junit.contains("status=\"STOPPED\""), "{junit}");
+        assert!(junit.trim_end().ends_with("</testsuites>"), "{junit}");
+        let leftovers: Vec<_> = std::fs::read_dir(tmp.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "atomic report writes left temp files: {leftovers:?}");
 
         let cmds = seen.lock().unwrap().join("\n");
         assert!(cmds.contains("reverse:killforward:tcp:7781"), "adb reverse was not removed:\n{cmds}");

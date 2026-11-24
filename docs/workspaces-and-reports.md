@@ -64,10 +64,37 @@ JUnit reports follow Maestro's XML structure (one `<testsuite>` per shard, custo
 
 Every report (`--report`, `--format`, `--trace`) is written to a temporary file next to its target and then renamed over it, so a crash or kill during the write leaves the previous report or the complete new one, never a truncated file.
 
+## Shard errors and interrupted runs
+
+A run that does not end normally still writes every requested report (`--report`, `--format`, `--trace`). The fields below are only added in these cases; a normal run's reports are unchanged.
+
+**A shard errors** (its device or driver setup fails, or its worker panics). The other shards keep their results. The flows the failed shard did not finish are recorded as errored with the shard's error message, and the run exits with code `2` after the reports are written.
+
+| Report | Addition |
+|---|---|
+| JSON, per flow | `"status": "errored"`, `"error": "<shard error>"`, `"totalMs": 0`, `"steps": []` |
+| JSON, top level | `"shardErrors": [{ "shardIndex", "shardId", "device", "error" }]` |
+| JSON, `shards[]` (sharded runs) | `"error": "<shard error>"`; the flows count in `failedCount` |
+| JUnit | `<testcase status="ERROR">` with `<failure>[shard N] <shard error></failure>`, counted in `failures` |
+| HTML | The flows are listed as failed with the shard error |
+| Trace | `shard.error`, and the flows have `"status": "failed"` |
+
+**The run is interrupted** by `SIGINT` (Ctrl-C) or `SIGTERM`. Tapwing first restores the device, then writes a partial report and exits with `128 + signal` (`130` / `143`). Finished flows keep their results. A second signal exits immediately, without a report.
+
+| Report | Addition |
+|---|---|
+| JSON, top level | `"interrupted": true`, `"interruptSignal": "SIGINT"` or `"SIGTERM"` |
+| JSON, per flow | `"status": "interrupted"` for the flow that was running, `"status": "notRun"` (with `"steps": []`) for flows that never started |
+| JSON, `summary` and `shards[]` (sharded runs) | `"notRunCount"` when above zero. Flows that were not run are excluded from `passedCount`, `failedCount` and `totalCount` |
+| JUnit | Running flow: `<testcase status="STOPPED">` with a `<failure>`, counted in `failures`. Not started: `<testcase status="CANCELED">` with `<skipped message="not run: ..."/>`, counted in a `skipped` attribute on `<testsuite>` |
+| HTML | An "interrupted by SIGTERM, partial results" note in the header; flows not started are shown as skipped and counted as "not run" |
+| Trace | Top-level `"interrupted": true`; flows not started have `"status": "skipped"` |
+
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
 | `0` | All flows passed |
 | `1` | One or more flows failed |
-| `2` | Invalid CLI flags, broken flow/config, device error, or report write error |
+| `2` | Invalid CLI flags, broken flow/config, device error (including a shard that errored), or report write error |
+| `130` / `143` | Interrupted by `SIGINT` / `SIGTERM` (a partial report is written) |

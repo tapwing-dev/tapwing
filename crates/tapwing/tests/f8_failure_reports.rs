@@ -188,6 +188,7 @@ appId: dev.tapwing.sample_app
         input_mode: "auto".into(),
         total_ms: 50.0,
         utc_offset_secs: 0,
+        interrupted: None,
         suites: vec![suite],
     };
 

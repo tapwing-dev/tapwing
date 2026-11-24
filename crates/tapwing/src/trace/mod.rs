@@ -16,7 +16,7 @@ use anyhow::Result;
 use clap::ValueEnum;
 use serde_json::{Value, json};
 
-use crate::report::{FlowRunRecord, SuiteResult};
+use crate::report::{FlowRunRecord, FlowStatus, SuiteResult};
 
 pub use html::render_trace_html;
 
@@ -332,7 +332,13 @@ fn flow_trace(record: &FlowRunRecord) -> Value {
     let mut flow = json!({
         "name": record.name,
         "path": record.path,
-        "status": if record.passed() { "passed" } else { "failed" },
+        "status": if record.passed() {
+            "passed"
+        } else if record.not_run() {
+            "skipped"
+        } else {
+            "failed"
+        },
         "startEpochMs": record.start_epoch_ms,
         "totalMs": record.duration_ms,
         "lane": record.lane,
@@ -357,7 +363,7 @@ fn flow_trace(record: &FlowRunRecord) -> Value {
 
 /// Builds the `tapwing.trace/1` document for one shard.
 pub fn build_shard_trace(suite: &SuiteResult, opts: &TraceOpts) -> Value {
-    json!({
+    let mut trace = json!({
         "schema": SCHEMA,
         "tapwingVersion": env!("CARGO_PKG_VERSION"),
         "createdEpochMs": now_epoch_ms(),
@@ -368,7 +374,15 @@ pub fn build_shard_trace(suite: &SuiteResult, opts: &TraceOpts) -> Value {
         },
         "options": { "screenshots": opts.screenshots.as_str() },
         "flows": suite.flows.iter().map(flow_trace).collect::<Vec<_>>(),
-    })
+    });
+    // Only on abnormal runs, so a normal trace is unchanged.
+    if let Some(error) = &suite.error {
+        trace["shard"]["error"] = Value::from(error.as_str());
+    }
+    if suite.flows.iter().any(|f| matches!(f.status, FlowStatus::Interrupted | FlowStatus::NotRun)) {
+        trace["interrupted"] = Value::Bool(true);
+    }
+    trace
 }
 
 /// Paths written by [`write_shard_trace`].

@@ -1,7 +1,12 @@
 //! Single-shard and multi-shard suite execution, thread-safe progress logging,
 //! generic [`FlowDriver`] test seam, and report output wiring.
+//!
+//! A shard that errors, panics or is interrupted still yields a
+//! [`SuiteResult`] (see [`super::shard_outcome`]), so the other shards' results
+//! and every requested report survive.
 
 use std::collections::HashMap;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -18,6 +23,7 @@ use crate::js::default_http_agent;
 use crate::native_lane::{InputMode, NativeLaneHandle};
 use crate::orchestra::{Orchestra, OrchestraOpts, print_prefixed};
 use crate::report::{self, FlowRunRecord, FlowStatus, ReportFormat, StepRecord, SuiteResult, TestExecutionSummary};
+use crate::run::shard_outcome::{self, ReportSinks, ShardMeta, UnrunFlow, panic_message, unrun_flow_record};
 use crate::run::{DeviceFlutterBackend, IosNativeSlot, LaneStats, Opts, Session, flows_need_ios_native};
 use crate::shard::{self, ShardPlan};
 use crate::workspace::{self, ExecutionPlan};
@@ -60,6 +66,11 @@ fn now_epoch_ms() -> u64 {
 
 /// Executes a [`ShardPlan`] over any [`FlowDriver`] implementation (real device
 /// backend or in-memory [`FakeDriver`]).
+///
+/// Always returns a [`SuiteResult`] covering every flow that started. After
+/// `SIGINT`/`SIGTERM` the flows that never started are appended as
+/// [`FlowStatus::NotRun`]; after a panic in `run_one` they are appended as
+/// errored and [`SuiteResult::error`] is set.
 pub fn execute_shard_with_driver<D, F>(
     shard_plan: &ShardPlan,
     base_opts: &OrchestraOpts,
@@ -67,34 +78,78 @@ pub fn execute_shard_with_driver<D, F>(
     device_description: Option<&str>,
     platform_name: &str,
     setup_ms: f64,
-    mut run_one: F,
+    run_one: F,
 ) -> SuiteResult
 where
     D: FlowDriver,
     F: FnMut(&ParsedFlow, OrchestraOpts) -> (crate::orchestra::FlowResult, LaneStats, bool),
 {
+    let target = ShardTarget { device_id, device_description, platform_name, setup_ms };
+    execute_shard(shard_plan, base_opts, &target, run_one, crate::interrupt::is_interrupted)
+}
+
+/// Device a shard runs on, as reported in its [`SuiteResult`].
+pub(crate) struct ShardTarget<'a> {
+    pub device_id: Option<&'a str>,
+    pub device_description: Option<&'a str>,
+    pub platform_name: &'a str,
+    pub setup_ms: f64,
+}
+
+/// [`execute_shard_with_driver`] with the interrupt check injected, so tests
+/// can interrupt a shard without touching the process-wide signal state.
+pub(crate) fn execute_shard<F, I>(
+    shard_plan: &ShardPlan,
+    base_opts: &OrchestraOpts,
+    target: &ShardTarget<'_>,
+    mut run_one: F,
+    is_interrupted: I,
+) -> SuiteResult
+where
+    F: FnMut(&ParsedFlow, OrchestraOpts) -> (crate::orchestra::FlowResult, LaneStats, bool),
+    I: Fn() -> bool,
+{
     let suite_start_epoch_ms = now_epoch_ms();
     let t0 = Instant::now();
     let prefix = shard_plan.log_prefix();
+    let device_id = target.device_id;
     let mut records = Vec::new();
     let mut all_ok = true;
     let mut skipped_count = 0usize;
+    let mut error = None;
 
-    for (idx, flow) in shard_plan.sequence.iter().enumerate() {
-        if crate::interrupt::is_interrupted() {
-            all_ok = false;
-            skipped_count = shard_plan.sequence.len().saturating_sub(idx);
+    // Sequential flows first, then the rest; `next` is the first flow not started yet.
+    let sequence_len = shard_plan.sequence.len();
+    let planned: Vec<&ParsedFlow> = shard_plan.sequence.iter().chain(&shard_plan.flows).collect();
+    let mut next = 0usize;
+    let mut stopped = false;
+    while let Some(flow) = planned.get(next).copied() {
+        if is_interrupted() {
+            stopped = true;
             break;
         }
-        let rec = execute_single_flow(flow, base_opts, shard_plan.shard_index, &prefix, device_id, &mut run_one);
+        let in_sequence = next < sequence_len;
+        next += 1;
+        let rec = match execute_single_flow(flow, base_opts, shard_plan.shard_index, &prefix, device_id, &mut run_one) {
+            Ok(rec) => rec,
+            // The driver session is in an unknown state after a panic: record
+            // the flow as errored and stop the shard instead of the process.
+            Err(panic) => {
+                let message = format!("panicked while running flow {}: {panic}", workspace::flow_name(flow));
+                records.push(unrun_flow_record(flow, UnrunFlow::Errored(&message)));
+                error = Some(message);
+                stopped = true;
+                break;
+            }
+        };
         let ok = rec.passed();
         all_ok &= ok;
         records.push(rec);
-        if crate::interrupt::is_interrupted() {
-            skipped_count = shard_plan.sequence.len().saturating_sub(idx + 1);
+        if is_interrupted() {
+            stopped = true;
             break;
         }
-        if !ok && !shard_plan.continue_on_failure {
+        if in_sequence && !ok && !shard_plan.continue_on_failure {
             if base_opts.print_progress {
                 print_prefixed(
                     &prefix,
@@ -104,34 +159,31 @@ where
                     ),
                 );
             }
-            skipped_count = shard_plan.sequence.len().saturating_sub(idx + 1);
-            break;
+            skipped_count = sequence_len.saturating_sub(next);
+            next = sequence_len;
         }
     }
 
-    for flow in &shard_plan.flows {
-        if crate::interrupt::is_interrupted() {
-            all_ok = false;
-            break;
-        }
-        let rec = execute_single_flow(flow, base_opts, shard_plan.shard_index, &prefix, device_id, &mut run_one);
-        all_ok &= rec.passed();
-        records.push(rec);
-        if crate::interrupt::is_interrupted() {
-            break;
-        }
+    if stopped {
+        all_ok = false;
+        let unrun = match &error {
+            Some(message) => UnrunFlow::Errored(message),
+            None => UnrunFlow::NotRun,
+        };
+        records.extend(planned.iter().skip(next).map(|flow| unrun_flow_record(flow, unrun)));
     }
 
     SuiteResult {
         shard_index: shard_plan.shard_index,
         device_id: device_id.map(str::to_string),
-        device_description: device_description.or(device_id).map(str::to_string),
-        platform: platform_name.to_string(),
+        device_description: target.device_description.or(device_id).map(str::to_string),
+        platform: target.platform_name.to_string(),
         passed: all_ok,
-        setup_ms,
+        setup_ms: target.setup_ms,
         duration_ms: t0.elapsed().as_secs_f64() * 1000.0,
         start_epoch_ms: suite_start_epoch_ms,
         skipped_count,
+        error,
         flows: records,
     }
 }
@@ -171,7 +223,7 @@ fn execute_single_flow<F>(
     prefix: &str,
     device_id: Option<&str>,
     run_one: &mut F,
-) -> FlowRunRecord
+) -> Result<FlowRunRecord, String>
 where
     F: FnMut(&ParsedFlow, OrchestraOpts) -> (crate::orchestra::FlowResult, LaneStats, bool),
 {
@@ -193,7 +245,16 @@ where
         opts.device_id = Some(id.to_string());
     }
 
-    let (result, lanes, blackbox) = run_one(flow, opts);
+    let (result, lanes, blackbox) = match catch_unwind(AssertUnwindSafe(|| run_one(flow, opts))) {
+        Ok(outcome) => outcome,
+        Err(payload) => {
+            let message = panic_message(payload.as_ref());
+            if base_opts.print_progress {
+                print_prefixed(prefix, &format!("ERROR {name}: panicked: {message}"));
+            }
+            return Err(message);
+        }
+    };
 
     if base_opts.print_progress {
         print_prefixed(
@@ -208,7 +269,18 @@ where
         }
     }
 
-    build_flow_record(flow, &name, result, flow_start_epoch_ms, &base_opts.settle_policy, lanes, blackbox)
+    Ok(build_flow_record(flow, &name, result, flow_start_epoch_ms, &base_opts.settle_policy, lanes, blackbox))
+}
+
+/// Report `properties` and `tags` declared in the flow's config section.
+pub(crate) fn flow_metadata(flow: &ParsedFlow) -> (Vec<(String, String)>, Vec<String>) {
+    let properties = flow
+        .config
+        .properties
+        .iter()
+        .map(|(k, v)| (k.clone(), v.as_str().map(str::to_string).unwrap_or_else(|| v.to_string())))
+        .collect();
+    (properties, flow.config.tags.clone().unwrap_or_default())
 }
 
 pub(crate) fn build_flow_record(
@@ -220,7 +292,12 @@ pub(crate) fn build_flow_record(
     lanes: LaneStats,
     blackbox: bool,
 ) -> FlowRunRecord {
+    // A flow cut short by SIGINT/SIGTERM is not a test failure: it gets its own status.
+    let interrupted = result.error.as_ref().is_some_and(crate::interrupt::is_interrupted_error);
     let mut raw_json = result.to_report_json(name, &flow.path, settle_policy);
+    if interrupted {
+        raw_json["status"] = json!("interrupted");
+    }
     raw_json["lane"] = json!(lanes.lane_name());
     raw_json["laneStats"] = json!({ "flutter": lanes.flutter, "native": lanes.native });
     if lanes.cold_start_retries > 0 {
@@ -266,13 +343,7 @@ pub(crate) fn build_flow_record(
         steps.iter().rev().find_map(|s| s.error.clone()).or_else(|| Some("Flow failed".to_string()))
     };
 
-    let properties: Vec<(String, String)> = flow
-        .config
-        .properties
-        .iter()
-        .map(|(k, v)| (k.clone(), v.as_str().map(str::to_string).unwrap_or_else(|| v.to_string())))
-        .collect();
-    let tags = flow.config.tags.clone().unwrap_or_default();
+    let (properties, tags) = flow_metadata(flow);
 
     let trace = result.trace.clone();
     let failure_diagnostics = if result.success {
@@ -285,7 +356,13 @@ pub(crate) fn build_flow_record(
         name: name.to_string(),
         path: flow.path.clone(),
         file: report::cwd_relative_path(&flow.path),
-        status: if result.success { FlowStatus::Success } else { FlowStatus::Error },
+        status: if result.success {
+            FlowStatus::Success
+        } else if interrupted {
+            FlowStatus::Interrupted
+        } else {
+            FlowStatus::Error
+        },
         duration_ms: result.total_ms,
         start_epoch_ms,
         failure_message,
@@ -306,6 +383,9 @@ pub(crate) fn build_flow_record(
 /// when 1 shard, or in parallel via `std::thread::scope` when `> 1`), prints
 /// the console summary, and writes all requested reports (`--format` and
 /// `--report`).
+///
+/// A shard that errors or panics, and an interrupt, still produce the reports:
+/// see [`shard_outcome::conclude_run`] for how the run then ends.
 pub fn run_test_suite(cfg: SuiteRunConfig) -> Result<bool> {
     let total_flows = cfg.plan.sequence.len() + cfg.plan.flows.len();
     let shard_req = shard::resolve_shard_request(
@@ -361,26 +441,40 @@ pub fn run_test_suite(cfg: SuiteRunConfig) -> Result<bool> {
         trace: cfg.trace,
     };
 
-    let suites: Vec<SuiteResult> = if shard_req.effective_shards <= 1 {
-        let mut iter_devs = devices.into_iter();
-        let mut iter_plans = shard_plans.into_iter();
-        let mut iter_dirs = shard_out_dirs.into_iter();
-        let dev = iter_devs.next().ok_or_else(|| anyhow!("no target device resolved"))?;
-        let sp = iter_plans.next().ok_or_else(|| anyhow!("no shard plan resolved"))?;
-        let out_dir = iter_dirs.next().unwrap_or_else(|| PathBuf::from(".tapwing"));
-        vec![run_device_shard(dev, &sp, out_dir, &shared, Arc::clone(&http_agent))?]
+    // Captured before the devices move into their shards, so a shard that
+    // never returns a result can still be reported.
+    let metas: Vec<ShardMeta> = devices
+        .iter()
+        .map(|dev| ShardMeta {
+            device_id: dev.id().to_string(),
+            device_description: dev.describe(),
+            platform: dev.platform().wire_name().to_string(),
+        })
+        .collect();
+
+    let results: Vec<Result<SuiteResult>> = if shard_req.effective_shards <= 1 {
+        let dev = devices.into_iter().next().ok_or_else(|| anyhow!("no target device resolved"))?;
+        let sp = shard_plans.first().ok_or_else(|| anyhow!("no shard plan resolved"))?;
+        let out_dir = shard_out_dirs.into_iter().next().unwrap_or_else(|| PathBuf::from(".tapwing"));
+        vec![shard_outcome::catch_shard_panic(|| run_device_shard(dev, sp, out_dir, &shared, Arc::clone(&http_agent)))]
     } else {
         run_shards_in_parallel(devices.into_iter().zip(&shard_plans).zip(shard_out_dirs), |((dev, sp), out_dir)| {
             run_device_shard(dev, sp, out_dir, &shared, Arc::clone(&http_agent))
-        })?
+        })
     };
 
-    // If interrupted by SIGINT/SIGTERM, all shard RAII guards have now dropped;
-    // abort before printing an end-of-run summary or writing partial reports.
-    crate::interrupt::check()?;
+    // Every shard has returned, so all device RAII guards have dropped: the
+    // device is clean before any report is rendered, interrupted or not.
+    let suites: Vec<SuiteResult> = shard_plans
+        .iter()
+        .zip(&metas)
+        .zip(results)
+        .map(|((plan, meta), result)| shard_outcome::suite_from_shard_result(plan, meta, result))
+        .collect();
+    let interrupted = crate::interrupt::signal();
 
     let elapsed = t0.elapsed();
-    let passed = suites.iter().all(|s| s.passed);
+    let passed = interrupted.is_none() && suites.iter().all(|s| s.passed);
     let utc_offset_secs = if cfg.report_format == ReportFormat::Noop { 0 } else { report::local_utc_offset_secs() };
     let summary = TestExecutionSummary {
         passed,
@@ -388,24 +482,18 @@ pub fn run_test_suite(cfg: SuiteRunConfig) -> Result<bool> {
         input_mode: format!("{:?}", cfg.input_mode).to_lowercase(),
         total_ms: elapsed.as_secs_f64() * 1000.0,
         utc_offset_secs,
+        interrupted,
         suites,
     };
 
-    if summary.suites.len() > 1 || summary.total_executed() + summary.skipped_count() > 1 {
-        print_execution_summary(&summary, elapsed);
-    }
-
-    if let Some(trace_opts) = &cfg.trace {
-        write_traces(&summary.suites, &trace_dirs, trace_opts);
-    }
-
-    report::write_formatted_report(cfg.report_format, cfg.report_output.as_deref(), &summary)?;
-    if let Some(json_path) = &cfg.report_json {
-        let json_str = report::render_json_report(&summary)?;
-        report::write_file_creating_parents(json_path, &json_str)?;
-    }
-
-    Ok(summary.passed)
+    let sinks = ReportSinks {
+        format: cfg.report_format,
+        output: cfg.report_output.as_deref(),
+        json: cfg.report_json.as_deref(),
+        trace: cfg.trace.as_ref(),
+        trace_dirs: &trace_dirs,
+    };
+    shard_outcome::conclude_run(&summary, &sinks, elapsed)
 }
 
 /// F8b: writes one trace per shard into its output dir and prints the paths.
@@ -421,9 +509,10 @@ pub fn write_traces(suites: &[SuiteResult], dirs: &[PathBuf], opts: &crate::trac
 }
 
 /// Runs `work` for each item concurrently via `std::thread::scope`, joining
-/// **every** worker before returning so all RAII guards drop cleanly and
-/// multi-shard setup failures or panics are reported with `[shard N]` context.
-fn run_shards_in_parallel<T, R, F>(items: impl IntoIterator<Item = T>, work: F) -> Result<Vec<R>>
+/// **every** worker before returning so all RAII guards drop cleanly. Returns
+/// one result per item, in order; a panicking worker becomes an `Err`, so one
+/// shard's failure never discards the others' results.
+pub(crate) fn run_shards_in_parallel<T, R, F>(items: impl IntoIterator<Item = T>, work: F) -> Vec<Result<R>>
 where
     T: Send,
     R: Send,
@@ -435,20 +524,13 @@ where
             let f = &work;
             handles.push(scope.spawn(move || f(item)));
         }
-        let mut results = Vec::with_capacity(handles.len());
-        let mut errors = Vec::new();
-        for (idx, h) in handles.into_iter().enumerate() {
-            let shard_num = idx + 1;
-            match h.join() {
-                Ok(Ok(val)) => results.push(val),
-                Ok(Err(e)) => errors.push(format!("[shard {shard_num}] {e:#}")),
-                Err(_) => errors.push(format!("[shard {shard_num}] shard worker thread panicked")),
-            }
-        }
-        if !errors.is_empty() {
-            anyhow::bail!("{}", errors.join("; "));
-        }
-        Ok(results)
+        handles
+            .into_iter()
+            .map(|h| match h.join() {
+                Ok(result) => result,
+                Err(payload) => Err(shard_outcome::shard_panic_error(payload.as_ref())),
+            })
+            .collect()
     })
 }
 
@@ -600,7 +682,7 @@ pub fn print_execution_summary(summary: &TestExecutionSummary, elapsed: std::tim
     if summary.suites.len() <= 1 {
         print_prefixed("", &format!("\n{passed}/{total} flows passed{skipped_part} in {:.1} s", elapsed.as_secs_f64()));
         for suite in &summary.suites {
-            for flow in suite.flows.iter().filter(|f| !f.passed()) {
+            for flow in suite.flows.iter().filter(|f| f.failed()) {
                 print_prefixed("", &format!("  FAILED {}", flow.name));
             }
         }
@@ -630,7 +712,7 @@ pub fn print_execution_summary(summary: &TestExecutionSummary, elapsed: std::tim
     }
     for (idx, suite) in summary.suites.iter().enumerate() {
         let shard_num = suite.shard_index.unwrap_or(idx) + 1;
-        for flow in suite.flows.iter().filter(|f| !f.passed()) {
+        for flow in suite.flows.iter().filter(|f| f.failed()) {
             print_prefixed("", &format!("  FAILED [shard {shard_num}] {}", flow.name));
         }
     }
@@ -650,37 +732,36 @@ mod tests {
     }
 
     #[test]
-    fn run_shards_in_parallel_joins_all_shards_drops_guards_and_reports_shard_errors() {
+    fn run_shards_in_parallel_joins_all_shards_drops_guards_and_keeps_every_result() {
         let drops = AtomicUsize::new(0);
-        let err = run_shards_in_parallel([0usize, 1, 2], |idx| {
+        let results = run_shards_in_parallel([0usize, 1, 2], |idx| {
             let _guard = DropCounter(&drops);
             match idx {
                 0 => Err(anyhow!("device locked")),
-                1 => {
-                    std::thread::sleep(std::time::Duration::from_millis(15));
-                    Ok("ok")
-                }
+                1 => Ok("ok"),
                 _ => Err(anyhow!("adb reverse failed")),
             }
-        })
-        .unwrap_err()
-        .to_string();
+        });
 
         assert_eq!(drops.load(Ordering::SeqCst), 3, "every shard must run to completion and drop its guards");
-        assert!(err.contains("[shard 1] device locked"), "{err}");
-        assert!(err.contains("[shard 3] adb reverse failed"), "{err}");
+        let shown: Vec<String> =
+            results.iter().map(|r| r.as_ref().map_or_else(|e| e.to_string(), |v| v.to_string())).collect();
+        assert_eq!(shown, ["device locked", "ok", "adb reverse failed"], "one result per shard, in shard order");
     }
 
     #[test]
-    fn run_shards_in_parallel_converts_worker_panic_into_error_even_after_earlier_err() {
-        let err = run_shards_in_parallel([0usize, 1], |idx| -> Result<()> {
-            if idx == 0 { Err(anyhow!("setup failed")) } else { panic!("boom") }
-        })
-        .unwrap_err()
-        .to_string();
+    fn run_shards_in_parallel_converts_worker_panic_into_error_and_keeps_other_results() {
+        let results = run_shards_in_parallel([0usize, 1, 2], |idx| -> Result<usize> {
+            match idx {
+                0 => Err(anyhow!("setup failed")),
+                1 => panic!("boom"),
+                _ => Ok(7),
+            }
+        });
 
-        assert!(err.contains("[shard 1] setup failed"), "{err}");
-        assert!(err.contains("[shard 2] shard worker thread panicked"), "{err}");
+        assert_eq!(results[0].as_ref().unwrap_err().to_string(), "setup failed");
+        assert_eq!(results[1].as_ref().unwrap_err().to_string(), "shard worker thread panicked: boom");
+        assert_eq!(*results[2].as_ref().unwrap(), 7);
     }
 
     #[test]
@@ -762,6 +843,7 @@ mod tests {
             duration_ms: 40.0,
             start_epoch_ms: 1_700_000_000_000,
             skipped_count: 0,
+            error: None,
             flows,
         };
 
@@ -773,6 +855,7 @@ mod tests {
             input_mode: "auto".into(),
             total_ms: 40.0,
             utc_offset_secs: 0,
+            interrupted: None,
             suites: vec![single_suite.clone()],
         };
         let single_json: Value = serde_json::from_str(&report::render_json_report(&single_summary).unwrap()).unwrap();
@@ -798,6 +881,7 @@ mod tests {
             input_mode: "auto".into(),
             total_ms: 40.0,
             utc_offset_secs: 0,
+            interrupted: None,
             suites: vec![make_suite(Some(0), vec![clean]), make_suite(Some(1), vec![retried])],
         };
         let multi_json: Value = serde_json::from_str(&report::render_json_report(&multi_summary).unwrap()).unwrap();
