@@ -75,3 +75,8 @@ recovery (a restart of the runner process) to the host.
   (still HTTP 200). If the handler does return, the gate heals by itself.
 - **Dead requests**: a queued request whose client hung up, or whose deadline
   passed while it waited, is never started.
+- **Typing**: `inputText` / `eraseText` type the slow first character, then
+  chunks of 60 characters (`Core/TypingPlan.swift`), and stop between chunks
+  once the request is dead. Text of up to 61 characters is still one event,
+  as in Maestro. The host scales the deadline of these two routes with the
+  text length, so long text is not cut off.

@@ -37,6 +37,11 @@ use ureq::Agent;
 
 /// Per-call deadline. A hierarchy dump of a busy screen can take seconds.
 const CALL_TIMEOUT: Duration = Duration::from_secs(30);
+/// Slowest typing rate the deadline of `inputText` / `eraseText` allows for.
+/// The runner types 30 characters per second; half of that leaves room for a
+/// busy simulator, so long text gets a deadline that grows with its length
+/// instead of running past a fixed one while the runner keeps typing.
+const TYPING_CHARS_PER_SEC: u64 = 15;
 /// Connecting to the loopback runner either works at once or not at all.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 /// Largest accepted response body (a hierarchy / @3x PNG screenshot).
@@ -275,21 +280,29 @@ impl IosNativeClient {
 
     /// One HTTP exchange, body read to the end (a connection with unread bytes
     /// cannot go back to the keep-alive pool). `POST` when `body` is given.
+    /// `timeout` replaces the client's call timeout for this exchange; either
+    /// way the runner is told the budget ([`DEADLINE_HEADER`]).
     fn exchange(&self, path: &str, body: Option<&[u8]>, timeout: Option<Duration>) -> Result<Answer, ureq::Error> {
         let url = self.url(path);
+        let limit = timeout.unwrap_or(self.call_timeout);
+        let budget = limit.as_millis().to_string();
         let resp = match body {
-            None => {
-                let req = self.agent.get(url).header(DEADLINE_HEADER, self.deadline_header());
-                match timeout {
-                    Some(t) => req.config().timeout_global(Some(t)).build().call()?,
-                    None => req.call()?,
-                }
-            }
+            None => self
+                .agent
+                .get(url)
+                .config()
+                .timeout_global(Some(limit))
+                .build()
+                .header(DEADLINE_HEADER, budget)
+                .call()?,
             Some(payload) => self
                 .agent
                 .post(url)
+                .config()
+                .timeout_global(Some(limit))
+                .build()
                 .header("Content-Type", "application/json")
-                .header(DEADLINE_HEADER, self.deadline_header())
+                .header(DEADLINE_HEADER, budget)
                 .send(payload)?,
         };
         let status = resp.status().as_u16();
@@ -297,9 +310,9 @@ impl IosNativeClient {
         Ok(Answer { status, body })
     }
 
-    /// The whole call budget in milliseconds; the runner keeps its own margin below it.
-    fn deadline_header(&self) -> String {
-        self.call_timeout.as_millis().to_string()
+    /// Deadline of a call that types or erases `chars` characters.
+    fn typing_timeout(&self, chars: u64) -> Duration {
+        self.call_timeout + Duration::from_millis(chars.saturating_mul(1000) / TYPING_CHARS_PER_SEC)
     }
 
     /// The runner's own message for an HTTP error status.
@@ -360,8 +373,14 @@ impl IosNativeClient {
 
     /// One attempt of a call. `Err(Ok(failed))` is a failure a restart may
     /// cure; `Err(Err(e))` is final (an ordinary error answer, a bad request).
-    fn attempt(&mut self, what: &str, path: &str, payload: Option<&[u8]>) -> Result<Vec<u8>, Result<Failed>> {
-        let err = match self.exchange(path, payload, None) {
+    fn attempt(
+        &mut self,
+        what: &str,
+        path: &str,
+        payload: Option<&[u8]>,
+        timeout: Option<Duration>,
+    ) -> Result<Vec<u8>, Result<Failed>> {
+        let err = match self.exchange(path, payload, timeout) {
             Ok(answer) => {
                 return match Self::stall_answer(what, &answer) {
                     Some(stalled) => Err(Ok(stalled)),
@@ -392,8 +411,20 @@ impl IosNativeClient {
     /// [`STALLS_BEFORE_RESTART`]-th stall in a row, restarts the runner (when
     /// this client can) and, if `replay` allows, repeats the call once.
     fn call(&mut self, what: &str, replay: Replay, path: &str, body: Option<&Value>) -> Result<Vec<u8>> {
+        self.call_within(what, replay, path, body, None)
+    }
+
+    /// [`Self::call`] with its own deadline (`None`: the client's call timeout).
+    fn call_within(
+        &mut self,
+        what: &str,
+        replay: Replay,
+        path: &str,
+        body: Option<&Value>,
+        timeout: Option<Duration>,
+    ) -> Result<Vec<u8>> {
         let payload = body.map(serde_json::to_vec).transpose().context("encoding the iOS driver request")?;
-        let failed = match self.attempt(what, path, payload.as_deref()) {
+        let failed = match self.attempt(what, path, payload.as_deref(), timeout) {
             Ok(bytes) => return Ok(bytes),
             Err(failed) => failed,
         };
@@ -423,7 +454,7 @@ impl IosNativeClient {
                  repeated because it may already have been applied"
             )));
         }
-        match self.attempt(what, path, payload.as_deref()) {
+        match self.attempt(what, path, payload.as_deref(), timeout) {
             Ok(bytes) => Ok(bytes),
             Err(again) => {
                 let again = match again {
@@ -545,17 +576,19 @@ impl IosNativeClient {
         )
     }
 
+    /// `POST /inputText`. The deadline grows with the length of `text`
+    /// ([`TYPING_CHARS_PER_SEC`]); the runner stops typing once it passes.
     pub fn input_text(&mut self, text: &str, app_ids: &[String]) -> Result<()> {
-        self.post("inputText", Replay::IfNotSent, "inputText", &json!({ "text": text, "appIds": app_ids }))
+        let timeout = self.typing_timeout(u64::try_from(text.chars().count()).unwrap_or(u64::MAX));
+        let body = json!({ "text": text, "appIds": app_ids });
+        self.call_within("inputText", Replay::IfNotSent, "inputText", Some(&body), Some(timeout)).map(drop)
     }
 
+    /// `POST /eraseText`, with a deadline that grows with `chars` like [`Self::input_text`].
     pub fn erase_text(&mut self, chars: u32, app_ids: &[String]) -> Result<()> {
-        self.post(
-            "eraseText",
-            Replay::IfNotSent,
-            "eraseText",
-            &json!({ "charactersToErase": chars, "appIds": app_ids }),
-        )
+        let timeout = self.typing_timeout(u64::from(chars));
+        let body = json!({ "charactersToErase": chars, "appIds": app_ids });
+        self.call_within("eraseText", Replay::IfNotSent, "eraseText", Some(&body), Some(timeout)).map(drop)
     }
 
     /// `POST /pressKey`: keyboard keys (`return`, `delete`).
@@ -1278,6 +1311,46 @@ mod tests {
         assert_eq!(r.calls("deviceInfo")[0].header(DEADLINE_HEADER), Some("30000"));
         assert_eq!(r.calls("touch")[0].header("x-tapwing-deadline-ms"), Some("30000"));
         assert!(CALL_TIMEOUT.as_millis() == 30_000);
+    }
+
+    #[test]
+    fn typing_deadlines_grow_with_the_text_and_reach_the_runner() {
+        let r = runner();
+        let mut c = IosNativeClient::connect(r.port);
+        c.input_text("abc", &apps()).unwrap();
+        // 1500 characters at the 15 characters per second floor: 100 s on top of the 30 s call timeout.
+        c.input_text(&"ž".repeat(1500), &apps()).unwrap();
+        c.erase_text(300, &apps()).unwrap();
+        c.erase_text(0, &apps()).unwrap();
+        let budget = |path: &str, i: usize| r.calls(path)[i].header(DEADLINE_HEADER).unwrap().to_string();
+        assert_eq!(budget("inputText", 0), "30200");
+        assert_eq!(budget("inputText", 1), "130000", "characters, not UTF-8 bytes");
+        assert_eq!(budget("eraseText", 0), "50000");
+        assert_eq!(budget("eraseText", 1), "30000");
+        assert_eq!(c.typing_timeout(u64::MAX), CALL_TIMEOUT + Duration::from_millis(u64::MAX / 15));
+    }
+
+    #[test]
+    fn a_long_text_is_not_cut_off_by_the_plain_call_timeout() {
+        // The runner answers after 3x the client's call timeout; the scaled typing deadline covers it.
+        fn slow_ok(mut s: TcpStream) {
+            let mut seen = Vec::new();
+            let mut chunk = [0_u8; 4096];
+            // Wait for the whole request: its body ends with the closing brace of the JSON.
+            while !seen.ends_with(b"}") {
+                match s.read(&mut chunk) {
+                    Ok(0) | Err(_) => return,
+                    Ok(n) => seen.extend_from_slice(&chunk[..n]),
+                }
+            }
+            std::thread::sleep(Duration::from_millis(300));
+            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}");
+        }
+        let mut c = IosNativeClient::connect_with_timeout(raw_server(slow_ok), Duration::from_millis(100));
+        // 15 characters buy one more second.
+        c.input_text(&"a".repeat(15), &apps()).unwrap();
+        let err = c.touch(1.0, 2.0, None).unwrap_err().to_string();
+        assert!(err.contains("timeout"), "other calls keep the plain call timeout: {err}");
     }
 
     #[test]

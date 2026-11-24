@@ -219,7 +219,7 @@ private final class ClientConnection: @unchecked Sendable {
         let requestGate = self.requestGate
         let admission = requestGate.submit(label: label, budget: budget) { [weak self] ticket in
             Task { @MainActor in
-                let response = await router.handle(request)
+                let response = await router.handle(request, ticket: ticket)
                 guard requestGate.finish(ticket), let self else { return }
                 self.queue.async { self.complete(ticket, with: response, keepAlive: keepAlive) }
             }
