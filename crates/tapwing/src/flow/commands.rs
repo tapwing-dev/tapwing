@@ -1564,7 +1564,7 @@ fn sub_commands(
         (None, Some(list)) => Ok((command_list(list, "commands", ctx, Some(env))?, None, None)),
         (Some(file), None) => {
             let path = flow_file(ctx, &file, pos)?;
-            let parsed = ctx.loader.parse_file(&path)?;
+            let parsed = ctx.loader.include(&path, pos)?;
             let commands = with_env(parsed.commands, env, pos).map_err(FlowFailure::here)?;
             Ok((commands, Some(file), Some(parsed.config)))
         }
