@@ -15,6 +15,20 @@
 //! a driver that answers with an error status, or an RPC that times out, is
 //! never restarted. If the restart itself fails the original error is kept
 //! and the lane stays down.
+//!
+//! **Replay.** Reads and idempotent writes are repeated after any transport
+//! failure. Input (`tap`, `inputText`, `eraseAllText`) is repeated only when
+//! the failed request provably never left this host ([`Fault::NotSent`]):
+//!
+//! * the TCP connect was refused (nothing listens on the forwarded port), or
+//! * the peer accepted the connection and closed or reset it before it sent a
+//!   byte, which [`super::connect`] detects before the client has written
+//!   one. This is what a dead driver looks like behind `adb forward`.
+//!
+//! Every other transport failure is ambiguous ([`Fault::Broken`]) and input
+//! is not repeated after it: a connection that had been up, whether it broke
+//! before, while or after the request was written; a connect that timed out;
+//! a peer that stayed silent past the grace period and was then written to.
 
 use std::time::Duration;
 
@@ -22,6 +36,8 @@ use anyhow::{Context, Result, anyhow};
 use tokio::runtime::Runtime;
 use tonic::Status;
 use tonic::transport::{Channel, Endpoint};
+
+use super::connect::{ClosedBeforeServerSpoke, SERVER_FIRST_GRACE, ServerFirstConnector};
 
 /// Generated protobuf messages and the tonic client.
 #[allow(clippy::all, clippy::pedantic, missing_docs)]
@@ -58,8 +74,8 @@ enum Replay {
     /// Reads and idempotent writes: always safe to repeat.
     Always,
     /// Input (`tap`, `inputText`, `eraseAllText`): repeated only when the
-    /// request provably never left the host (the connection was refused), so
-    /// a lost reply can never turn into a double tap or doubled text.
+    /// request provably never left the host ([`Fault::NotSent`]), so a lost
+    /// reply can never turn into a double tap or doubled text.
     IfNotSent,
 }
 
@@ -68,8 +84,9 @@ enum Replay {
 enum Fault {
     /// The driver answered, or the RPC timed out: not a transport failure.
     None,
-    /// The connection could not be established, so nothing was sent.
-    Refused,
+    /// No byte of the request left this host: the connect was refused, or the
+    /// peer closed the new connection before either side had sent anything.
+    NotSent,
     /// The connection broke; the request may or may not have been processed.
     Broken,
 }
@@ -77,7 +94,7 @@ enum Fault {
 fn classify(status: &Status) -> Fault {
     use std::error::Error;
     use std::io::ErrorKind;
-    let mut refused = false;
+    let mut not_sent = false;
     let mut broken = false;
     let mut src: Option<&(dyn Error + 'static)> = status.source();
     while let Some(e) = src {
@@ -86,9 +103,14 @@ fn classify(status: &Status) -> Fault {
         if e.is::<tonic::TimeoutExpired>() {
             return Fault::None;
         }
+        // The connector's own verdict. The `io::Error` under it (a reset) says
+        // how the peer went away and must not count as a broken connection.
+        if e.is::<ClosedBeforeServerSpoke>() {
+            return Fault::NotSent;
+        }
         if let Some(io) = e.downcast_ref::<std::io::Error>() {
             match io.kind() {
-                ErrorKind::ConnectionRefused => refused = true,
+                ErrorKind::ConnectionRefused => not_sent = true,
                 ErrorKind::ConnectionReset
                 | ErrorKind::ConnectionAborted
                 | ErrorKind::BrokenPipe
@@ -100,12 +122,12 @@ fn classify(status: &Status) -> Fault {
         broken |= e.is::<tonic::transport::Error>();
         src = e.source();
     }
-    if refused {
-        return Fault::Refused;
+    if not_sent {
+        return Fault::NotSent;
     }
     // Hand-built statuses (and tonic versions that drop the source) still carry the text.
     if status.code() == tonic::Code::Unavailable && status.message().contains("tcp connect error") {
-        return Fault::Refused;
+        return Fault::NotSent;
     }
     // Mid-response body drops come through `Body::poll_frame` -> `Status::map_error` without
     // a `tonic::transport::Error` wrapper (`Code::Unknown`, `"h2 protocol error: ..."`).
@@ -140,6 +162,12 @@ impl NativeDriverClient {
     /// end). The connection is established lazily by the first RPC, so this
     /// succeeds while the on-device server is still starting.
     pub fn connect(host_port: u16) -> Result<Self> {
+        Self::connect_with_grace(host_port, SERVER_FIRST_GRACE)
+    }
+
+    /// [`Self::connect`] with the time a new connection waits for the driver
+    /// to speak first (see [`super::connect`]).
+    pub(super) fn connect_with_grace(host_port: u16, server_first_grace: Duration) -> Result<Self> {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
@@ -148,12 +176,11 @@ impl NativeDriverClient {
             .context("starting the native-lane tokio runtime")?;
         let endpoint = Endpoint::from_shared(format!("http://127.0.0.1:{host_port}"))
             .context("invalid native driver endpoint")?
-            .tcp_nodelay(true)
             .connect_timeout(Duration::from_secs(5))
             .timeout(RPC_TIMEOUT);
         let channel = {
             let _guard = rt.enter();
-            endpoint.connect_lazy()
+            endpoint.connect_with_connector_lazy(ServerFirstConnector::new(server_first_grace))
         };
         let inner = MaestroDriverClient::new(channel)
             .max_decoding_message_size(64 * 1024 * 1024)
@@ -245,7 +272,7 @@ impl NativeDriverClient {
             describe(what, &status)
                 .context(format!("the native driver lost its connection and could not be restarted: {e:#}"))
         })?;
-        if replay == Replay::IfNotSent && fault != Fault::Refused {
+        if replay == Replay::IfNotSent && fault != Fault::NotSent {
             return Err(describe(what, &status).context(
                 "the native driver lost its connection while sending this request and was restarted; the \
                  request was not repeated because it may already have been applied",
@@ -493,11 +520,11 @@ mod tests {
     #[test]
     fn classifies_transport_failures_from_real_tonic_errors() {
         use super::*;
-        use std::io::Read;
-        use std::net::TcpListener;
+        use crate::native_lane::connect::testing::{Peer, serve};
 
+        /// The status of one `tap` against `port`, with a short wait for a silent peer.
         fn tap_status(port: u16) -> Status {
-            let c = NativeDriverClient::connect(port).unwrap();
+            let c = NativeDriverClient::connect_with_grace(port, Duration::from_millis(50)).unwrap();
             let client = c.inner.clone();
             c.rt.block_on(async move {
                 let mut c = client;
@@ -507,29 +534,27 @@ mod tests {
         }
 
         // Nothing listens: refused before anything is sent.
-        let closed = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        assert_eq!(classify(&tap_status(closed)), Fault::Refused);
+        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        assert_eq!(classify(&tap_status(closed)), Fault::NotSent);
 
-        // `adb forward` to a dead device end: accepted, then closed mid-handshake.
-        let l = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = l.local_addr().unwrap().port();
-        std::thread::spawn(move || {
-            while let Ok((s, _)) = l.accept() {
-                drop(s);
-            }
-        });
-        assert_eq!(classify(&tap_status(port)), Fault::Broken);
+        // `adb forward` to a dead device end: accepted, then closed (or reset) before the
+        // server said anything. The client had not written a byte.
+        for peer in [Peer::Closes, Peer::Resets] {
+            let (port, seen) = serve(peer);
+            let status = tap_status(port);
+            assert_eq!(classify(&status), Fault::NotSent, "{peer:?}: {status:?}");
+            assert!(!seen.recv().unwrap(), "{peer:?} read a request");
+        }
 
-        // Closed after the request started.
-        let l = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = l.local_addr().unwrap().port();
-        std::thread::spawn(move || {
-            while let Ok((mut s, _)) = l.accept() {
-                let mut b = [0u8; 64];
-                let _ = s.read(&mut b);
-            }
-        });
-        assert_eq!(classify(&tap_status(port)), Fault::Broken);
+        // The server took the whole request and reset the connection instead of answering:
+        // it may have applied it. The same when it never sent its own preface, because the
+        // client stopped waiting and wrote the request.
+        for peer in [Peer::ReadsRequestThenResets, Peer::SilentReadsRequestThenResets] {
+            let (port, seen) = serve(peer);
+            let status = tap_status(port);
+            assert_eq!(classify(&status), Fault::Broken, "{peer:?}: {status:?}");
+            assert!(seen.recv().unwrap(), "{peer:?} never got the request");
+        }
 
         // The driver answered (or timed out): never a transport fault.
         for status in [
@@ -541,7 +566,7 @@ mod tests {
             assert_eq!(classify(&status), Fault::None, "{status:?}");
         }
         // A hand-built connect failure still counts, so a tonic upgrade that drops the source is caught.
-        assert_eq!(classify(&Status::unavailable("tcp connect error")), Fault::Refused);
+        assert_eq!(classify(&Status::unavailable("tcp connect error")), Fault::NotSent);
         assert_eq!(classify(&Status::unknown("transport error")), Fault::Broken);
     }
 

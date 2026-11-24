@@ -11,6 +11,7 @@
 //! * [`tapwing_apk`]: finds Tapwing's driver APK.
 //! * [`command`]: the `am` commands that start and stop it.
 //! * [`client`]: synchronous gRPC facade ([`NativeDriverClient`]).
+//! * [`connect`]: its TCP connector, which proves when a request was never sent.
 //! * [`hierarchy`]: UiAutomator XML into the shared selector engine.
 //! * [`ops`]: Maestro-style commands (tap, assert, swipe, ...) on top of both.
 //! * [`restart`]: the time budget of a restart and which start failures it retries.
@@ -21,6 +22,7 @@
 pub mod apk;
 pub mod client;
 pub mod command;
+mod connect;
 pub mod hierarchy;
 pub mod ops;
 mod restart;

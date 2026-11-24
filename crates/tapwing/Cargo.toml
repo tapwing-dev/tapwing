@@ -8,6 +8,7 @@ license = "Apache-2.0"
 anyhow = "1.0.104"
 clap = { version = "4.6.9", features = ["derive"] }
 fancy-regex = "0.20.2"
+hyper-util = { version = "0.1.21", features = ["client-legacy", "tokio"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "tiff"] }
 prost = "0.14.6"
 quick-xml = "0.42.0"
@@ -18,9 +19,13 @@ sha2 = "0.11.1"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "time", "net", "sync"] }
 tonic = "0.14.9"
 tonic-prost = "0.14.9"
+tower-service = "0.3.3"
 ureq = "3.5.2"
 yaml-rust2 = "0.13.1"
 zip = { version = "9.8.1", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+socket2 = "0.6.5"
 
 [build-dependencies]
 tonic-prost-build = "0.14.9"

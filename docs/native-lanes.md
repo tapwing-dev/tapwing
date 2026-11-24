@@ -36,7 +36,7 @@ Commands that can be affected by overlays upfront (`assertNotVisible`, `back`, `
 **Mid-run disconnects.** If the connection to a native driver breaks (an `adb` server restart, a USB hiccup, or a killed runner process), Tapwing tears down the dead session, starts a fresh one (up to 3 restarts per run, with a warning), and retries the command only when it is safe to do so:
 
 - Reads are always retried.
-- Taps, text input, and key presses are retried only if the connection was refused before the request could be sent. Otherwise the step fails cleanly instead of risking a duplicate tap, and the lane is ready again for the next step.
+- Taps, text input, and key presses are retried only if the request provably never left your machine: the connection was refused, or (on Android, where a dead driver behind `adb forward` still accepts connections) it was closed before the driver sent anything and before Tapwing wrote a byte. Otherwise the step fails cleanly instead of risking a duplicate tap, and the lane is ready again for the next step.
 
 On Android a restart is bounded in time as well as in number: each one may take up to 30 seconds (it waits for a device that is briefly `offline` to come back), and all restarts of a run share 60 seconds. The error names the budget when it runs out. A start that cannot succeed (no driver APK, `adb install` refused it, the instrumentation crashed) is not retried and fails at once with that cause.
 
