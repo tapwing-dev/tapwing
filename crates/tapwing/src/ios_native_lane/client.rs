@@ -95,6 +95,30 @@ struct ErrorBody {
     error_code: String,
 }
 
+/// What a readiness probe (`GET /status`) says about who answered it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Readiness {
+    /// The runner this client started (or no session id to check against).
+    Ready,
+    /// A runner built before session ids existed: ready, but it cannot be told
+    /// from one left over from an earlier run.
+    Unverified,
+    /// Another runner (its session id) answers on this port: a stale runner of
+    /// a hard-killed run, or another Tapwing process sharing a fixed port.
+    Foreign(String),
+}
+
+/// Compares the session id this client started its runner with against the
+/// one `/status` reported.
+fn judge_session(expected: Option<&str>, reported: Option<&str>) -> Readiness {
+    match (expected, reported) {
+        (None, _) => Readiness::Ready,
+        (Some(_), None) => Readiness::Unverified,
+        (Some(want), Some(got)) if want == got => Readiness::Ready,
+        (Some(_), Some(got)) => Readiness::Foreign(got.to_string()),
+    }
+}
+
 /// Whether a call may be sent again after the transport failed under it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Replay {
@@ -223,6 +247,8 @@ pub struct IosNativeClient {
     call_timeout: Duration,
     /// Stalled calls in a row (see the module docs).
     stalls: u32,
+    /// Session id the runner was started with; `/status` must echo it.
+    session: Option<String>,
 }
 
 impl IosNativeClient {
@@ -250,7 +276,18 @@ impl IosNativeClient {
             restart_notices: Vec::new(),
             call_timeout,
             stalls: 0,
+            session: None,
         }
+    }
+
+    /// Makes [`Self::probe`] accept only a runner that reports `session`.
+    pub fn expect_session(&mut self, session: String) {
+        self.session = Some(session);
+    }
+
+    /// Queues a user-facing line for [`Self::take_restart_notices`].
+    pub fn add_notice(&mut self, notice: String) {
+        self.restart_notices.push(notice);
     }
 
     /// Hands the client ownership of the process serving it: it is stopped
@@ -517,6 +554,17 @@ impl IosNativeClient {
     pub fn status(&self, timeout: Duration) -> Result<()> {
         let answer = self.exchange("status", None, Some(timeout)).map_err(|e| Self::describe("status", &e))?;
         Self::finish("status", answer).map(drop)
+    }
+
+    /// [`Self::status`] that also checks who answered: the body's `session`
+    /// against [`Self::expect_session`]. A `/status` answer on the right port
+    /// is not proof of the right runner (see [`Readiness::Foreign`]).
+    pub fn probe(&self, timeout: Duration) -> Result<Readiness> {
+        let answer = self.exchange("status", None, Some(timeout)).map_err(|e| Self::describe("status", &e))?;
+        let body = Self::finish("status", answer)?;
+        let reported = serde_json::from_slice::<Value>(&body).ok();
+        let reported = reported.as_ref().and_then(|v| v.get("session")).and_then(Value::as_str);
+        Ok(judge_session(self.session.as_deref(), reported))
     }
 
     /// Screen size (`GET /deviceInfo`), fetched once and cached; call
@@ -949,6 +997,36 @@ mod tests {
         // A non-JSON error body is passed through trimmed; the empty body still names the call.
         let err = c.post("boom", Replay::Always, "boom", &json!({})).unwrap_err().to_string();
         assert!(err.contains("`boom`") && err.contains("HTTP 500"), "{err}");
+    }
+
+    #[test]
+    fn probe_tells_this_runs_runner_from_a_stale_or_old_one() {
+        let ours = MockRunner::start(Box::new(|_| Resp::json(r#"{"status":"ok","session":"abc123"}"#)));
+        let old = runner();
+        let timeout = Duration::from_millis(500);
+
+        // Without an expected session any answer is ready (the behaviour before session ids).
+        assert_eq!(IosNativeClient::connect(ours.port).probe(timeout).unwrap(), Readiness::Ready);
+        assert_eq!(IosNativeClient::connect(old.port).probe(timeout).unwrap(), Readiness::Ready);
+
+        let mut c = IosNativeClient::connect(ours.port);
+        c.expect_session("abc123".into());
+        assert_eq!(c.probe(timeout).unwrap(), Readiness::Ready);
+        c.expect_session("other".into());
+        assert_eq!(c.probe(timeout).unwrap(), Readiness::Foreign("abc123".into()));
+
+        // `{}`: a runner that predates session ids.
+        let mut c = IosNativeClient::connect(old.port);
+        c.expect_session("abc123".into());
+        assert_eq!(c.probe(timeout).unwrap(), Readiness::Unverified);
+
+        // An error status is still not ready.
+        let failing = MockRunner::start(Box::new(|_| Resp { status: 503, content_type: "text/plain", body: vec![] }));
+        let mut c = IosNativeClient::connect(failing.port);
+        c.expect_session("abc123".into());
+        assert!(c.probe(timeout).is_err());
+
+        assert_eq!(judge_session(Some("a"), Some("")), Readiness::Foreign(String::new()));
     }
 
     #[test]

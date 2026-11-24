@@ -287,14 +287,28 @@ public enum GateReply {
 
     /// `GET /status`: always HTTP 200 so readiness probes of older hosts keep
     /// working; the wedged state is in the body.
-    public static func status(_ gate: GateSnapshot) -> StatusResponse {
+    public static func status(_ gate: GateSnapshot, session: String? = nil) -> StatusResponse {
         StatusResponse(
             status: gate.wedged ? "wedged" : "ok",
             busy: gate.running,
             busyMs: gate.running == nil ? nil : Int((gate.runningSeconds * 1000).rounded()),
-            wedged: gate.wedged ? true : nil
+            wedged: gate.wedged ? true : nil,
+            session: session
         )
     }
+
+    /// The session id from the runner's environment; nil when the host sent
+    /// none (an older Tapwing) or an empty one.
+    public static func session(fromEnvironment environment: [String: String]) -> String? {
+        guard let raw = environment[sessionEnvironmentKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return nil
+        }
+        return raw
+    }
+
+    /// `xcodebuild` strips the `TEST_RUNNER_` prefix of `TEST_RUNNER_TAPWING_SESSION`.
+    public static let sessionEnvironmentKey = "TAPWING_SESSION"
 
     private static func describe(_ gate: GateSnapshot) -> String {
         guard let running = gate.running else {

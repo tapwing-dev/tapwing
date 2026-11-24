@@ -252,6 +252,23 @@ final class RequestGateTests: XCTestCase {
         XCTAssertEqual(AppErrorType.runnerBusy.rawValue, "runnerBusy")
     }
 
+    func testStatusEchoesTheSessionTheHostStartedTheRunnerWith() throws {
+        XCTAssertNil(GateReply.session(fromEnvironment: [:]))
+        XCTAssertNil(GateReply.session(fromEnvironment: ["TAPWING_SESSION": "  "]))
+        let session = GateReply.session(fromEnvironment: ["TAPWING_SESSION": " 3f9a61c2d4e5b7a8\n", "PORT": "22087"])
+        XCTAssertEqual(session, "3f9a61c2d4e5b7a8")
+
+        let body = HttpResponse.json(GateReply.status(GateSnapshot(), session: session)).body
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: body) as? [String: String],
+            ["status": "ok", "session": "3f9a61c2d4e5b7a8"]
+        )
+        // A wedged runner still identifies itself.
+        let wedged = GateReply.status(GateSnapshot(running: "POST /touch", runningSeconds: 40, wedged: true), session: session)
+        XCTAssertEqual(wedged.session, session)
+        XCTAssertEqual(wedged.status, "wedged")
+    }
+
     func testAnIdleStatusStaysTheOriginalMinimalBody() throws {
         let body = HttpResponse.json(GateReply.status(GateSnapshot())).body
         XCTAssertEqual(try JSONSerialization.jsonObject(with: body) as? [String: String], ["status": "ok"])

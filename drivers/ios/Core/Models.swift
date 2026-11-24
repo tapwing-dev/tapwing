@@ -189,12 +189,22 @@ public struct StatusResponse: Codable, Equatable, Sendable {
     /// How long that handler has been running, in milliseconds.
     public let busyMs: Int?
     public let wedged: Bool?
+    /// The session id the host started this runner with (`TEST_RUNNER_TAPWING_SESSION`),
+    /// echoed so the host can tell this runner from a stale one on the same port.
+    public let session: String?
 
-    public init(status: String = "ok", busy: String? = nil, busyMs: Int? = nil, wedged: Bool? = nil) {
+    public init(
+        status: String = "ok",
+        busy: String? = nil,
+        busyMs: Int? = nil,
+        wedged: Bool? = nil,
+        session: String? = nil
+    ) {
         self.status = status
         self.busy = busy
         self.busyMs = busyMs
         self.wedged = wedged
+        self.session = session
     }
 }
 

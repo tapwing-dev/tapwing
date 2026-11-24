@@ -14,14 +14,17 @@ import Network
 final class HttpServer {
     private let port: UInt16
     private let router: Router
+    private let session: String?
     private let requestGate = RequestGate()
     private let queue = DispatchQueue(label: "dev.tapwing.ios-runner.http", qos: .userInteractive)
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: ClientConnection] = [:]
 
-    init(port: UInt16, router: Router) {
+    /// `session` is echoed in `GET /status` (see `StatusResponse.session`).
+    init(port: UInt16, router: Router, session: String?) {
         self.port = port
         self.router = router
+        self.session = session
     }
 
     func start() async throws {
@@ -77,7 +80,8 @@ final class HttpServer {
             connection: nwConn,
             queue: queue,
             router: router,
-            requestGate: requestGate
+            requestGate: requestGate,
+            session: session
         ) { [weak self] id in
             self?.connections.removeValue(forKey: id)
         }
@@ -116,6 +120,7 @@ private final class ClientConnection: @unchecked Sendable {
     private let queue: DispatchQueue
     private let router: Router
     private let requestGate: RequestGate
+    private let session: String?
     private let onClose: (ObjectIdentifier) -> Void
     private var buffer = Data()
     private var closed = false
@@ -129,12 +134,14 @@ private final class ClientConnection: @unchecked Sendable {
         queue: DispatchQueue,
         router: Router,
         requestGate: RequestGate,
+        session: String?,
         onClose: @escaping (ObjectIdentifier) -> Void
     ) {
         self.connection = connection
         self.queue = queue
         self.router = router
         self.requestGate = requestGate
+        self.session = session
         self.onClose = onClose
         self.id = ObjectIdentifier(connection)
     }
@@ -204,7 +211,7 @@ private final class ClientConnection: @unchecked Sendable {
             if request.method == "GET" && request.path == "/status" {
                 // Answered here, off the main thread and outside the gate, so a
                 // wedged handler can never make the runner look dead.
-                send(HttpResponse.json(GateReply.status(requestGate.snapshot())), keepAlive: keepAlive)
+                send(HttpResponse.json(GateReply.status(requestGate.snapshot(), session: session)), keepAlive: keepAlive)
                 return
             }
             dispatch(request, keepAlive: keepAlive)

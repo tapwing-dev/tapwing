@@ -14,7 +14,7 @@ tapwing test ...                         # always uses it
 |---|---|
 | Host app / runner bundle IDs | `dev.tapwing.ios-runner` / `dev.tapwing.ios-runnerUITests.xctrunner` |
 | Scope | iOS Simulator only (`iphonesimulator`, no physical devices) |
-| Start | `xcodebuild test-without-building -xctestrun tapwing-ios-runner.xctestrun -destination id=<UDID>` with `TEST_RUNNER_PORT=<port>` |
+| Start | `xcodebuild test-without-building -xctestrun tapwing-ios-runner.xctestrun -destination id=<UDID>` with `TEST_RUNNER_PORT=<port>` and `TEST_RUNNER_TAPWING_SESSION=<id>` |
 | External dependencies | None (Apple SDK only: `XCTest`, `Network`, `UIKit`, `CryptoKit`, `Foundation`) |
 | Toolchain | Xcode (`xcodebuild`) + Swift (`swift test` for `Core/` host unit tests) |
 | Licenses | ported Maestro / WebDriverAgent semantics: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
@@ -75,6 +75,10 @@ recovery (a restart of the runner process) to the host.
   (still HTTP 200). If the handler does return, the gate heals by itself.
 - **Dead requests**: a queued request whose client hung up, or whose deadline
   passed while it waited, is never started.
+- **Session id**: `/status` echoes `TEST_RUNNER_TAPWING_SESSION` as
+  `"session"`. The host waits for its own id, so a runner left over from a
+  hard-killed run that still answers on the same port is never mistaken for
+  the one just started. A runner started without the variable omits the field.
 - **Typing**: `inputText` / `eraseText` type the slow first character, then
   chunks of 60 characters (`Core/TypingPlan.swift`), and stop between chunks
   once the request is dead. Text of up to 61 characters is still one event,
