@@ -40,9 +40,63 @@ pub use mapping::{
 
 use launch::{LaunchPlan, LaunchPlanInput, decide_launch_plan, format_blackbox_demotion_warning};
 
+/// Default `--settle-load-timeout-ms`; the driver's own default
+/// (`HttpTracker.defaultSettleBound`) when the host sends nothing.
+pub const DEFAULT_SETTLE_LOAD_TIMEOUT_MS: u64 = 5000;
+
+/// Which loads may keep settle waiting (`configure` `settleLoadTimeoutMs` /
+/// `settleHttpIgnore`): CLI flags merged over `config.yaml` `tapwing:`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SettleLoadOpts {
+    /// How long one in-flight HTTP request or pending image blocks settle, in
+    /// ms; `0` removes the bound.
+    pub timeout_ms: u64,
+    /// Regexes (Dart syntax, unanchored, matched in the app against the full
+    /// URL) for requests that never block settle.
+    pub http_ignore: Vec<String>,
+}
+
+impl Default for SettleLoadOpts {
+    fn default() -> Self {
+        Self { timeout_ms: DEFAULT_SETTLE_LOAD_TIMEOUT_MS, http_ignore: Vec::new() }
+    }
+}
+
+impl SettleLoadOpts {
+    /// The CLI timeout wins over `tapwing.settleLoadTimeoutMs`; CLI ignore
+    /// patterns are added to `tapwing.settleHttpIgnore`.
+    pub fn resolve(
+        cli_timeout_ms: Option<u64>,
+        cli_http_ignore: &[String],
+        config: &crate::workspace::config::TapwingConfig,
+    ) -> Self {
+        let mut http_ignore = config.settle_http_ignore.clone();
+        http_ignore.extend(cli_http_ignore.iter().cloned());
+        Self {
+            timeout_ms: cli_timeout_ms.or(config.settle_load_timeout_ms).unwrap_or(DEFAULT_SETTLE_LOAD_TIMEOUT_MS),
+            http_ignore,
+        }
+    }
+
+    /// A driver that predates these options never confirms them and keeps
+    /// waiting for every request; worth a warning only when the user changed
+    /// something.
+    pub fn unsupported_warning(&self, configure_result: &Value) -> Option<String> {
+        (*self != Self::default() && configure_result.get("settleLoadTimeoutMs").is_none_or(Value::is_null)).then(
+            || {
+                "the app's tapwing_driver does not support --settle-load-timeout-ms / --settle-http-ignore \
+                 (settings ignored); update the tapwing_driver package in the app"
+                    .to_string()
+            },
+        )
+    }
+}
+
 pub struct Opts {
     pub settle_policy: String,
     pub check_settle: bool,
+    /// `--settle-load-timeout-ms` / `--settle-http-ignore`.
+    pub settle_load: SettleLoadOpts,
     /// `-e KEY=VALUE` from the command line; wins over flow `env`.
     pub cli_env: HashMap<String, String>,
     /// Output directory for screenshots and diff artifacts (`--test-output-dir`).
@@ -896,6 +950,9 @@ pub fn driver_config(opts: &Opts, platform: Platform, app_name: Option<&str>) ->
     // F8b: explicit either way, so a run without `--trace` also stops a log
     // left enabled by an earlier traced session in the same app process.
     cfg["httpLog"] = Value::Bool(opts.trace);
+    // Explicit either way, for the same reason; older drivers ignore both.
+    cfg["settleLoadTimeoutMs"] = Value::from(opts.settle_load.timeout_ms);
+    cfg["settleHttpIgnore"] = json!(opts.settle_load.http_ignore);
     cfg
 }
 

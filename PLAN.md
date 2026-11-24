@@ -167,7 +167,7 @@ Orchestration stays on the host. Each UI command is a **single round-trip**: wai
 |---|---|
 | Full view hierarchy dump via UiAutomator, filtered on host | In-process selector over live Semantics tree (target < 1 ms) |
 | Polling loop until timeout | **Reactive waiting:** predicate re-evaluates after each rendered frame, resolves on the first matching frame |
-| Settle via `isWindowUpdating` + screenshot diff | **Deterministic idle detector:** `!hasScheduledFrame && transientCallbackCount == 0`, no in-flight HTTP (`HttpOverrides`), `imageCache.pendingImageCount == 0`. Infinite animations (spinners) are handled via **layout/semantics hash** stability across frames plus significant-animation scanning |
+| Settle via `isWindowUpdating` + screenshot diff | **Deterministic idle detector:** `!hasScheduledFrame && transientCallbackCount == 0`, no in-flight HTTP (`HttpOverrides`), `imageCache.pendingImageCount == 0` (a single request or pending image blocks for at most `--settle-load-timeout-ms`, 5 s by default; URLs matching `--settle-http-ignore` never do). Infinite animations (spinners) are handled via **layout/semantics hash** stability across frames plus significant-animation scanning |
 | Tap via UiAutomator / `input` | `PointerDataPacket` straight into the framework, coordinates from `RenderBox`, zero OS latency |
 | `inputText` via IME / adb character by character | `flutter/textinput` messages; formatters and `onChanged` run normally |
 | `retryTapIfNoChange` via screenshots | "Did the tap have an effect?" = semantics tree hash changed or frame scheduled |

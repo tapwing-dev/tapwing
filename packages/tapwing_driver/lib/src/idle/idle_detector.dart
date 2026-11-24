@@ -46,14 +46,15 @@ class BusyReport {
   /// is idle.
   final bool framesIdle;
 
-  /// Whether no tracked HTTP requests, platform-channel replies, or image loads
-  /// are pending.
+  /// Whether no tracked HTTP request, platform-channel reply, or image load
+  /// currently blocks settle (HTTP requests and image loads older than the
+  /// settle load bound and ignored URLs do not).
   final bool loadingIdle;
 
   /// Number of active transient frame callbacks (tickers/animations).
   final int transientCallbacks;
 
-  /// Number of in-flight `dart:io` HTTP requests.
+  /// Number of in-flight `dart:io` HTTP requests that block settle.
   final int httpInFlight;
 
   /// Number of non-system platform-channel calls currently awaiting a reply.
@@ -108,11 +109,14 @@ class IdleDetector {
     double Function()? readBottomInset,
     Future<void> Function(Duration timeout)? waitForFirstFrame,
     Duration Function()? clock,
+    int Function()? readPendingImages,
   }) : _httpTracker = httpTracker ?? HttpTracker.instance,
        _channelTracker = channelTracker ?? ChannelTracker.instance,
        _animationScanner = animationScanner ?? AnimationScanner(clock: clock),
        _computeSemanticsHash = computeSemanticsHash ?? Snapshot.computeHash,
        _readBottomInset = readBottomInset ?? _defaultBottomInset,
+       _readPendingImages = readPendingImages ?? _defaultPendingImages,
+       _nowOverride = clock,
        _waitForFirstFrameOverride = waitForFirstFrame {
     _keyboardWaiter = KeyboardWaiter(
       textInput ?? TextInputController.instance,
@@ -141,6 +145,8 @@ class IdleDetector {
   final AnimationScanner _animationScanner;
   final int Function() _computeSemanticsHash;
   final double Function() _readBottomInset;
+  final int Function() _readPendingImages;
+  final Duration Function()? _nowOverride;
   final Future<void> Function(Duration timeout)? _waitForFirstFrameOverride;
   late final KeyboardWaiter _keyboardWaiter;
 
@@ -163,9 +169,27 @@ class IdleDetector {
   /// as absent (hardware-keyboard device or CLI hint).
   bool get softKeyboardAbsent => _keyboardWaiter.softKeyboardAbsent;
 
+  /// How long a single HTTP request or a set of pending images counts as
+  /// busy for settle (`null`: until it ends). See [HttpTracker.settleBound].
+  Duration? get settleLoadBound => _httpTracker.settleBound;
+
   /// Applies session-level hints from the `configure` RPC.
   void configure({bool? softKeyboard}) {
     _keyboardWaiter.configure(softKeyboard: softKeyboard);
+  }
+
+  /// Applies the `configure` settle load options: [timeoutMs] bounds how long
+  /// one HTTP request or pending image blocks settle (`0`: no bound), and
+  /// [httpIgnore] replaces the URL patterns that never block it.
+  void configureSettleLoad({int? timeoutMs, List<RegExp>? httpIgnore}) {
+    if (timeoutMs != null) {
+      _httpTracker.settleBound = timeoutMs <= 0
+          ? null
+          : Duration(milliseconds: timeoutMs);
+    }
+    if (httpIgnore != null) {
+      _httpTracker.settleIgnore = httpIgnore;
+    }
   }
 
   /// Installs the global `HttpOverrides` hook to observe `dart:io` traffic.
@@ -180,12 +204,51 @@ class IdleDetector {
       SchedulerBinding.instance.transientCallbackCount == 0 &&
       SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle;
 
-  /// Whether no tracked HTTP requests, platform-channel calls, or image loads
-  /// are currently pending.
+  /// Whether no tracked HTTP request, platform-channel reply, or image load
+  /// currently blocks settle.
+  ///
+  /// Reading it samples the pending image count (see [_imagesIdle]).
   bool get loadingIdle =>
-      _httpTracker.isIdle &&
-      _channelTracker.isIdle &&
-      PaintingBinding.instance.imageCache.pendingImageCount == 0;
+      _httpTracker.isIdle && _channelTracker.isIdle && _imagesIdle;
+
+  int _imagesSeen = 0;
+  int _imagesStale = 0;
+  Duration _imagesSince = Duration.zero;
+
+  /// Whether no pending image blocks settle.
+  ///
+  /// `ImageCache` exposes only a count, so the age of pending images is
+  /// tracked from what successive reads see: a higher count means a load
+  /// just started. Once the count has not grown for [settleLoadBound], the
+  /// images pending at that moment are written off as stale and stop
+  /// blocking (an image that never resolves would otherwise make every step
+  /// wait for its whole settle timeout). Stale images that do finish later
+  /// are forgotten again.
+  bool get _imagesIdle {
+    final int count = _readPendingImages();
+    if (count == 0) {
+      _imagesSeen = 0;
+      _imagesStale = 0;
+      return true;
+    }
+    final Duration now = _nowOverride?.call() ?? _clock.elapsed;
+    if (count > _imagesSeen) {
+      _imagesSince = now;
+    } else if (_imagesStale > count) {
+      _imagesStale = count;
+    }
+    _imagesSeen = count;
+    final Duration? bound = settleLoadBound;
+    if (bound == null) {
+      _imagesStale = 0;
+    } else if (now - _imagesSince >= bound) {
+      _imagesStale = count;
+    }
+    return count <= _imagesStale;
+  }
+
+  static int _defaultPendingImages() =>
+      PaintingBinding.instance.imageCache.pendingImageCount;
 
   void _ensureFrameCallback() {
     if (_frameCallbackScheduled) return;
@@ -242,7 +305,7 @@ class IdleDetector {
     transientCallbacks: SchedulerBinding.instance.transientCallbackCount,
     httpInFlight: _httpTracker.inFlight,
     pendingChannels: _channelTracker.pending,
-    pendingImages: PaintingBinding.instance.imageCache.pendingImageCount,
+    pendingImages: _readPendingImages(),
     animations: _animationScanner.scan(treeHash: _computeSemanticsHash()),
   );
 
@@ -381,14 +444,14 @@ class IdleDetector {
     if (maxWait <= Duration.zero || (isCancelled != null && isCancelled())) {
       return Future<void>.value();
     }
-    final bool noPendingImages =
-        PaintingBinding.instance.imageCache.pendingImageCount == 0;
-    // When only HTTP requests or platform-channel replies are pending, wake
-    // immediately upon drain.
-    if (!_httpTracker.isIdle && noPendingImages) {
+    final bool imagesIdle = _imagesIdle;
+    // When only HTTP requests or platform-channel replies are pending (and no
+    // fresh image is still blocking), wake immediately upon drain or when the
+    // last HTTP request reaches the settle load bound.
+    if (!_httpTracker.isIdle && imagesIdle) {
       return _httpTracker.waitForIdle(maxWait, isCancelled: isCancelled);
     }
-    if (!_channelTracker.isIdle && noPendingImages) {
+    if (!_channelTracker.isIdle && imagesIdle) {
       return _channelTracker.waitForIdle(maxWait, isCancelled: isCancelled);
     }
     final Duration step = maxWait < _imagePollStep ? maxWait : _imagePollStep;

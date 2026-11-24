@@ -17,7 +17,17 @@ class ConfigureResult {
     this.pixelsPerUnit,
     this.appIssues = false,
     this.httpLog = false,
+    this.settleLoadTimeoutMs,
+    this.settleHttpIgnore,
   });
+
+  /// Active settle load bound in ms (`0`: none). Absent from older drivers,
+  /// so the host can tell a driver without the bound apart.
+  final int? settleLoadTimeoutMs;
+
+  /// Number of active `settleHttpIgnore` patterns (absent from older
+  /// drivers).
+  final int? settleHttpIgnore;
 
   /// Whether app health issues are attached to responses.
   final bool appIssues;
@@ -55,6 +65,8 @@ class ConfigureResult {
     if (pixelsPerUnit != null) 'pixelsPerUnit': pixelsPerUnit,
     if (appIssues) 'appIssues': true,
     if (httpLog) 'httpLog': true,
+    if (settleLoadTimeoutMs != null) 'settleLoadTimeoutMs': settleLoadTimeoutMs,
+    if (settleHttpIgnore != null) 'settleHttpIgnore': settleHttpIgnore,
   };
 }
 

@@ -16,6 +16,8 @@ class ConfigureParams {
     this.strictHideKeyboard,
     this.appIssues,
     this.httpLog,
+    this.settleLoadTimeoutMs,
+    this.settleHttpIgnore,
   });
 
   /// Parses `configure` parameters from JSON.
@@ -32,7 +34,15 @@ class ConfigureParams {
     if (platform != null && DriverPlatform.tryParse(platform) == null) {
       throw DriverError.invalidCommand('Unknown platform: $platform');
     }
+    final Object? loadTimeout = json['settleLoadTimeoutMs'];
+    if (loadTimeout != null && (loadTimeout is! num || loadTimeout < 0)) {
+      throw DriverError.invalidCommand(
+        'settleLoadTimeoutMs must be a non-negative number: $loadTimeout',
+      );
+    }
     return ConfigureParams(
+      settleLoadTimeoutMs: (loadTimeout as num?)?.toInt(),
+      settleHttpIgnore: _parsePatterns(json['settleHttpIgnore']),
       settlePolicy: settlePolicy,
       softKeyboard: json['softKeyboard'] is bool
           ? json['softKeyboard']! as bool
@@ -49,6 +59,44 @@ class ConfigureParams {
       httpLog: json['httpLog'] is bool ? json['httpLog']! as bool : null,
     );
   }
+
+  static List<RegExp>? _parsePatterns(Object? raw) {
+    if (raw == null) {
+      return null;
+    }
+    if (raw is! List<Object?>) {
+      throw DriverError.invalidCommand(
+        'settleHttpIgnore must be a list of regular expressions',
+      );
+    }
+    return <RegExp>[
+      for (final Object? pattern in raw)
+        if (pattern is String)
+          _compile(pattern)
+        else
+          throw DriverError.invalidCommand(
+            'settleHttpIgnore must be a list of regular expressions',
+          ),
+    ];
+  }
+
+  static RegExp _compile(String pattern) {
+    try {
+      return RegExp(pattern);
+    } on FormatException catch (e) {
+      throw DriverError.invalidCommand(
+        'Invalid settleHttpIgnore pattern `$pattern`: ${e.message}',
+      );
+    }
+  }
+
+  /// Optional bound (ms) on how long one HTTP request or pending image
+  /// blocks settle (`--settle-load-timeout-ms`); `0` removes the bound.
+  final int? settleLoadTimeoutMs;
+
+  /// Optional URL patterns whose requests never block settle
+  /// (`--settle-http-ignore`); replaces the previous list.
+  final List<RegExp>? settleHttpIgnore;
 
   /// Optional new settle policy (`v2` or `legacy`).
   final SettlePolicy? settlePolicy;

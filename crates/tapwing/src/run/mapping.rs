@@ -336,6 +336,7 @@ mod tests {
         let opts = Opts {
             settle_policy: "v2".into(),
             check_settle: false,
+            settle_load: Default::default(),
             cli_env: HashMap::new(),
             test_output_dir: PathBuf::from("out"),
             strict_input: false,
@@ -360,7 +361,59 @@ mod tests {
         assert_eq!(android["strictHideKeyboard"], false);
         // F8b: the HTTP log is switched off explicitly without `--trace`.
         assert_eq!(android["httpLog"], false);
+        // Settle load options are sent explicitly, defaults included.
+        assert_eq!(android["settleLoadTimeoutMs"], 5000);
+        assert_eq!(android["settleHttpIgnore"], serde_json::json!([]));
         assert_eq!(driver_config(&Opts { trace: true, ..opts }, Platform::Android, None)["httpLog"], true);
+    }
+
+    #[test]
+    fn settle_load_options_merge_cli_over_config_and_reach_configure() {
+        use crate::run::SettleLoadOpts;
+        use crate::workspace::config::TapwingConfig;
+
+        let config = TapwingConfig {
+            settle_load_timeout_ms: Some(2000),
+            settle_http_ignore: vec!["/poll".into()],
+            ..Default::default()
+        };
+        assert_eq!(SettleLoadOpts::resolve(None, &[], &TapwingConfig::default()), SettleLoadOpts::default());
+        assert_eq!(SettleLoadOpts::default().timeout_ms, 5000);
+        assert_eq!(
+            SettleLoadOpts::resolve(None, &[], &config),
+            SettleLoadOpts { timeout_ms: 2000, http_ignore: vec!["/poll".into()] }
+        );
+        // The CLI timeout wins (0 removes the bound); CLI patterns are added.
+        let merged = SettleLoadOpts::resolve(Some(0), &["analytics".to_string()], &config);
+        assert_eq!(merged, SettleLoadOpts { timeout_ms: 0, http_ignore: vec!["/poll".into(), "analytics".into()] });
+
+        let opts = Opts {
+            settle_policy: "v2".into(),
+            check_settle: false,
+            settle_load: merged.clone(),
+            cli_env: HashMap::new(),
+            test_output_dir: PathBuf::from("out"),
+            strict_input: false,
+            soft_keyboard_hint: None,
+            maestro_compat_strict: false,
+            http_agent: None,
+            input_mode: InputMode::Auto,
+            shard_index: None,
+            log_prefix: String::new(),
+            app_errors: crate::app_health::AppErrorsPolicy::Report,
+            trace: false,
+        };
+        let cfg = driver_config(&opts, Platform::Android, None);
+        assert_eq!(cfg["settleLoadTimeoutMs"], 0);
+        assert_eq!(cfg["settleHttpIgnore"], serde_json::json!(["/poll", "analytics"]));
+
+        // A driver that predates the options never echoes them: warn only
+        // when the user asked for something other than the defaults.
+        let old = serde_json::json!({ "settlePolicy": "v2", "pixelsPerUnit": 1 });
+        let new = serde_json::json!({ "settlePolicy": "v2", "settleLoadTimeoutMs": 0, "settleHttpIgnore": 2 });
+        assert!(merged.unsupported_warning(&old).unwrap().contains("--settle-http-ignore"));
+        assert_eq!(merged.unsupported_warning(&new), None);
+        assert_eq!(SettleLoadOpts::default().unsupported_warning(&old), None);
     }
 
     #[test]

@@ -11,6 +11,11 @@ import '../diagnostics/http_log.dart';
 /// errors, detaches (WebSocket/HTTP upgrade), aborts, or hits a safety timeout
 /// so abandoned requests can never wedge idleness permanently.
 ///
+/// A request counts as busy for settle for at most [settleBound] (long-polls,
+/// streaming downloads and hung requests stop blocking after that), and not
+/// at all when its URL matches [settleIgnore]. Either way it stays in the
+/// request [log] until it really ends.
+///
 /// With [log] enabled (`configure` `httpLog: true`, F8b `--trace`), every
 /// request is also recorded with privacy-redacted metadata. [ensureInstalled]
 /// re-wraps any `HttpOverrides` the app installed after the binding so both
@@ -33,16 +38,52 @@ class HttpTracker {
   /// Safety timeout if a response is returned but nobody drains its body.
   static const Duration responseSafetyTimeout = Duration(seconds: 10);
 
+  /// Default [settleBound].
+  ///
+  /// Longer than the default settle timeout of a step (3 s) and equal to the
+  /// launch `waitIdle` (5 s), so with defaults a single settle never returns
+  /// earlier than it did without the bound: it either sees the request
+  /// finish or times out first. Only the steps after it stop waiting.
+  static const Duration defaultSettleBound = Duration(seconds: 5);
+
   static const Duration _cancelPollInterval = Duration(milliseconds: 25);
+
+  /// How long one request counts as in flight for settle, measured from when
+  /// it was opened; `null` means until it ends (or a safety timeout fires).
+  /// Applies to requests opened after the change.
+  Duration? settleBound = defaultSettleBound;
+
+  List<RegExp> _settleIgnore = const <RegExp>[];
+
+  /// Patterns for URLs whose requests never count as in flight for settle
+  /// (analytics, long-poll endpoints). Unanchored, matched against the full
+  /// request URL. Applies to requests opened after the change.
+  List<RegExp> get settleIgnore => _settleIgnore;
+  set settleIgnore(List<RegExp> patterns) =>
+      _settleIgnore = List<RegExp>.unmodifiable(patterns);
+
+  bool _ignoredForSettle(Uri? url) {
+    if (url == null || _settleIgnore.isEmpty) {
+      return false;
+    }
+    final String text = url.toString();
+    for (final RegExp pattern in _settleIgnore) {
+      if (pattern.hasMatch(text)) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   int _inFlight = 0;
   bool _creatingClient = false;
   final Set<Completer<void>> _idleWaiters = <Completer<void>>{};
 
-  /// Number of `dart:io` HTTP requests currently in flight.
+  /// Number of `dart:io` HTTP requests that currently block settle: in
+  /// flight, younger than [settleBound] and not matching [settleIgnore].
   int get inFlight => _inFlight;
 
-  /// Whether no tracked HTTP requests are currently in flight.
+  /// Whether no HTTP request currently blocks settle.
   bool get isIdle => _inFlight == 0;
 
   /// Request log for the trace viewer (disabled by default).
@@ -163,16 +204,18 @@ class _TrackingHttpOverrides extends HttpOverrides {
 
 /// Per-request bookkeeping: the idle counter release and the log entry.
 class _RequestTracking {
-  _RequestTracking(this._tracker, this.entry);
+  _RequestTracking(this._tracker, bool countIdle, this.entry)
+    : _idleReleased = !countIdle;
 
   final HttpTracker _tracker;
 
   /// Log entry, or `null` when the request log is disabled.
   final HttpLogEntry? entry;
 
-  bool _idleReleased = false;
+  bool _idleReleased;
   bool _logFinished = false;
   Timer? _safety;
+  Timer? _settleBound;
 
   /// Bytes the app added to the request body.
   int requestBytes = 0;
@@ -192,10 +235,20 @@ class _RequestTracking {
     _safety = null;
   }
 
+  /// Stops counting the request for settle once it has been open for
+  /// [bound]; the log entry and the safety timeout are left alone.
+  void armSettleBound(Duration? bound) {
+    if (bound != null && !_idleReleased) {
+      _settleBound = Timer(bound, releaseIdle);
+    }
+  }
+
   /// Releases idle counting immediately (e.g. for `text/event-stream` SSE
   /// streams) while keeping the HTTP log entry open until the stream ends or
   /// cancels.
   void releaseIdle() {
+    _settleBound?.cancel();
+    _settleBound = null;
     if (!_idleReleased) {
       _idleReleased = true;
       _tracker._onRequestFinished();
@@ -207,6 +260,8 @@ class _RequestTracking {
   }
 
   void release(HttpLogState state, {Object? error}) {
+    _settleBound?.cancel();
+    _settleBound = null;
     if (!_idleReleased) {
       _idleReleased = true;
       _tracker._onRequestFinished();
@@ -239,10 +294,23 @@ class _TrackingHttpClient implements HttpClient {
     Future<HttpClientRequest> pending,
   ) async {
     final HttpLogEntry? entry = _tracker.log.begin(method, url);
-    _tracker._onRequestOpened();
-    final _RequestTracking tracking = _RequestTracking(_tracker, entry);
+    final bool countIdle = !_tracker._ignoredForSettle(url);
+    if (!countIdle && entry == null) {
+      // Ignored URL with logging off: pure pass-through.
+      return pending;
+    }
+    if (countIdle) {
+      _tracker._onRequestOpened();
+    }
+    final _RequestTracking tracking = _RequestTracking(
+      _tracker,
+      countIdle,
+      entry,
+    );
     // Safety net in case a request is opened and abandoned without close()/abort().
-    tracking.armTimeout(HttpTracker.openSafetyTimeout);
+    tracking
+      ..armTimeout(HttpTracker.openSafetyTimeout)
+      ..armSettleBound(_tracker.settleBound);
     try {
       // The app owns (and closes) the request; it is only wrapped here.
       // ignore: close_sinks

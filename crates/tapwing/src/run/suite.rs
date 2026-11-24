@@ -45,6 +45,8 @@ pub struct SuiteRunConfig {
     pub cli_env: HashMap<String, String>,
     pub settle_policy: String,
     pub check_settle: bool,
+    /// `--settle-load-timeout-ms` / `--settle-http-ignore` (CLI merged over `config.yaml` `tapwing:`).
+    pub settle_load: super::SettleLoadOpts,
     pub strict_input: bool,
     pub maestro_compat_strict: bool,
     pub input_mode: InputMode,
@@ -353,6 +355,7 @@ pub fn run_test_suite(cfg: SuiteRunConfig) -> Result<bool> {
         input_mode: cfg.input_mode,
         settle_policy: &cfg.settle_policy,
         check_settle: cfg.check_settle,
+        settle_load: &cfg.settle_load,
         strict_input: cfg.strict_input,
         maestro_compat_strict: cfg.maestro_compat_strict,
         cli_env: &cfg.cli_env,
@@ -458,6 +461,7 @@ struct ShardSessionSettings<'a> {
     input_mode: InputMode,
     settle_policy: &'a str,
     check_settle: bool,
+    settle_load: &'a super::SettleLoadOpts,
     strict_input: bool,
     maestro_compat_strict: bool,
     cli_env: &'a HashMap<String, String>,
@@ -527,6 +531,7 @@ fn run_device_shard(
     let opts = Opts {
         settle_policy: settings.settle_policy.to_string(),
         check_settle: settings.check_settle,
+        settle_load: settings.settle_load.clone(),
         cli_env: settings.cli_env.clone(),
         test_output_dir: test_output_dir.clone(),
         strict_input: settings.strict_input,

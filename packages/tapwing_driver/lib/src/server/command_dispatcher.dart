@@ -11,9 +11,8 @@ import 'gesture_handlers.dart';
 import 'input_navigation_handlers.dart';
 
 /// Signature for an individual RPC method handler.
-typedef RpcCommandHandler = Future<Object?> Function(
-  Map<String, Object?> params,
-);
+typedef RpcCommandHandler =
+    Future<Object?> Function(Map<String, Object?> params);
 
 /// Routes RPC method names to dedicated per-command handlers.
 ///
@@ -23,8 +22,8 @@ typedef RpcCommandHandler = Future<Object?> Function(
 class CommandDispatcher {
   /// Creates a dispatcher operating against [context].
   CommandDispatcher(this._context)
-      : _gestures = GestureHandlers(_context),
-        _inputNav = InputNavigationHandlers(_context) {
+    : _gestures = GestureHandlers(_context),
+      _inputNav = InputNavigationHandlers(_context) {
     _handlers = <String, RpcCommandHandler>{
       'ping': _handlePing,
       'configure': _handleConfigure,
@@ -97,6 +96,10 @@ class CommandDispatcher {
     if (params.strictHideKeyboard != null) {
       _context.strictHideKeyboard = params.strictHideKeyboard!;
     }
+    _context.idle.configureSettleLoad(
+      timeoutMs: params.settleLoadTimeoutMs,
+      httpIgnore: params.settleHttpIgnore,
+    );
     final AppIssueLog issues = _context.errorHooks.log;
     if (params.appIssues == true) {
       issues.deliveryEnabled = true;
@@ -118,6 +121,8 @@ class CommandDispatcher {
     return ConfigureResult(
       appIssues: issues.deliveryEnabled,
       httpLog: http.log.enabled,
+      settleLoadTimeoutMs: http.settleBound?.inMilliseconds ?? 0,
+      settleHttpIgnore: http.settleIgnore.length,
       settlePolicy: _context.settlePolicy,
       strictInput: _context.strictInput,
       platform: _context.platform,

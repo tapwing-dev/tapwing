@@ -463,6 +463,20 @@ fn test_rejects_a_bad_app_errors_ignore_regex() {
 }
 
 #[test]
+fn test_rejects_a_bad_settle_load_timeout_and_documents_the_settle_load_flags() {
+    let tmp = TempDir::new("test_settle_load");
+    let flow = flow_file(&tmp);
+    let out = tapwing(&["test", &flow, "--settle-load-timeout-ms", "soon"]);
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("invalid value 'soon' for '--settle-load-timeout-ms <MS>'"), "{}", stderr(&out));
+    // Negative bounds are not a thing (`0` removes the bound).
+    assert_eq!(code(&tapwing(&["test", &flow, "--settle-load-timeout-ms=-1"])), 2);
+    let help = stdout(&tapwing(&["test", "--help"]));
+    assert!(help.contains("--settle-load-timeout-ms <MS>"), "{help}");
+    assert!(help.contains("--settle-http-ignore <REGEX>"), "{help}");
+}
+
+#[test]
 fn test_rejects_an_invalid_flow_before_touching_a_device() {
     let tmp = TempDir::new("test_invalid_flow");
     let flow = tmp.write("bad.yaml", "appId: x\n---\n- bogusCommand\n");

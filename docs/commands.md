@@ -65,7 +65,33 @@ All Maestro selectors and relative matchers are supported:
 
 - **Timeouts:** `assertVisible` and `assertNotVisible` default to 17 s; optional lookups (`tapOn`, `copyTextFrom`, `swipe from`) default to 7 s. Both adjust for time already spent since the last mutating command, matching Maestro.
 - **Settle detection:** Tapwing waits for coasting scrolls to stop and ignores endless decorative animations (such as loading spinners running over 1.5 s without changing the UI tree) so flows don't hang.
+- **Network and images:** a step also waits for the app's in-flight `dart:io` HTTP requests and pending images, see [Loads that keep a step waiting](#loads-that-keep-a-step-waiting).
 - **`optional: true`:** ignores command-level failures (like a missing element). Invalid arguments and lost device connections still fail.
+
+### Loads that keep a step waiting
+
+After each action Tapwing waits (up to the step's settle timeout, 3 s by default) until the app has no HTTP request in flight and no image still loading, so the next step sees the loaded screen. Two options keep requests that never finish from slowing every step down:
+
+| Flag | `config.yaml` (`tapwing:`) | Purpose |
+|---|---|---|
+| `--settle-load-timeout-ms <ms>` | `settleLoadTimeoutMs` | How long a single HTTP request, or a pending image, counts as busy, measured from when it started. Default `5000`; `0` waits until it ends, as Tapwing did before this option existed |
+| `--settle-http-ignore <regex>` | `settleHttpIgnore` | Requests whose URL matches never count as busy (repeatable). For analytics, long-poll and streaming endpoints |
+
+```yaml
+tapwing:
+  settleLoadTimeoutMs: 5000
+  settleHttpIgnore:
+    - "^https://analytics\\."
+    - "/events/poll"
+```
+
+- The CLI timeout overrides `config.yaml`; `--settle-http-ignore` patterns from the CLI are added to the ones in `config.yaml`.
+- Patterns are Dart regular expressions, matched anywhere in the full request URL (scheme, host, path and query). They are compiled in the app, so an invalid one fails `launchApp` with the driver's error.
+- A request shorter than the bound is waited for exactly as before. The 5 s default is longer than the 3 s settle timeout, so no single step ends sooner than it used to: it either sees the request finish or reaches its settle timeout first. What changes is that the steps after it stop waiting for a request that is already more than 5 s old (a hung call, a download, a long-poll). A long-poll loop opens a new request each time and each one blocks for the bound again, so put such endpoints in `settleHttpIgnore`.
+- If a later step needs the result of a slow request, wait for what it shows (`assertVisible`, `extendedWaitUntil`) rather than relying on settle; `waitForAnimationToEnd` is bounded the same way.
+- Server-sent event streams (`text/event-stream`) and WebSocket connections stop counting as busy as soon as they are established. Requests past the bound and ignored requests still appear in the `--trace` request log.
+- Both settle policies (`--settle-policy v2|legacy`) use the same rules; `--check-settle` only reports animations and is not affected.
+- Needs a `tapwing_driver` that knows the options. An app built with an older driver ignores them (Tapwing prints a warning when you set one) and waits for every request.
 
 ## iOS Simulator differences
 

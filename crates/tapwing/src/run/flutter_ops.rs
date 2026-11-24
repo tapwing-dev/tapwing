@@ -31,6 +31,9 @@ pub(super) struct Handshake {
     pub(super) retries: u32,
 }
 
+/// The old-driver warning for the settle load options is printed once per run.
+static SETTLE_LOAD_WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn is_unknown_method(e: &anyhow::Error) -> bool {
     e.downcast_ref::<crate::driver::DriverError>().is_some_and(|d| d.code == "UNKNOWN_METHOD")
 }
@@ -43,6 +46,11 @@ impl DeviceFlutterBackend<'_> {
         *self.units_scale = res["pixelsPerUnit"].as_f64().filter(|v| *v > 0.0).unwrap_or(1.0);
         // F8b: older drivers ignore `httpLog` and never confirm it.
         self.drv.set_http_log(self.opts.trace && res["httpLog"] == true);
+        if let Some(warning) = self.opts.settle_load.unsupported_warning(&res)
+            && !SETTLE_LOAD_WARNED.swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            eprintln!("{}warning: {warning}", self.opts.log_prefix);
+        }
         Ok(())
     }
 
@@ -570,6 +578,7 @@ mod tests {
         Opts {
             settle_policy: "v2".into(),
             check_settle: false,
+            settle_load: Default::default(),
             cli_env: HashMap::new(),
             test_output_dir: PathBuf::from("out"),
             strict_input: false,
