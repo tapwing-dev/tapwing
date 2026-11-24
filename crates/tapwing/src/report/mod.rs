@@ -368,12 +368,13 @@ pub fn render_json_report(summary: &TestExecutionSummary) -> Result<String> {
     }))?)
 }
 
-/// Writes `contents` to `path`, creating parent directories if needed.
+/// Writes `contents` to `path` atomically (see [`crate::atomic_write`]),
+/// creating parent directories if needed.
 pub fn write_file_creating_parents(path: &Path, contents: &str) -> Result<()> {
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).with_context(|| format!("creating directory {}", parent.display()))?;
     }
-    std::fs::write(path, contents).with_context(|| format!("writing report to {}", path.display()))
+    crate::atomic_write::write(path, contents).with_context(|| format!("writing report to {}", path.display()))
 }
 
 /// Writes the requested `--format` report (`junit`, `html`, `html-detailed`) if enabled.

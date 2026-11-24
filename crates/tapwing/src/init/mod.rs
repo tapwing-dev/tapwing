@@ -288,10 +288,10 @@ fn write_file_plan(plan: &FilePlan) -> Result<()> {
                 std::fs::create_dir_all(parent)
                     .with_context(|| format!("failed to create directory {}", parent.display()))?;
             }
-            std::fs::write(path, new_content).with_context(|| format!("failed to write {}", path.display()))
+            crate::atomic_write::write(path, new_content).with_context(|| format!("failed to write {}", path.display()))
         }
         FilePlan::Update { path, new_content, .. } => {
-            std::fs::write(path, new_content).with_context(|| format!("failed to write {}", path.display()))
+            crate::atomic_write::write(path, new_content).with_context(|| format!("failed to write {}", path.display()))
         }
         FilePlan::SkipAlreadyPresent { .. } | FilePlan::Unchanged { .. } => Ok(()),
     }

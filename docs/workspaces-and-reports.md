@@ -62,6 +62,8 @@ tapwing test .maestro --report timings.json
 
 JUnit reports follow Maestro's XML structure (one `<testsuite>` per shard, custom `junitId` / `junitClassname` properties, and `[shard N] ` prefixes on failures). HTML and `html-detailed` reports are single self-contained files with no external CDN requests.
 
+Every report (`--report`, `--format`, `--trace`) is written to a temporary file next to its target and then renamed over it, so a crash or kill during the write leaves the previous report or the complete new one, never a truncated file.
+
 ## Exit codes
 
 | Code | Meaning |
