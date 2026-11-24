@@ -50,6 +50,34 @@ use pb::maestro_driver_client::MaestroDriverClient;
 /// Per-RPC deadline. A hierarchy dump on a busy UI can take seconds.
 const RPC_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Most ASCII characters sent in one `inputText` RPC. The driver types ASCII
+/// one key at a time, 75 ms apart (Maestro's pace), so a text of 400
+/// characters alone would outlast [`RPC_TIMEOUT`]; 100 take 7.5 s and leave
+/// room for a slow device.
+const ASCII_INPUT_CHUNK: usize = 100;
+
+/// Splits `text` into the pieces sent as one `inputText` RPC each.
+///
+/// Only pure ASCII is split: the driver types it key by key whatever the
+/// request boundaries are, so the result on the device is the same. Other
+/// text goes through one accessibility action (or the IME), whose time does
+/// not grow with the length like that and whose result at the cursor is not
+/// worth re-deriving per piece.
+fn input_text_chunks(text: &str) -> Vec<&str> {
+    let mut chunks = Vec::new();
+    let mut rest = text;
+    if text.is_ascii() {
+        while rest.len() > ASCII_INPUT_CHUNK
+            && let Some((head, tail)) = rest.split_at_checked(ASCII_INPUT_CHUNK)
+        {
+            chunks.push(head);
+            rest = tail;
+        }
+    }
+    chunks.push(rest);
+    chunks
+}
+
 /// Longest teardown waits for the driver to remove its mock-location providers.
 const DISABLE_LOCATION_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -404,10 +432,24 @@ impl NativeDriverClient {
         Ok(())
     }
 
+    /// Types `text`. A long ASCII text goes out in several RPCs (see
+    /// [`input_text_chunks`]) so that none of them outlasts the RPC deadline;
+    /// each is replayed or not on its own, so nothing is ever typed twice.
     pub fn input_text(&mut self, text: &str) -> Result<()> {
-        self.call("inputText", Replay::IfNotSent, text.to_string(), |mut c, text| async move {
-            c.input_text(pb::InputTextRequest { text }).await
-        })?;
+        let mut typed = 0;
+        for chunk in input_text_chunks(text) {
+            if typed > 0 {
+                crate::interrupt::check()?;
+            }
+            self.call("inputText", Replay::IfNotSent, chunk.to_string(), |mut c, text| async move {
+                c.input_text(pb::InputTextRequest { text }).await
+            })
+            .map_err(|e| match typed {
+                0 => e,
+                _ => e.context(format!("inputText stopped after {typed} of {} characters", text.len())),
+            })?;
+            typed += chunk.len();
+        }
         Ok(())
     }
 
@@ -505,6 +547,31 @@ mod tests {
             media_ext: "png".into(),
         };
         assert_eq!(round_trip(&media), media);
+    }
+
+    #[test]
+    fn long_ascii_text_is_split_so_no_rpc_outlasts_the_deadline() {
+        use super::{ASCII_INPUT_CHUNK, RPC_TIMEOUT, input_text_chunks};
+
+        assert_eq!(input_text_chunks(""), vec![""], "an empty text is still one RPC");
+        assert_eq!(input_text_chunks("hello 42"), vec!["hello 42"]);
+        let exact = "a".repeat(ASCII_INPUT_CHUNK);
+        assert_eq!(input_text_chunks(&exact), vec![exact.as_str()], "no empty trailing piece");
+
+        let long: String = ('a'..='z').cycle().take(2 * ASCII_INPUT_CHUNK + 50).collect();
+        let chunks = input_text_chunks(&long);
+        assert_eq!(chunks.iter().map(|c| c.len()).collect::<Vec<_>>(), vec![100, 100, 50]);
+        assert_eq!(chunks.concat(), long, "nothing lost, nothing reordered");
+
+        // The driver types one ASCII key every 75 ms: a full piece stays well inside the deadline.
+        let nominal = std::time::Duration::from_millis(75) * ASCII_INPUT_CHUNK as u32;
+        assert!(nominal * 3 <= RPC_TIMEOUT, "{nominal:?} per piece against {RPC_TIMEOUT:?}");
+
+        // Anything else is one action on the device and stays one request.
+        let unicode = "ž".repeat(3 * ASCII_INPUT_CHUNK);
+        assert_eq!(input_text_chunks(&unicode), vec![unicode.as_str()]);
+        let mixed = format!("{}🚀", "a".repeat(3 * ASCII_INPUT_CHUNK));
+        assert_eq!(input_text_chunks(&mixed), vec![mixed.as_str()]);
     }
 
     #[test]

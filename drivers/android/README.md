@@ -38,6 +38,12 @@ answer `UNIMPLEMENTED`.
 - **Different:** non-ASCII `inputText` is handled on the device without
   switching the IME (`ACTION_SET_TEXT` reproducing `commitText` at the cursor;
   an in-APK IME only as fallback). See `input/UnicodeTextInput.kt`.
+  `inputText` and `eraseAllText` look at the gRPC call before every key (or
+  IME text chunk) and stop, answering `CANCELLED`, once the client reset the
+  call, its deadline passed or the connection died; Maestro's driver types
+  the rest regardless (`input/CancellableLoop.kt`). The CLI sends ASCII text
+  in pieces of 100 characters, so that typing at 75 ms per key never
+  outlasts its 30 s RPC deadline.
   `enableMockLocationProviders` grants this package the mock-location app-op
   and location permissions itself. The gRPC server is grpc-okhttp instead of
   grpc-netty-shaded (same HTTP/2 wire, 4 MB APK instead of 12.6 MB) and

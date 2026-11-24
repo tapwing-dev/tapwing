@@ -21,7 +21,9 @@
 // types without switching the IME (UnicodeTextInput) instead of dropping it;
 // `enableMockLocationProviders` grants this package the mock-location app-op
 // and location permissions itself, `disableLocationUpdates` hands the app-op
-// back, and mock location left behind by a killed driver is removed at start.
+// back, and mock location left behind by a killed driver is removed at start;
+// `inputText` and `eraseAllText` stop between keys when the call is cancelled
+// and answer CANCELLED.
 // Hierarchy, tap, key, screenshot, window update and location semantics are
 // Maestro's.
 package dev.tapwing.driver
@@ -42,7 +44,9 @@ import androidx.test.uiautomator.UiDeviceAccess.clickNoSyncExt
 import dev.tapwing.driver.hierarchy.ToastListener
 import dev.tapwing.driver.hierarchy.ViewHierarchy
 import dev.tapwing.driver.input.AsciiKeys
+import dev.tapwing.driver.input.CancellableLoop
 import dev.tapwing.driver.input.InputInjector
+import dev.tapwing.driver.input.TypingCancelledException
 import dev.tapwing.driver.input.UnicodeTextInput
 import dev.tapwing.driver.location.MockLocationProvider
 import dev.tapwing.driver.location.MockProviders
@@ -136,26 +140,34 @@ class DriverService(
         request: MaestroAndroid.EraseAllTextRequest,
         responseObserver: StreamObserver<MaestroAndroid.EraseAllTextResponse>,
     ) = respond(responseObserver) {
-        repeat(request.charactersToErase) { inputInjector.pressKeyCode(KeyEvent.KEYCODE_DEL) }
+        val call = io.grpc.Context.current()
+        val total = request.charactersToErase
+        val erased = CancellableLoop.run(total, call::isCancelled) { inputInjector.pressKeyCode(KeyEvent.KEYCODE_DEL) }
+        if (erased < total) throw TypingCancelledException(erased, total, "deletions")
         MaestroAndroid.EraseAllTextResponse.getDefaultInstance()
     }
 
     /**
      * ASCII: one key press per character, 75 ms apart, like Maestro. Anything
      * else: [UnicodeTextInput] (where Maestro's host would switch to its IME).
+     *
+     * The call's context is cancelled when the client resets the stream, its
+     * deadline passes or the connection dies; typing stops at the next key.
      */
     override fun inputText(
         request: MaestroAndroid.InputTextRequest,
         responseObserver: StreamObserver<MaestroAndroid.InputTextResponse>,
     ) = respond(responseObserver) {
         val text = request.text
+        val call = io.grpc.Context.current()
         if (AsciiKeys.isAscii(text)) {
-            text.forEach { ch ->
-                AsciiKeys.forChar(ch)?.let { inputInjector.pressKeyCode(it.keyCode, it.metaState) }
+            val typed = CancellableLoop.run(text.length, call::isCancelled) { index ->
+                AsciiKeys.forChar(text[index])?.let { inputInjector.pressKeyCode(it.keyCode, it.metaState) }
                 Thread.sleep(ASCII_KEY_INTERVAL_MS)
             }
+            if (typed < text.length) throw TypingCancelledException(typed, text.length, "keys")
         } else {
-            val path = unicodeInput.input(text)
+            val path = unicodeInput.input(text, call::isCancelled)
             Log.d(TAG, "Unicode input via $path")
         }
         MaestroAndroid.InputTextResponse.getDefaultInstance()
@@ -300,6 +312,12 @@ class DriverService(
     private inline fun <T> respond(observer: StreamObserver<T>, body: () -> T) {
         val response = try {
             body()
+        } catch (cancelled: TypingCancelledException) {
+            // Nobody is listening any more; the status is for the log and for a client
+            // that is still there after a server-side deadline.
+            Log.w(TAG, "RPC ${cancelled.message}")
+            observer.onError(Status.CANCELLED.withDescription(cancelled.message).asRuntimeException())
+            return
         } catch (t: Throwable) {
             Log.e(TAG, "RPC failed", t)
             observer.onError(t.internalError())

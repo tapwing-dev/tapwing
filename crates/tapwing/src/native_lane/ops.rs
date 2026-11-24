@@ -638,6 +638,8 @@ mod tests {
         mock_location_enabled_calls: usize,
         mock_location_disabled_calls: usize,
         locations: Vec<(f64, f64)>,
+        /// `inputText` answers with an error once this many texts were typed.
+        fail_typing_after: Option<usize>,
         /// Optional hook invoked after a mutation RPC (`tap`/`inputText`/`eraseAllText`)
         /// has been recorded in state, before the response is returned.
         on_mutation: Option<Box<dyn FnMut() + Send>>,
@@ -699,6 +701,9 @@ mod tests {
             r: Request<pb::InputTextRequest>,
         ) -> Result<Response<pb::InputTextResponse>, Status> {
             let mut s = self.0.lock().unwrap();
+            if s.fail_typing_after == Some(s.typed.len()) {
+                return Err(Status::internal("keyboard gone"));
+            }
             s.typed.push(r.into_inner().text);
             if let Some(cb) = s.on_mutation.as_mut() {
                 cb();
@@ -1045,6 +1050,29 @@ mod tests {
         assert_eq!(s.typed, vec!["hello 42".to_string()]);
         assert_eq!(s.erased, vec![50]);
         assert_eq!(s.taps, vec![(540, 600)]);
+    }
+
+    #[test]
+    fn long_ascii_text_is_typed_in_several_rpcs_and_stops_at_the_first_failure() {
+        let mut f = fixture(APP);
+        let long: String = ('a'..='z').cycle().take(250).collect();
+        f.client.input_text(&long).unwrap();
+        {
+            let typed = &f.state.lock().unwrap().typed;
+            assert_eq!(typed.iter().map(String::len).collect::<Vec<_>>(), vec![100, 100, 50]);
+            assert_eq!(typed.concat(), long);
+        }
+
+        // The driver refuses the third piece: nothing after it is sent, and the error
+        // says how far the text got.
+        let mut f = fixture(APP);
+        f.state.lock().unwrap().fail_typing_after = Some(2);
+        let err = format!("{:#}", f.client.input_text(&long).unwrap_err());
+        assert!(
+            err.contains("inputText stopped after 200 of 250 characters") && err.contains("keyboard gone"),
+            "{err}"
+        );
+        assert_eq!(f.state.lock().unwrap().typed.concat(), long[..200]);
     }
 
     #[test]
