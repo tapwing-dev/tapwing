@@ -28,7 +28,9 @@ pub use helpers::{
 pub(super) use helpers::{run, wait_with_timeout};
 pub use permissions::{PermissionOutcome, all_permission_targets_from_dump, translate_permission_name};
 pub(super) use recording::{MIN_RECORDING, RECORDER_EXIT_TIMEOUT};
-pub use recording::{remote_recording_path, screenrecord_command};
+pub use recording::{
+    OrphanRecording, orphan_recordings, remote_recording_path, screenrecord_command, stop_orphan_recorders_script,
+};
 
 use helpers::{ADB_SERVER_START_TIMEOUT, media_scan_script, plan_media, validate_package_name};
 use permissions::{translate_appops_value, translate_permission_value};

@@ -111,6 +111,36 @@ fn run_polled(cmd: &mut Command, timeout: Duration, pause: &mut dyn FnMut(Durati
     Err(failure)
 }
 
+/// Whether a process with this pid exists on this host. Errs on the side of
+/// "alive": callers use it to decide that leftovers of a dead Tapwing process
+/// may be removed, so an unknown answer must keep them.
+pub(crate) fn pid_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        // Pid 0 and negative pids address process groups, not one process.
+        let Some(pid) = libc::pid_t::try_from(pid).ok().filter(|p| *p > 0) else { return true };
+        // SAFETY: signal 0 only checks for existence and permission.
+        if unsafe { libc::kill(pid, 0) } == 0 {
+            return true;
+        }
+        // Anything but "no such process" (`EPERM`: it exists under another user) counts as alive.
+        std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        true
+    }
+}
+
+/// Sends `SIGKILL` to a process that is not our child; `true` when it was delivered.
+#[cfg(unix)]
+pub(crate) fn kill_pid(pid: u32) -> bool {
+    let Some(pid) = libc::pid_t::try_from(pid).ok().filter(|p| *p > 0) else { return false };
+    // SAFETY: plain `kill(2)` on a positive pid, so one process and never a group.
+    unsafe { libc::kill(pid, libc::SIGKILL) == 0 }
+}
+
 /// `SIGKILL` cannot be ignored, so the `wait` that reaps the child returns promptly.
 fn kill_and_reap(child: &mut Child) {
     let _ = child.kill();
@@ -370,6 +400,21 @@ mod tests {
         let pid = out.stdout_lossy().trim().to_string();
         assert!(process_alive(&pid), "the grandchild should still be running");
         let _ = Command::new("kill").arg(&pid).output();
+    }
+
+    #[test]
+    fn pid_liveness_tells_a_running_process_from_a_reaped_one_and_keeps_unknowns() {
+        assert!(pid_alive(std::process::id()));
+        let mut child = sh("exec sleep 60").spawn().unwrap();
+        let pid = child.id();
+        assert!(pid_alive(pid));
+        assert!(kill_pid(pid));
+        child.wait().unwrap();
+        assert!(!pid_alive(pid), "a reaped child is gone");
+        assert!(!kill_pid(pid));
+        assert!(pid_alive(0), "pid 0 is a process group, never reported dead");
+        assert!(pid_alive(u32::MAX), "a pid that does not fit pid_t is never reported dead");
+        assert!(!kill_pid(0) && !kill_pid(u32::MAX));
     }
 
     #[test]
