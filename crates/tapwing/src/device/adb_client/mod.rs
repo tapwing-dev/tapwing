@@ -1161,4 +1161,130 @@ mod tests {
         );
         handle.join().unwrap();
     }
+
+    #[test]
+    fn push_file_fails_before_connecting_when_local_file_is_missing() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let client = AdbClient::with_addr(addr);
+
+        let missing = std::env::temp_dir().join(format!("tapwing_missing_push_{}.bin", std::process::id()));
+        let _ = std::fs::remove_file(&missing);
+        let err = client.push_file("emulator-5554", &missing, "/data/local/tmp/missing.bin", 0o644).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("opening local file") && msg.contains("tapwing_missing_push_"), "{msg}");
+        assert!(
+            matches!(listener.accept(), Err(ref e) if e.kind() == ErrorKind::WouldBlock),
+            "push_file must not open an ADB TCP connection when the local file is missing"
+        );
+    }
+
+    #[test]
+    fn push_file_streams_multi_chunk_and_recovers_early_fail_mid_stream() {
+        // Part A: >128 KiB (200 KiB = 4 DATA frames) round-trip from disk.
+        let payload: Vec<u8> = (0..(200 * 1024)).map(|i| (i % 241) as u8).collect();
+        let expected = payload.clone();
+
+        // Part B: 4 MiB file on disk aborted mid-stream with FAIL ("No space left on device").
+        let big_payload = vec![0xCD; 4 * 1024 * 1024];
+
+        let (client, handle) = spawn_mock_adb_server(2, move |idx, mut stream| {
+            assert_eq!(mock_read_command(&mut stream), "host:transport:emulator-5554");
+            mock_write_okay(&mut stream);
+            assert_eq!(mock_read_command(&mut stream), "sync:");
+            mock_write_okay(&mut stream);
+
+            let (tag, spec_len) = read_sync_header(&mut stream).unwrap();
+            assert_eq!(&tag, b"SEND");
+            let _spec = read_exact_string(&mut stream, spec_len as usize).unwrap();
+
+            if idx == 0 {
+                let mut received = Vec::new();
+                let mut chunks = 0usize;
+                loop {
+                    let (ctag, clen) = read_sync_header(&mut stream).unwrap();
+                    if &ctag == b"DATA" {
+                        assert!(clen as usize <= SYNC_DATA_MAX);
+                        let mut buf = vec![0u8; clen as usize];
+                        stream.read_exact(&mut buf).unwrap();
+                        received.extend_from_slice(&buf);
+                        chunks += 1;
+                    } else if &ctag == b"DONE" {
+                        assert!(clen > 0, "mtime should be non-zero");
+                        break;
+                    } else {
+                        panic!("unexpected sync tag: {:?}", ctag);
+                    }
+                }
+                assert_eq!(chunks, 4);
+                assert_eq!(received, expected);
+                write_sync_header(&mut stream, b"OKAY", 0).unwrap();
+            } else {
+                let (ctag, clen) = read_sync_header(&mut stream).unwrap();
+                assert_eq!(&ctag, b"DATA");
+                let mut first = vec![0u8; clen as usize];
+                stream.read_exact(&mut first).unwrap();
+
+                let err_msg = b"No space left on device";
+                write_sync_packet(&mut stream, b"FAIL", err_msg.len() as u32, err_msg).unwrap();
+                stream.flush().unwrap();
+                let _ = stream.shutdown(std::net::Shutdown::Write);
+                let mut drain = [0u8; 16 * 1024];
+                while let Ok(n) = stream.read(&mut drain) {
+                    if n == 0 {
+                        break;
+                    }
+                }
+            }
+        });
+
+        let dir = std::env::temp_dir().join(format!("tapwing_push_stream_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let small_path = dir.join("small.bin");
+        let big_path = dir.join("big.bin");
+        std::fs::write(&small_path, &payload).unwrap();
+        std::fs::write(&big_path, &big_payload).unwrap();
+
+        client.push_file("emulator-5554", &small_path, "/data/local/tmp/small.bin", 0o644).unwrap();
+        let err = client.push_file("emulator-5554", &big_path, "/sdcard/big.bin", 0o644).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("No space left on device"), "expected early FAIL reason, got: {msg}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn sync_read_chunk_retries_interrupted_and_coalesces_partial_reads() {
+        struct FlakyReader {
+            data: &'static [u8],
+            pos: usize,
+            calls: usize,
+        }
+        impl Read for FlakyReader {
+            fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+                self.calls += 1;
+                if self.calls % 2 == 1 {
+                    return Err(std::io::Error::new(ErrorKind::Interrupted, "EINTR"));
+                }
+                if self.pos >= self.data.len() {
+                    return Ok(0);
+                }
+                let step = 3.min(out.len()).min(self.data.len() - self.pos);
+                out[..step].copy_from_slice(&self.data[self.pos..self.pos + step]);
+                self.pos += step;
+                Ok(step)
+            }
+        }
+
+        let mut reader = FlakyReader { data: b"abcdefghij", pos: 0, calls: 0 };
+        let mut buf = [0u8; 8];
+        assert_eq!(sync::read_chunk(&mut reader, &mut buf).unwrap(), 8);
+        assert_eq!(&buf, b"abcdefgh");
+        assert_eq!(sync::read_chunk(&mut reader, &mut buf).unwrap(), 2);
+        assert_eq!(&buf[..2], b"ij");
+        assert_eq!(sync::read_chunk(&mut reader, &mut buf).unwrap(), 0);
+    }
 }

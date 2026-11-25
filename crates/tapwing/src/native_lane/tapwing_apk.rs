@@ -8,14 +8,16 @@
 //! built from. Installing it reuses the hash-cached installer of
 //! [`super::apk`], with its own device marker.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use anyhow::{Context, Result, bail};
 
-use super::apk::{InstallPlan, sha256_hex};
-use crate::driver_bundle::{self, DriverPlatform};
+use super::apk::InstallPlan;
+use crate::driver_bundle::{self, DriverPlatform, FileStamp, sidecar_path, sidecar_sha256, stream_file_sha256};
 
 /// Package of the driver APK; its instrumentation targets itself.
 pub const PACKAGE: &str = "dev.tapwing.driver";
@@ -99,18 +101,50 @@ fn current_source() -> Option<ApkSource> {
     )
 }
 
-/// `<apk>.sha256` in `shasum -a 256` format, written next to the APK by
-/// `scripts/build-android-driver.sh` and shipped in release bundles.
-fn sidecar_sha256(apk: &Path) -> Option<String> {
-    let mut name = apk.as_os_str().to_owned();
-    name.push(".sha256");
-    let text = fs::read_to_string(PathBuf::from(name)).ok()?;
-    let sum = text.split_whitespace().next()?.to_ascii_lowercase();
-    (sum.len() == 64 && sum.bytes().all(|b| b.is_ascii_hexdigit())).then_some(sum)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ApkSourceKind {
+    Env,
+    Bundled,
+    Checkout,
 }
 
-/// Hashes the APK; a bundled APK must match its sidecar (a broken release
-/// install fails loudly instead of installing something unexpected).
+impl ApkSource {
+    fn kind(&self) -> ApkSourceKind {
+        match self {
+            Self::Env(_) => ApkSourceKind::Env,
+            Self::Bundled(_) => ApkSourceKind::Bundled,
+            Self::Checkout(_) => ApkSourceKind::Checkout,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ApkCacheKey {
+    kind: ApkSourceKind,
+    canonical_path: PathBuf,
+    apk_stamp: FileStamp,
+    sidecar_stamp: Option<FileStamp>,
+}
+
+static APK_HASH_CACHE: OnceLock<Mutex<HashMap<ApkCacheKey, String>>> = OnceLock::new();
+
+fn apk_cache() -> &'static Mutex<HashMap<ApkCacheKey, String>> {
+    APK_HASH_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cache_key(source: &ApkSource) -> Option<ApkCacheKey> {
+    let canonical_path = fs::canonicalize(source.path()).ok()?;
+    let apk_stamp = FileStamp::from_path(&canonical_path)?;
+    let sidecar_stamp = match source {
+        ApkSource::Bundled(_) => FileStamp::from_path(&sidecar_path(&canonical_path)),
+        ApkSource::Env(_) | ApkSource::Checkout(_) => None,
+    };
+    Some(ApkCacheKey { kind: source.kind(), canonical_path, apk_stamp, sidecar_stamp })
+}
+
+/// Hashes the APK in 64 KiB chunks; a bundled APK must match its sidecar (a
+/// broken release install fails loudly instead of installing something
+/// unexpected).
 pub fn resolve(source: Option<ApkSource>) -> Result<TapwingApk> {
     let Some(source) = source else {
         bail!(
@@ -119,8 +153,8 @@ pub fn resolve(source: Option<ApkSource>) -> Result<TapwingApk> {
         );
     };
     let path = source.path();
-    let bytes = fs::read(path).with_context(|| format!("reading the Tapwing driver APK {}", path.display()))?;
-    let sha256 = sha256_hex(&[&bytes]);
+    let sha256 =
+        stream_file_sha256(path, None).with_context(|| format!("reading the Tapwing driver APK {}", path.display()))?;
     if let ApkSource::Bundled(_) = source
         && let Some(expected) = sidecar_sha256(path)
         && expected != sha256
@@ -134,9 +168,30 @@ pub fn resolve(source: Option<ApkSource>) -> Result<TapwingApk> {
     Ok(TapwingApk { source, sha256 })
 }
 
-/// Finds and hashes the Tapwing driver APK.
+fn locate_with_cache(
+    source: Option<ApkSource>,
+    cache: &Mutex<HashMap<ApkCacheKey, String>>,
+    resolve_fn: impl FnOnce(Option<ApkSource>) -> Result<TapwingApk>,
+) -> Result<TapwingApk> {
+    let key = source.as_ref().and_then(cache_key);
+    if let (Some(src), Some(k)) = (&source, &key) {
+        let guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(sha256) = guard.get(k) {
+            return Ok(TapwingApk { source: src.clone(), sha256: sha256.clone() });
+        }
+    }
+    let apk = resolve_fn(source)?;
+    if let Some(k) = key {
+        let mut guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+        guard.insert(k, apk.sha256.clone());
+    }
+    Ok(apk)
+}
+
+/// Finds and hashes the Tapwing driver APK, memoizing verified digests by
+/// canonical path and file/sidecar metadata stamps across shards and restarts.
 pub fn locate() -> Result<TapwingApk> {
-    let apk = resolve(current_source())?;
+    let apk = locate_with_cache(current_source(), apk_cache(), resolve)?;
     if std::env::var_os(driver_bundle::DEBUG_ENV).is_some_and(|v| !v.is_empty() && v != "0") {
         eprintln!("debug: Tapwing Android driver: {} (sha256 {})", apk.source, apk.sha256);
     }
@@ -158,6 +213,9 @@ pub fn version_line() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::super::apk::sha256_hex;
     use super::*;
 
     struct Scratch(PathBuf);
@@ -308,5 +366,56 @@ mod tests {
         assert_eq!(plan.packages, vec![(PACKAGE, PathBuf::from("/x/tapwing-driver.apk"))]);
         assert_eq!(plan.marker, DEVICE_MARKER);
         assert_eq!(plan.sha256, "ab");
+    }
+
+    #[test]
+    fn locate_memoizes_unchanged_apk_and_invalidates_on_apk_or_sidecar_change() {
+        let s = Scratch::new("memoize");
+        let apk = s.0.join(APK_NAME);
+        let initial_bytes = b"initial-apk-payload";
+        fs::write(&apk, initial_bytes).unwrap();
+        let initial_sum = sha256_hex(&[initial_bytes]);
+        let sidecar = s.0.join(format!("{APK_NAME}.sha256"));
+        fs::write(&sidecar, format!("{initial_sum}  {APK_NAME}\n")).unwrap();
+
+        let cache = Mutex::new(HashMap::new());
+        let resolves = AtomicUsize::new(0);
+        let run = |src: ApkSource| {
+            locate_with_cache(Some(src), &cache, |opt| {
+                resolves.fetch_add(1, Ordering::Relaxed);
+                resolve(opt)
+            })
+        };
+
+        // First call hashes the APK; second call with unchanged file/sidecar is a cache hit.
+        let first = run(ApkSource::Bundled(apk.clone())).unwrap();
+        let second = run(ApkSource::Bundled(apk.clone())).unwrap();
+        assert_eq!(first.sha256, initial_sum);
+        assert_eq!(second.sha256, initial_sum);
+        assert_eq!(resolves.load(Ordering::Relaxed), 1, "second locate must hit cache");
+
+        // Replacing the APK bytes invalidates the cache and detects corruption against the sidecar.
+        fs::write(&apk, b"tampered-apk-payload").unwrap();
+        let err = format!("{:#}", run(ApkSource::Bundled(apk.clone())).unwrap_err());
+        assert!(err.contains("corrupt") && err.contains(&initial_sum), "{err}");
+        assert_eq!(resolves.load(Ordering::Relaxed), 2);
+
+        // Updating the APK back with matching sidecar succeeds and caches again.
+        let updated_bytes = b"updated-apk-payload-v2";
+        let updated_sum = sha256_hex(&[updated_bytes]);
+        fs::write(&apk, updated_bytes).unwrap();
+        fs::write(&sidecar, format!("{updated_sum}  {APK_NAME}\n")).unwrap();
+        let third = run(ApkSource::Bundled(apk.clone())).unwrap();
+        assert_eq!(third.sha256, updated_sum);
+        assert_eq!(resolves.load(Ordering::Relaxed), 3);
+        let fourth = run(ApkSource::Bundled(apk.clone())).unwrap();
+        assert_eq!(fourth.sha256, updated_sum);
+        assert_eq!(resolves.load(Ordering::Relaxed), 3, "unchanged updated APK must hit cache");
+
+        // Tampering with only the `.sha256` sidecar immediately invalidates the cache.
+        fs::write(&sidecar, format!("{}  {APK_NAME}\n", "0".repeat(64))).unwrap();
+        let err = format!("{:#}", run(ApkSource::Bundled(apk)).unwrap_err());
+        assert!(err.contains("corrupt"), "{err}");
+        assert_eq!(resolves.load(Ordering::Relaxed), 4);
     }
 }

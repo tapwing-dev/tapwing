@@ -485,8 +485,8 @@ pub fn write_formatted_report(
     let rendered = match format {
         ReportFormat::Noop => return Ok(None),
         ReportFormat::Junit => junit::render_junit(summary)?,
-        ReportFormat::Html => html::render_html(summary, false),
-        ReportFormat::HtmlDetailed => html::render_html(summary, true),
+        ReportFormat::Html => html::render_html_for_path(summary, false, Some(&target)),
+        ReportFormat::HtmlDetailed => html::render_html_for_path(summary, true, Some(&target)),
     };
     write_file_creating_parents(&target, &rendered)?;
     Ok(Some(target))

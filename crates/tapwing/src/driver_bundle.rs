@@ -8,7 +8,95 @@
 //! (env override, bundle, checkout build).
 
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+
+use sha2::{Digest, Sha256};
+
+/// Chunk size (64 KiB) for streaming SHA-256 verification of driver artifacts.
+const HASH_BUF_SIZE: usize = 64 * 1024;
+
+/// Metadata snapshot used to detect whether a cached driver artifact or its
+/// `.sha256` sidecar has been replaced or modified on disk.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct FileStamp {
+    len: u64,
+    modified: Option<SystemTime>,
+    #[cfg(unix)]
+    dev: u64,
+    #[cfg(unix)]
+    ino: u64,
+    #[cfg(unix)]
+    ctime: i64,
+    #[cfg(unix)]
+    ctime_nsec: i64,
+}
+
+impl FileStamp {
+    pub(crate) fn from_path(path: &Path) -> Option<Self> {
+        let meta = fs::metadata(path).ok()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            Some(Self {
+                len: meta.len(),
+                modified: meta.modified().ok(),
+                dev: meta.dev(),
+                ino: meta.ino(),
+                ctime: meta.ctime(),
+                ctime_nsec: meta.ctime_nsec(),
+            })
+        }
+        #[cfg(not(unix))]
+        {
+            Some(Self { len: meta.len(), modified: meta.modified().ok() })
+        }
+    }
+}
+
+/// Returns the `<path>.sha256` sidecar path for a driver artifact.
+pub(crate) fn sidecar_path(artifact: &Path) -> PathBuf {
+    let mut name = artifact.as_os_str().to_owned();
+    name.push(".sha256");
+    PathBuf::from(name)
+}
+
+/// Parses `<artifact>.sha256` in `shasum -a 256` format, returning the
+/// lowercase 64-digit hex digest when present and well-formed.
+pub(crate) fn sidecar_sha256(artifact: &Path) -> Option<String> {
+    let text = fs::read_to_string(sidecar_path(artifact)).ok()?;
+    let sum = text.split_whitespace().next()?.to_ascii_lowercase();
+    (sum.len() == 64 && sum.bytes().all(|b| b.is_ascii_hexdigit())).then_some(sum)
+}
+
+/// Formats a finalized `Sha256` digest as lowercase hex.
+pub(crate) fn hex_digest(hasher: Sha256) -> String {
+    hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Streams `path` in 64 KiB chunks without buffering the whole artifact in
+/// memory, updating `combined` (when supplied) in the same pass and returning
+/// the file's lowercase hex SHA-256.
+pub(crate) fn stream_file_sha256(path: &Path, mut combined: Option<&mut Sha256>) -> std::io::Result<String> {
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; HASH_BUF_SIZE];
+    loop {
+        match file.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                hasher.update(&buf[..n]);
+                if let Some(ref mut c) = combined {
+                    c.update(&buf[..n]);
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(hex_digest(hasher))
+}
 
 /// The bundle below the install prefix.
 pub const BUNDLE_DIR: &str = "share/tapwing/drivers";

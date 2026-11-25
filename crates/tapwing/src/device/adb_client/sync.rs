@@ -19,9 +19,16 @@ const MAX_SYNC_DATA_PACKET: usize = 4 * 1024 * 1024;
 static PULL_TMP_SEQ: AtomicU32 = AtomicU32::new(0);
 
 impl AdbClient {
-    /// Pushes in-memory bytes to `remote_path` on `serial` with POSIX `mode`
-    /// (e.g. `0o644`) using the ADB `sync:` (`SEND`/`DATA`/`DONE`) service.
-    pub fn push(&self, serial: &str, data: &[u8], remote_path: &str, mode: u32) -> Result<()> {
+    /// Streams bytes from `reader` to `remote_path` on `serial` with POSIX
+    /// `mode` and `mtime` using a bounded `SYNC_DATA_MAX` (64 KiB) buffer.
+    pub(crate) fn push_reader<R: Read>(
+        &self,
+        serial: &str,
+        reader: &mut R,
+        remote_path: &str,
+        mode: u32,
+        mtime: u32,
+    ) -> Result<()> {
         let mut stream = self.connect_sync(serial)?;
 
         // SEND request payload is "<remote_path>,<decimal_mode>".
@@ -29,17 +36,23 @@ impl AdbClient {
         write_sync_packet(&mut stream, b"SEND", send_spec.len() as u32, send_spec.as_bytes())
             .with_context(|| format!("sending sync SEND for `{remote_path}`"))?;
 
-        let write_outcome: std::io::Result<()> = (|| {
-            for chunk in data.chunks(SYNC_DATA_MAX) {
-                if has_pending_sync_response(&stream) {
-                    return Err(std::io::Error::new(ErrorKind::BrokenPipe, "early sync response available"));
+        let mut buf = vec![0u8; SYNC_DATA_MAX];
+        let write_outcome: std::io::Result<()> = loop {
+            let n = match read_chunk(reader, &mut buf) {
+                Ok(0) => break write_sync_header_io(&mut stream, b"DONE", mtime).and_then(|()| stream.flush()),
+                Ok(n) => n,
+                Err(read_err) => {
+                    return Err(anyhow::Error::new(read_err))
+                        .with_context(|| format!("reading payload for adb push `{remote_path}`"));
                 }
-                write_sync_packet_io(&mut stream, b"DATA", chunk.len() as u32, chunk)?;
+            };
+            if has_pending_sync_response(&stream) {
+                break Err(std::io::Error::new(ErrorKind::BrokenPipe, "early sync response available"));
             }
-            let mtime = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as u32).unwrap_or(0);
-            write_sync_header_io(&mut stream, b"DONE", mtime)?;
-            stream.flush()
-        })();
+            if let Err(err) = write_sync_packet_io(&mut stream, b"DATA", n as u32, &buf[..n]) {
+                break Err(err);
+            }
+        };
 
         if let Err(io_err) = write_outcome {
             if is_peer_abort(&io_err)
@@ -68,11 +81,28 @@ impl AdbClient {
         }
     }
 
-    /// Pushes a local file from disk to `remote_path` on `serial` with POSIX `mode`.
+    /// Pushes in-memory bytes to `remote_path` on `serial` with POSIX `mode`
+    /// (e.g. `0o644`) using the ADB `sync:` (`SEND`/`DATA`/`DONE`) service.
+    pub fn push(&self, serial: &str, data: &[u8], remote_path: &str, mode: u32) -> Result<()> {
+        let mut slice = data;
+        self.push_reader(serial, &mut slice, remote_path, mode, current_unix_mtime())
+    }
+
+    /// Streams a local file from disk to `remote_path` on `serial` with POSIX
+    /// `mode` using a bounded 64 KiB buffer.
     pub fn push_file(&self, serial: &str, local_path: &Path, remote_path: &str, mode: u32) -> Result<()> {
-        let data = std::fs::read(local_path)
-            .with_context(|| format!("reading local file `{}` for adb push", local_path.display()))?;
-        self.push(serial, &data, remote_path, mode)
+        // Open before connecting to ADB so missing/unreadable local files fail immediately.
+        let mut file = std::fs::File::open(local_path)
+            .with_context(|| format!("opening local file `{}` for adb push", local_path.display()))?;
+        let mtime = file
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as u32)
+            .filter(|&s| s > 0)
+            .unwrap_or_else(current_unix_mtime);
+        self.push_reader(serial, &mut file, remote_path, mode, mtime)
     }
 
     /// Streams `remote_path` from `serial` into `out` using the ADB `sync:`
@@ -166,6 +196,24 @@ impl AdbClient {
         send_command(&mut stream, "sync:").with_context(|| format!("starting sync service on `{serial}`"))?;
         Ok(stream)
     }
+}
+
+fn current_unix_mtime() -> u32 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as u32).unwrap_or(0)
+}
+
+/// Fills `buf` from `reader` until full or EOF, retrying `ErrorKind::Interrupted`.
+pub(super) fn read_chunk<R: Read + ?Sized>(reader: &mut R, buf: &mut [u8]) -> std::io::Result<usize> {
+    let mut filled = 0;
+    while filled < buf.len() {
+        match reader.read(&mut buf[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(filled)
 }
 
 fn write_sync_header_io<W: Write>(stream: &mut W, tag: &[u8; 4], arg: u32) -> std::io::Result<()> {

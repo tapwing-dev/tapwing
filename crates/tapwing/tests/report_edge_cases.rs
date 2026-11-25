@@ -7,7 +7,7 @@ use quick_xml::Reader;
 use quick_xml::events::Event;
 use serde_json::{Value, json};
 use tapwing::failure::{FailureDiagnostics, Suggestion};
-use tapwing::report::html::{escape_html, render_html};
+use tapwing::report::html::{escape_html, render_html, render_html_for_path};
 use tapwing::report::junit::{render_junit, sanitize_xml_text};
 use tapwing::report::{
     FlowRunRecord, FlowStatus, ReportFormat, StepRecord, SuiteResult, TestExecutionSummary, render_json_report,
@@ -363,10 +363,13 @@ fn html_escapes_suite_names_tags_properties_and_failure_screenshot_paths() {
 }
 
 #[test]
-fn html_inlines_an_existing_failure_screenshot_as_a_data_uri_with_no_external_urls() {
+fn html_inlines_an_existing_failure_screenshot_as_jpeg_thumbnail_linked_to_full_png() {
     let dir = temp_dir("shot");
-    let png = dir.join("fail.png");
-    std::fs::write(&png, [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]).unwrap();
+    let failures = dir.join("failures");
+    std::fs::create_dir_all(&failures).unwrap();
+    let png = failures.join("my fail #1?v=2%20.png");
+    image::RgbaImage::from_pixel(4, 4, image::Rgba([66, 133, 244, 255])).save(&png).unwrap();
+
     let mut f = failing("flow", "boom");
     f.failure_diagnostics = Some(FailureDiagnostics {
         screenshot: Some(png.to_string_lossy().into_owned()),
@@ -374,10 +377,31 @@ fn html_inlines_an_existing_failure_screenshot_as_a_data_uri_with_no_external_ur
         hierarchy: Some("- a".into()),
         ..Default::default()
     });
-    let html = render_html(&summary(vec![suite(None, None, vec![f])]), false);
-    assert!(html.contains("<img src=\"data:image/png;base64,iVBORw0KGgo=\""), "{html}");
+    let s = summary(vec![suite(None, None, vec![f])]);
+
+    let html = render_html(&s, false);
+    assert!(html.contains("data:image/jpeg;base64,"), "{html}");
+    assert!(!html.contains("data:image/png;base64,"), "{html}");
+    assert!(html.contains("target=\"_blank\" rel=\"noopener\"><img src=\"data:image/jpeg;base64,"), "{html}");
     assert!(!html.contains("http://") && !html.contains("https://"), "self-contained: no external URLs");
     assert!(html.contains("UI tree at failure (1 element)"), "singular element: {html}");
+
+    // Relative link resolution across directories & URL-escaping of #, ?, %, spaces.
+    let nested_report = dir.join("reports/report.html");
+    let cross_dir = render_html_for_path(&s, false, Some(&nested_report));
+    assert!(cross_dir.contains("href=\"../failures/my%20fail%20%231%3Fv%3D2%2520.png\""), "{cross_dir}");
+    assert!(!cross_dir.contains("http://") && !cross_dir.contains("https://"));
+
+    // Non-decodable bytes on disk degrade cleanly without panicking or emitting <img>.
+    let bad_png = failures.join("corrupt.png");
+    std::fs::write(&bad_png, [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]).unwrap();
+    let mut f_bad = failing("bad_img", "boom");
+    f_bad.failure_diagnostics =
+        Some(FailureDiagnostics { screenshot: Some(bad_png.to_string_lossy().into_owned()), ..Default::default() });
+    let bad_html = render_html_for_path(&summary(vec![suite(None, None, vec![f_bad])]), false, Some(&nested_report));
+    assert!(!bad_html.contains("<img"), "{bad_html}");
+    assert!(bad_html.contains("href=\"../failures/corrupt.png\""), "{bad_html}");
+
     let _ = std::fs::remove_dir_all(dir);
 }
 
