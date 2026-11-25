@@ -31,8 +31,19 @@ fn main() {
     // SAFETY: build scripts are single-threaded at this point.
     unsafe { std::env::set_var("PROTOC", protoc) };
     tonic_prost_build::configure()
-        // The server side is only used by in-process fakes in tests.
-        .build_server(true)
+        .build_server(false)
         .compile_protos(&["proto/maestro_android.proto"], &["proto"])
-        .expect("compiling maestro_android.proto");
+        .expect("compiling maestro_android.proto client");
+
+    // The server side is only used by in-process fakes in tests. Generate it
+    // separately so normal builds do not require `tonic/server`.
+    let server_out_dir = PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR is set by Cargo")).join("server");
+    std::fs::create_dir_all(&server_out_dir).expect("creating server proto out_dir");
+    tonic_prost_build::configure()
+        .out_dir(&server_out_dir)
+        .build_client(false)
+        .build_server(true)
+        .extern_path(".maestro_android", "crate::native_lane::client::pb")
+        .compile_protos(&["proto/maestro_android.proto"], &["proto"])
+        .expect("compiling maestro_android.proto server");
 }

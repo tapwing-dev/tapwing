@@ -799,12 +799,14 @@ pub(super) mod tests {
                 let port = listener.local_addr().unwrap().port();
                 let incoming = tonic::transport::server::TcpIncoming::from(listener);
                 let _ = port_tx.send(port);
-                let _ = tonic::transport::Server::builder()
-                    .add_service(svc)
-                    .serve_with_incoming_shutdown(incoming, async {
-                        let _ = stopped.await;
-                    })
-                    .await;
+                // Abort the fake server on stop instead of waiting for graceful HTTP/2 GOAWAY:
+                // `NativeDriverClient` uses a `current_thread` runtime that is idle between RPCs.
+                let server = tokio::spawn(async move {
+                    let _ = tonic::transport::Server::builder().add_service(svc).serve_with_incoming(incoming).await;
+                });
+                let _ = stopped.await;
+                server.abort();
+                let _ = server.await;
             });
         });
         let port = port_rx.recv_timeout(Duration::from_secs(5)).expect("fake driver bound");

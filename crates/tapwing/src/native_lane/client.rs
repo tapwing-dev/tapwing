@@ -39,10 +39,18 @@ use tonic::transport::{Channel, Endpoint};
 
 use super::connect::{ClosedBeforeServerSpoke, SERVER_FIRST_GRACE, ServerFirstConnector};
 
-/// Generated protobuf messages and the tonic client.
+/// Generated protobuf messages and the tonic client (plus server stubs in tests).
 #[allow(clippy::all, clippy::pedantic, missing_docs)]
 pub mod pb {
     tonic::include_proto!("maestro_android");
+
+    #[cfg(test)]
+    mod server_pb {
+        include!(concat!(env!("OUT_DIR"), "/server/maestro_android.rs"));
+    }
+
+    #[cfg(test)]
+    pub use server_pb::maestro_driver_server;
 }
 
 use pb::maestro_driver_client::MaestroDriverClient;
@@ -196,8 +204,7 @@ impl NativeDriverClient {
     /// [`Self::connect`] with the time a new connection waits for the driver
     /// to speak first (see [`super::connect`]).
     pub(super) fn connect_with_grace(host_port: u16, server_first_grace: Duration) -> Result<Self> {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1)
+        let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .thread_name("tapwing-native-grpc")
             .build()
@@ -726,19 +733,22 @@ mod tests {
                 let port = listener.local_addr().unwrap().port();
                 let incoming = tonic::transport::server::TcpIncoming::from(listener);
                 let _ = port_tx.send(port);
-                let _ = tonic::transport::Server::builder()
-                    .add_service(MaestroDriverServer::new(HangingDriver))
-                    .serve_with_incoming_shutdown(incoming, async {
-                        let _ = stop_rx.await;
-                    })
-                    .await;
+                let server = tokio::spawn(async move {
+                    let _ = tonic::transport::Server::builder()
+                        .add_service(MaestroDriverServer::new(HangingDriver))
+                        .serve_with_incoming(incoming)
+                        .await;
+                });
+                let _ = stop_rx.await;
+                server.abort();
+                let _ = server.await;
             });
         });
         let port = port_rx.recv_timeout(Duration::from_secs(5)).unwrap();
 
         // Build a client identical to `NativeDriverClient::connect`, with a short
         // per-RPC `Endpoint::timeout` so we exercise the real timeout status without waiting 30 s.
-        let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let endpoint = Endpoint::from_shared(format!("http://127.0.0.1:{port}"))
             .unwrap()
             .tcp_nodelay(true)
