@@ -64,18 +64,39 @@ impl From<FlowError> for FlowFailure {
     }
 }
 
+#[derive(Clone)]
+struct CachedFlow {
+    flow: ParsedFlow,
+    /// Deepest sub-flow nesting below this file (`0` for a leaf flow).
+    sub_depth: usize,
+}
+
+enum Preloaded {
+    Text(String),
+    Docs(Vec<Node>),
+}
+
 /// Parses flow files, following sub-flow references.
 #[derive(Default)]
 pub struct Loader {
     depth: Cell<usize>,
+    /// Deepest `depth` reached within the currently executing `parse_file` subtree.
+    max_depth: Cell<usize>,
     /// Identity (see [`identity`]) of every file being parsed, outermost first.
     /// A sub-flow already in here is a cycle.
     in_progress: RefCell<Vec<PathBuf>>,
     /// Finished files by normalized path, so a flow included from many places
     /// is read and parsed once.
-    parsed: RefCell<HashMap<PathBuf, ParsedFlow>>,
+    parsed: RefCell<HashMap<PathBuf, CachedFlow>>,
+    /// Source text or YAML trees already read during discovery, consumed once
+    /// on first parse so files are not read or YAML-loaded twice.
+    preloaded: RefCell<HashMap<PathBuf, Preloaded>>,
     #[cfg(test)]
     files_parsed: Cell<usize>,
+    #[cfg(test)]
+    disk_reads: Cell<usize>,
+    #[cfg(test)]
+    yaml_loads: Cell<usize>,
 }
 
 /// Sub-flow nesting limit, a backstop behind the cycle check for chains the
@@ -87,29 +108,106 @@ impl Loader {
         Self::default()
     }
 
+    pub(crate) fn preload_text(&self, path: &Path, text: String) {
+        self.preloaded.borrow_mut().insert(normalize(path), Preloaded::Text(text));
+    }
+
+    pub(crate) fn preload_docs(&self, path: &Path, docs: Vec<Node>) {
+        self.preloaded.borrow_mut().insert(normalize(path), Preloaded::Docs(docs));
+    }
+
+    pub(crate) fn has_flow_cached(&self, path: &Path) -> bool {
+        let path = normalize(path);
+        self.parsed.borrow().contains_key(&path) || self.preloaded.borrow().contains_key(&path)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn files_parsed(&self) -> usize {
+        self.files_parsed.get()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn disk_reads(&self) -> usize {
+        self.disk_reads.get()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn yaml_loads(&self) -> usize {
+        self.yaml_loads.get()
+    }
+
     pub fn parse_file(&self, path: &Path) -> Result<ParsedFlow, FlowError> {
         let path = normalize(path);
-        if let Some(done) = self.parsed.borrow().get(&path) {
-            return Ok(done.clone());
+        if let Some(hit) = self.check_cache_or_depth(&path)? {
+            return Ok(hit);
         }
-        let source = std::fs::read_to_string(&path).map_err(|e| {
-            FlowError::at(&path, Problem::new("Failed to read file", e.to_string(), Pos { line: 1, col: 1 }))
-        })?;
-        if self.depth.get() >= MAX_DEPTH {
+        let preloaded = self.preloaded.borrow_mut().remove(&path);
+        match preloaded {
+            Some(Preloaded::Docs(docs)) => self.parse_normalized_docs(&path, &docs),
+            Some(Preloaded::Text(text)) => self.parse_normalized_source(&path, &text),
+            None => {
+                #[cfg(test)]
+                self.disk_reads.set(self.disk_reads.get() + 1);
+                let source = std::fs::read_to_string(&path).map_err(|e| {
+                    FlowError::at(&path, Problem::new("Failed to read file", e.to_string(), Pos { line: 1, col: 1 }))
+                })?;
+                self.parse_normalized_source(&path, &source)
+            }
+        }
+    }
+
+    /// Parses `source` as the flow at `path`, reusing and populating this loader's cache.
+    pub fn parse_file_with_source(&self, path: &Path, source: &str) -> Result<ParsedFlow, FlowError> {
+        let path = normalize(path);
+        if let Some(hit) = self.check_cache_or_depth(&path)? {
+            return Ok(hit);
+        }
+        self.preloaded.borrow_mut().remove(&path);
+        self.parse_normalized_source(&path, source)
+    }
+
+    /// Enforces `MAX_DEPTH` before checking `parsed` so an already-cached sub-flow
+    /// cannot bypass the nesting limit when included at or near `MAX_DEPTH`.
+    fn check_cache_or_depth(&self, path: &Path) -> Result<Option<ParsedFlow>, FlowError> {
+        let d0 = self.depth.get();
+        if d0 >= MAX_DEPTH {
             return Err(FlowError::at(
-                &path,
+                path,
                 Problem::failed(format!("Sub-flows nest deeper than {MAX_DEPTH} levels"), Pos { line: 1, col: 1 }),
             ));
         }
+        if let Some(cached) = self.parsed.borrow().get(path)
+            && d0 + cached.sub_depth < MAX_DEPTH
+        {
+            self.max_depth.set(self.max_depth.get().max(d0 + cached.sub_depth));
+            return Ok(Some(cached.flow.clone()));
+        }
+        Ok(None)
+    }
+
+    fn parse_normalized_source(&self, path: &Path, source: &str) -> Result<ParsedFlow, FlowError> {
+        #[cfg(test)]
+        self.yaml_loads.set(self.yaml_loads.get() + 1);
+        let docs = yaml::load(source).map_err(|e| FlowError::at(path, Problem::failed(e.message, e.pos)))?;
+        self.parse_normalized_docs(path, &docs)
+    }
+
+    fn parse_normalized_docs(&self, path: &Path, docs: &[Node]) -> Result<ParsedFlow, FlowError> {
         #[cfg(test)]
         self.files_parsed.set(self.files_parsed.get() + 1);
-        self.depth.set(self.depth.get() + 1);
-        self.in_progress.borrow_mut().push(identity(&path));
-        let result = self.parse(&path, &source);
+        let d0 = self.depth.get();
+        self.depth.set(d0 + 1);
+        let prev_max = self.max_depth.replace(d0);
+        self.in_progress.borrow_mut().push(identity(path));
+        let result = self.parse_docs(path, docs).map_err(|f| f.at(path));
         self.in_progress.borrow_mut().pop();
-        self.depth.set(self.depth.get() - 1);
+        let child_max = self.max_depth.get();
+        self.max_depth.set(prev_max.max(child_max));
+        self.depth.set(d0);
         if let Ok(flow) = &result {
-            self.parsed.borrow_mut().insert(path, flow.clone());
+            self.parsed
+                .borrow_mut()
+                .insert(path.to_path_buf(), CachedFlow { flow: flow.clone(), sub_depth: child_max.saturating_sub(d0) });
         }
         result
     }
@@ -146,7 +244,13 @@ impl Loader {
     }
 
     fn parse_inner(&self, path: &Path, source: &str) -> Result<ParsedFlow, FlowFailure> {
+        #[cfg(test)]
+        self.yaml_loads.set(self.yaml_loads.get() + 1);
         let docs = yaml::load(source).map_err(|e| FlowFailure::here(Problem::failed(e.message, e.pos)))?;
+        self.parse_docs(path, &docs)
+    }
+
+    fn parse_docs(&self, path: &Path, docs: &[Node]) -> Result<ParsedFlow, FlowFailure> {
         let start = Pos { line: 1, col: 1 };
         let config_node = match docs.first() {
             Some(n @ Node::Map(..)) => n,
@@ -379,5 +483,71 @@ mod tests {
             assert!(parse_file(&dir.join("f1.yaml")).is_ok());
         });
         deep.unwrap().join().unwrap();
+    }
+
+    #[test]
+    fn shared_subflow_across_multiple_top_level_flows_is_parsed_once() {
+        let mut files: Vec<(String, String)> = vec![("common/login.yaml".into(), "- tapOn: Sign In\n".into())];
+        let count = 6;
+        for i in 0..count {
+            files.push((format!("flow_{i}.yaml"), format!("- runFlow: common/login.yaml\n- tapOn: Item {i}\n")));
+        }
+        let refs: Vec<(&str, &str)> = files.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        let dir = flows(&refs);
+
+        let loader = Loader::new();
+        for i in 0..count {
+            let cached = loader.parse_file(&dir.join(format!("flow_{i}.yaml"))).unwrap();
+            let uncached = parse_file(&dir.join(format!("flow_{i}.yaml"))).unwrap();
+            assert_eq!(format!("{:?}", cached.commands), format!("{:?}", uncached.commands));
+        }
+        assert_eq!(loader.files_parsed(), count + 1, "6 top-level flows + common/login.yaml once");
+        assert_eq!(loader.disk_reads(), count + 1);
+    }
+
+    #[test]
+    fn cached_subflow_still_enforces_max_depth() {
+        let names: Vec<String> = (0..=MAX_DEPTH).map(|i| format!("f{i}.yaml")).collect();
+        let bodies: Vec<String> = (0..=MAX_DEPTH)
+            .map(|i| if i == MAX_DEPTH { "- launchApp\n".to_string() } else { format!("- runFlow: f{}.yaml\n", i + 1) })
+            .collect();
+        let files: Vec<(&str, &str)> =
+            names.iter().map(String::as_str).zip(bodies.iter().map(String::as_str)).collect();
+        let dir = flows(&files);
+
+        let deep = std::thread::Builder::new().stack_size(32 * 1024 * 1024).spawn(move || {
+            let loader = Loader::new();
+            // Pre-populate the cache at depth 0 with both the leaf (f64) and an
+            // intermediate ancestor (f62, sub_depth = 2).
+            assert!(loader.parse_file(&dir.join(format!("f{MAX_DEPTH}.yaml"))).is_ok());
+            assert!(loader.parse_file(&dir.join(format!("f{}.yaml", MAX_DEPTH - 2))).is_ok());
+
+            let err = loader.parse_file(&dir.join("f0.yaml")).unwrap_err();
+            assert_eq!(err.message, "Sub-flows nest deeper than 64 levels");
+            assert_eq!(err.path, dir.join(format!("f{MAX_DEPTH}.yaml")));
+            assert!(loader.parse_file(&dir.join("f1.yaml")).is_ok());
+        });
+        deep.unwrap().join().unwrap();
+    }
+
+    #[test]
+    fn parse_file_with_source_populates_cache_without_disk_read() {
+        let dir = flows(&[("common/login.yaml", "- launchApp\n"), ("main.yaml", "- runFlow: common/login.yaml\n")]);
+        let login_path = dir.join("common/login.yaml");
+        let login_src = std::fs::read_to_string(&login_path).unwrap();
+
+        let loader = Loader::new();
+        let login = loader.parse_file_with_source(&login_path, &login_src).unwrap();
+        assert_eq!(loader.disk_reads(), 0);
+        assert_eq!(loader.files_parsed(), 1);
+
+        let main = loader.parse_file(&dir.join("main.yaml")).unwrap();
+        assert_eq!(loader.disk_reads(), 1, "only main.yaml is read from disk");
+        assert_eq!(loader.files_parsed(), 2, "common/login.yaml comes from cache");
+        assert_eq!(
+            format!("{:?}", main.commands),
+            format!("{:?}", parse_file(&dir.join("main.yaml")).unwrap().commands)
+        );
+        assert_eq!(login.path, login_path);
     }
 }

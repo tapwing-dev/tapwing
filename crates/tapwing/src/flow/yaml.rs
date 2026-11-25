@@ -212,7 +212,7 @@ pub struct SyntaxError {
 
 /// All documents of a YAML stream.
 pub fn load(source: &str) -> Result<Vec<Node>, SyntaxError> {
-    let mut builder = Builder { source: source.chars().collect(), stack: Vec::new(), docs: Vec::new() };
+    let mut builder = Builder { source, chars: None, stack: Vec::new(), docs: Vec::new() };
     let mut parser = Parser::new_from_str(source);
     parser
         .load(&mut builder, true)
@@ -225,13 +225,16 @@ enum Open {
     Map(Vec<(Node, Node)>, Option<Node>, Pos),
 }
 
-struct Builder {
-    source: Vec<char>,
+struct Builder<'a> {
+    source: &'a str,
+    /// Populated lazily on the first `Event::Alias`, because `yaml-rust2` reports
+    /// char indices rather than byte offsets and most flows contain no aliases.
+    chars: Option<Vec<char>>,
     stack: Vec<Open>,
     docs: Vec<Node>,
 }
 
-impl Builder {
+impl Builder<'_> {
     fn push(&mut self, node: Node) {
         match self.stack.last_mut() {
             None => self.docs.push(node),
@@ -244,15 +247,15 @@ impl Builder {
     }
 
     /// The anchor name of `*name` at `mark` (yaml-rust2 only reports an id).
-    fn alias_name(&self, mark: Marker) -> String {
-        let from = mark.index();
-        let text: String = self.source.get(from..).unwrap_or_default().iter().collect();
-        let name = text.strip_prefix('*').unwrap_or(&text);
-        name.chars().take_while(|c| !c.is_whitespace() && !matches!(c, ',' | ']' | '}')).collect()
+    fn alias_name(&mut self, mark: Marker) -> String {
+        let chars = self.chars.get_or_insert_with(|| self.source.chars().collect());
+        let tail = chars.get(mark.index()..).unwrap_or_default();
+        let name = tail.strip_prefix(&['*']).unwrap_or(tail);
+        name.iter().copied().take_while(|c| !c.is_whitespace() && !matches!(c, ',' | ']' | '}')).collect()
     }
 }
 
-impl MarkedEventReceiver for Builder {
+impl MarkedEventReceiver for Builder<'_> {
     fn on_event(&mut self, ev: Event, mark: Marker) {
         match ev {
             Event::Scalar(text, style, _, tag) => {
@@ -349,5 +352,19 @@ mod tests {
         let Node::Seq(items, _) = &docs[0] else { panic!() };
         let entries = items[1].map_entries().unwrap();
         assert_eq!(entries[0].1.as_scalar().unwrap().text, "t");
+    }
+
+    #[test]
+    fn alias_after_multibyte_utf8_and_delimiters_resolves_char_index() {
+        let src = "# café 日本語 🚀\n- tapOn: &anchor_one \"héllo 🎉\"\n- tapOn: &other bar\n- tapOn: [*anchor_one, *other]\n- tapOn: {id: *anchor_one}\n";
+        let docs = load(src).unwrap();
+        let Node::Seq(items, _) = &docs[0] else { panic!() };
+        let seq_entries = items[2].map_entries().unwrap();
+        let Node::Seq(seq, _) = seq_entries[0].1 else { panic!() };
+        assert_eq!(seq[0].as_scalar().unwrap().text, "anchor_one");
+        assert_eq!(seq[1].as_scalar().unwrap().text, "other");
+        let map_entries = items[3].map_entries().unwrap();
+        let inner = map_entries[0].1.map_entries().unwrap();
+        assert_eq!(inner[0].1.as_scalar().unwrap().text, "anchor_one");
     }
 }

@@ -166,19 +166,32 @@ pub fn parse(text: &str) -> Result<Parsed, Problem> {
     Ok(parsed)
 }
 
+pub(crate) enum WorkspaceConfigProbe {
+    IsConfig,
+    NotConfigText,
+    NotConfigDocs(Vec<Node>),
+}
+
+pub(crate) fn probe_workspace_config(text: &str) -> WorkspaceConfigProbe {
+    if text.contains("\n---") {
+        return WorkspaceConfigProbe::NotConfigText;
+    }
+    let Ok(docs) = yaml::load(text) else {
+        return WorkspaceConfigProbe::NotConfigText;
+    };
+    let is_cfg = match docs.first().and_then(Node::map_entries) {
+        Some(entries) => entries.iter().all(|(k, _, _)| KNOWN_KEYS.contains(k)),
+        None => false,
+    };
+    if is_cfg { WorkspaceConfigProbe::IsConfig } else { WorkspaceConfigProbe::NotConfigDocs(docs) }
+}
+
 /// `Filters.isWorkspaceConfigFile`: YAML without a `\n---` document
 /// separator whose top level is a map of known workspace keys only. Such
 /// files (`config.yaml` under another name, `regression_config.yaml`, …)
 /// are not flows. Anything unreadable or not a map is not a config.
 pub fn looks_like_workspace_config(text: &str) -> bool {
-    if text.contains("\n---") {
-        return false;
-    }
-    let Ok(docs) = yaml::load(text) else { return false };
-    match docs.first().and_then(Node::map_entries) {
-        Some(entries) => entries.iter().all(|(k, _, _)| KNOWN_KEYS.contains(k)),
-        None => false,
-    }
+    matches!(probe_workspace_config(text), WorkspaceConfigProbe::IsConfig)
 }
 
 /// `WorkspaceConfig.StringList`: a single string or a list of strings.

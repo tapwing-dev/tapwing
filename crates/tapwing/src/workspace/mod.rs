@@ -83,6 +83,17 @@ pub fn plan(
     exclude_tags: &[String],
     config: Option<&Path>,
 ) -> Result<ExecutionPlan, PlanError> {
+    let loader = flow::Loader::new();
+    plan_with_loader(input, include_tags, exclude_tags, config, &loader)
+}
+
+pub(crate) fn plan_with_loader(
+    input: &[PathBuf],
+    include_tags: &[String],
+    exclude_tags: &[String],
+    config: Option<&Path>,
+    loader: &flow::Loader,
+) -> Result<ExecutionPlan, PlanError> {
     // `TestCommand` makes every input absolute and de-duplicates it.
     let mut inputs: Vec<PathBuf> = Vec::new();
     for p in input.iter().map(|p| absolute(p)) {
@@ -103,7 +114,7 @@ pub fn plan(
     if let [single] = inputs.as_slice()
         && single.is_file()
     {
-        let flow = flow::parse_file(single)?;
+        let flow = loader.parse_file(single)?;
         let config = config.as_deref().map(config::read).transpose()?.unwrap_or_default();
         return Ok(ExecutionPlan { sequence: Vec::new(), continue_on_failure: true, flows: vec![flow], config });
     }
@@ -113,12 +124,13 @@ pub fn plan(
     let config_path = config.or_else(|| dirs.iter().find_map(|d| find_config_file(d)));
     let config_ref = config_path.as_deref();
 
-    let flow_files: Vec<PathBuf> = files.into_iter().filter(|f| is_flow_file(f, config_ref)).collect();
+    let flow_files: Vec<PathBuf> =
+        files.into_iter().filter(|f| is_flow_file_with_loader(f, config_ref, loader)).collect();
     let mut dir_flows: Vec<PathBuf> = Vec::new();
     for dir in &dirs {
         let mut found = Vec::new();
         walk(dir, &mut found);
-        found.retain(|p| is_flow_file(p, config_ref));
+        found.retain(|p| is_flow_file_with_loader(p, config_ref, loader));
         found.sort();
         dir_flows.extend(found);
     }
@@ -176,7 +188,7 @@ pub fn plan(
         return Err(PlanError::Validation(message));
     }
 
-    let parsed = selected.iter().map(|p| flow::parse_file(p)).collect::<Result<Vec<_>, _>>()?;
+    let parsed = selected.iter().map(|p| loader.parse_file(p)).collect::<Result<Vec<_>, _>>()?;
 
     let all_include: Vec<String> =
         include_tags.iter().cloned().chain(ws.include_tags.iter().flatten().cloned()).collect();
@@ -254,6 +266,17 @@ fn flows_in_sequence(flows: &[ParsedFlow], order: &[String]) -> Result<Vec<usize
 /// workspace config, not named `config.*`, and does not look like a workspace
 /// config either.
 pub fn is_flow_file(path: &Path, config: Option<&Path>) -> bool {
+    is_flow_file_inner(path, config, None)
+}
+
+/// Like [`is_flow_file`], caching any read source or parsed YAML in `loader`
+/// so a subsequent [`flow::Loader::parse_file`] avoids reading or YAML-parsing
+/// the file a second time.
+pub fn is_flow_file_with_loader(path: &Path, config: Option<&Path>, loader: &flow::Loader) -> bool {
+    is_flow_file_inner(path, config, Some(loader))
+}
+
+fn is_flow_file_inner(path: &Path, config: Option<&Path>, loader: Option<&flow::Loader>) -> bool {
     if !path.is_file() {
         return false;
     }
@@ -266,9 +289,26 @@ pub fn is_flow_file(path: &Path, config: Option<&Path>) -> bool {
     if !matches!(ext, "yaml" | "yml") || stem == "config" {
         return false;
     }
-    match std::fs::read_to_string(path) {
-        Ok(text) => !config::looks_like_workspace_config(&text),
-        Err(_) => true,
+    if loader.is_some_and(|l| l.has_flow_cached(path)) {
+        return true;
+    }
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return true;
+    };
+    match config::probe_workspace_config(&text) {
+        config::WorkspaceConfigProbe::IsConfig => false,
+        config::WorkspaceConfigProbe::NotConfigText => {
+            if let Some(loader) = loader {
+                loader.preload_text(path, text);
+            }
+            true
+        }
+        config::WorkspaceConfigProbe::NotConfigDocs(docs) => {
+            if let Some(loader) = loader {
+                loader.preload_docs(path, docs);
+            }
+            true
+        }
     }
 }
 
@@ -316,4 +356,57 @@ fn join_paths(paths: &[PathBuf]) -> String {
 /// `toYamlListString`: `- a` per line.
 fn yaml_list(items: &[String]) -> String {
     items.iter().map(|s| format!("- {s}")).collect::<Vec<_>>().join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn temp_workspace(files: &[(&str, &str)]) -> PathBuf {
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("tapwing-ws-cache-{}-{n}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, body) in files {
+            let file = dir.join(name);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, body).unwrap();
+        }
+        dir.canonicalize().unwrap()
+    }
+
+    #[test]
+    fn plan_shares_loader_and_avoids_double_reads_and_parses() {
+        let mut files: Vec<(String, String)> = vec![
+            ("config.yaml".into(), "flows:\n  - \"*\"\n".into()),
+            ("common/login.yaml".into(), "appId: com.example.app\n---\n- tapOn: Sign In\n".into()),
+        ];
+        let count = 8;
+        for i in 0..count {
+            files.push((
+                format!("flow_{i}.yaml"),
+                format!("appId: com.example.app\n---\n- runFlow: common/login.yaml\n- tapOn: Item {i}\n"),
+            ));
+        }
+        let refs: Vec<(&str, &str)> = files.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        let dir = temp_workspace(&refs);
+
+        let loader = flow::Loader::new();
+        let plan = plan_with_loader(std::slice::from_ref(&dir), &[], &[], None, &loader).unwrap();
+        assert_eq!(plan.flows.len(), count);
+        assert_eq!(loader.files_parsed(), count + 1, "8 top-level flows + common/login.yaml once");
+        assert_eq!(loader.disk_reads(), 0, "all files were already read once during discovery");
+    }
+
+    #[test]
+    fn discovery_reuses_yaml_docs_when_no_document_separator() {
+        let dir = temp_workspace(&[("bad_flow.yaml", "notAConfigKey: 1\n")]);
+        let loader = flow::Loader::new();
+        let err = plan_with_loader(std::slice::from_ref(&dir), &[], &[], None, &loader).unwrap_err();
+        assert!(matches!(err, PlanError::Flow(ref e) if e.title == "Config Field Required"));
+        assert_eq!(loader.disk_reads(), 0, "discovered file was not read from disk twice");
+        assert_eq!(loader.yaml_loads(), 0, "already-loaded YAML docs were reused without a second yaml::load");
+    }
 }
