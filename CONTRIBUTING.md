@@ -66,12 +66,12 @@ scripts/test-dist.sh
 
 | Suite | Where | What it guards |
 |---|---|---|
-| Unit tests | `crates/tapwing/src/**` (`#[cfg(test)]`) | Driver connection and reconnect handling, driver artifact discovery and SHA-256 checks, reports, trace redaction, planners |
+| Unit tests | `crates/tapwing/src/**` (`#[cfg(test)]`) | Driver connection and reconnect handling, the `launchApp` / `setPermissions` scripts and the Android native-lane startup against a fake ADB server (`device/adb_client/fake.rs`; every script is parsed with `sh -n` and run under the host `sh` with stubbed device commands), driver artifact discovery and SHA-256 checks, reports, trace redaction, planners |
 | CLI end-to-end | `crates/tapwing/tests/cli_e2e.rs` | The compiled `tapwing` binary: `--version`/`--help`, `check`, `init`, `test` argument validation, exit codes and messages |
 | Integration | `crates/tapwing/tests/*.rs` | Parser parity with Maestro (`compat`), workspace planner, sharding, reports (`report_edge_cases`), app health, failure reports, trace, `init` |
 | Dart driver | `packages/tapwing_driver/test` | Selector engine, snapshot semantics, RPC protocol and error wire format, idle detection, input injection |
 | Sample app | `examples/sample_app/test` | Widget tests of the app, `tapwing_driver` selectors resolving against the real UI, and every `id:` in `.maestro/` still existing in the app |
-| Android driver | `drivers/android/driver/src/test` | Pure Kotlin helpers: ASCII key table, Unicode text chunks and splices, XML character filtering |
+| Android driver | `drivers/android/driver/src/test` | Pure Kotlin helpers: ASCII key table, Unicode text chunks and splices, the cancellable typing loop, XML character filtering |
 | iOS driver | `drivers/ios/Tests` | `TapwingRunnerCore`: HTTP/1.1 framing, wire models, error classification, orientation math |
 
 Useful single Rust suites: `cargo test --test cli_e2e`, `--test compat` (parser parity with Maestro), `--test workspace` (workspace planner parity), `--test f6_sharding_and_reports`, `--test init` (also keeps the CLI and driver versions in lockstep).

@@ -762,30 +762,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tapwing"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "clap",
- "fancy-regex",
- "image",
- "libc",
- "prost",
- "quick-xml",
- "rquickjs",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tonic",
- "tonic-prost",
- "tonic-prost-build",
- "ureq",
- "yaml-rust2",
- "zip",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1359,6 +1335,33 @@ name = "sync_wrapper"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
+
+[[package]]
+name = "tapwing"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "fancy-regex",
+ "hyper-util",
+ "image",
+ "libc",
+ "prost",
+ "quick-xml",
+ "rquickjs",
+ "serde",
+ "serde_json",
+ "sha2",
+ "socket2",
+ "tokio",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
+ "tower-service",
+ "ureq",
+ "yaml-rust2",
+ "zip",
+]
 
 [[package]]
 name = "tempfile"

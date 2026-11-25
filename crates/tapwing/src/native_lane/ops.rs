@@ -596,7 +596,7 @@ impl<'a> NativeOps<'a> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use std::sync::{Arc, Mutex};
 
     use tonic::{Request, Response, Status, Streaming};
@@ -607,6 +607,7 @@ mod tests {
         self,
         maestro_driver_server::{MaestroDriver, MaestroDriverServer},
     };
+    use crate::native_lane::connect::testing::{Peer, serve as serve_peer};
 
     const DIALOG: &str = r#"<hierarchy rotation="0">
   <node text="" bounds="[0,0][1080,2400]" enabled="true">
@@ -622,8 +623,8 @@ mod tests {
 </hierarchy>"#;
 
     #[derive(Default)]
-    struct FakeState {
-        xml: String,
+    pub(in crate::native_lane) struct FakeState {
+        pub(in crate::native_lane) xml: String,
         taps: Vec<(u32, u32)>,
         typed: Vec<String>,
         erased: Vec<u32>,
@@ -637,6 +638,8 @@ mod tests {
         mock_location_enabled_calls: usize,
         mock_location_disabled_calls: usize,
         locations: Vec<(f64, f64)>,
+        /// `inputText` answers with an error once this many texts were typed.
+        fail_typing_after: Option<usize>,
         /// Optional hook invoked after a mutation RPC (`tap`/`inputText`/`eraseAllText`)
         /// has been recorded in state, before the response is returned.
         on_mutation: Option<Box<dyn FnMut() + Send>>,
@@ -698,6 +701,9 @@ mod tests {
             r: Request<pb::InputTextRequest>,
         ) -> Result<Response<pb::InputTextResponse>, Status> {
             let mut s = self.0.lock().unwrap();
+            if s.fail_typing_after == Some(s.typed.len()) {
+                return Err(Status::internal("keyboard gone"));
+            }
             s.typed.push(r.into_inner().text);
             if let Some(cb) = s.on_mutation.as_mut() {
                 cb();
@@ -758,8 +764,8 @@ mod tests {
     }
 
     /// A fake driver serving on a free loopback port until stopped or dropped.
-    struct Served {
-        port: u16,
+    pub(in crate::native_lane) struct Served {
+        pub(in crate::native_lane) port: u16,
         thread: Option<std::thread::JoinHandle<()>>,
         stop: Option<tokio::sync::oneshot::Sender<()>>,
     }
@@ -782,7 +788,7 @@ mod tests {
         }
     }
 
-    fn serve(state: Arc<Mutex<FakeState>>) -> Served {
+    pub(in crate::native_lane) fn serve(state: Arc<Mutex<FakeState>>) -> Served {
         let (port_tx, port_rx) = std::sync::mpsc::channel::<u16>();
         let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
         let svc = MaestroDriverServer::new(FakeDriver(state));
@@ -1047,6 +1053,29 @@ mod tests {
     }
 
     #[test]
+    fn long_ascii_text_is_typed_in_several_rpcs_and_stops_at_the_first_failure() {
+        let mut f = fixture(APP);
+        let long: String = ('a'..='z').cycle().take(250).collect();
+        f.client.input_text(&long).unwrap();
+        {
+            let typed = &f.state.lock().unwrap().typed;
+            assert_eq!(typed.iter().map(String::len).collect::<Vec<_>>(), vec![100, 100, 50]);
+            assert_eq!(typed.concat(), long);
+        }
+
+        // The driver refuses the third piece: nothing after it is sent, and the error
+        // says how far the text got.
+        let mut f = fixture(APP);
+        f.state.lock().unwrap().fail_typing_after = Some(2);
+        let err = format!("{:#}", f.client.input_text(&long).unwrap_err());
+        assert!(
+            err.contains("inputText stopped after 200 of 250 characters") && err.contains("keyboard gone"),
+            "{err}"
+        );
+        assert_eq!(f.state.lock().unwrap().typed.concat(), long[..200]);
+    }
+
+    #[test]
     fn input_text_goes_through_the_rpc_without_an_ime_switch() {
         let mut f = fixture(APP);
         let mut ops = NativeOps::new(&mut f.client, &f.adb);
@@ -1186,19 +1215,6 @@ mod tests {
         std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
     }
 
-    /// Accepts connections and closes them at once, like an `adb forward` whose
-    /// device end is gone: the TCP connect succeeds, the HTTP/2 handshake does not.
-    fn accept_and_close() -> u16 {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        std::thread::spawn(move || {
-            while let Ok((stream, _)) = listener.accept() {
-                drop(stream);
-            }
-        });
-        port
-    }
-
     /// A replacement driver for a restart, with its own state; counts the restarts.
     struct Replacement {
         state: Arc<Mutex<FakeState>>,
@@ -1250,29 +1266,96 @@ mod tests {
         assert_eq!(replacement.state.lock().unwrap().taps, vec![(10, 20), (30, 40)]);
     }
 
+    /// The three input RPCs, each sent once.
+    const INPUTS: [&str; 3] = ["tap", "inputText", "eraseAllText"];
+
+    fn send_input(client: &mut NativeDriverClient, kind: &str) -> Result<()> {
+        match kind {
+            "tap" => client.tap(100, 200),
+            "inputText" => client.input_text("once"),
+            "eraseAllText" => client.erase_all_text(5),
+            other => unreachable!("{other}"),
+        }
+    }
+
+    /// How many input RPCs of any kind the fake driver behind `state` received.
+    fn inputs_received(state: &Mutex<FakeState>) -> usize {
+        let s = state.lock().unwrap();
+        s.taps.len() + s.typed.len() + s.erased.len()
+    }
+
     #[test]
-    fn a_broken_connection_repeats_reads_but_not_input() {
-        let replacement = Replacement::new(APP);
-        let mut client = NativeDriverClient::connect(accept_and_close()).unwrap();
-        client.set_restart(replacement.restart_fn());
+    fn input_to_a_driver_that_died_behind_adb_forward_is_replayed_exactly_once() {
+        // `adb forward` to a dead device end accepts the connection and closes (or resets)
+        // it. Nothing reached the device, so after the restart the input is sent again.
+        for peer in [Peer::Closes, Peer::Resets] {
+            for kind in INPUTS {
+                let (port, seen) = serve_peer(peer);
+                let replacement = Replacement::new(APP);
+                let mut client = NativeDriverClient::connect(port).unwrap();
+                client.set_restart(replacement.restart_fn());
 
-        // Reads are always safe to repeat.
-        let xml = client.view_hierarchy().unwrap();
-        assert!(xml.contains("Request Location Permission"), "{xml}");
-        assert_eq!(replacement.restarts(), 1);
+                send_input(&mut client, kind).unwrap_or_else(|e| panic!("{peer:?} {kind}: {e:#}"));
+                assert!(!seen.recv().unwrap(), "{peer:?} {kind}: the dead end read a request");
+                assert_eq!(replacement.restarts(), 1, "{peer:?} {kind}");
+                assert_eq!(inputs_received(&replacement.state), 1, "{peer:?} {kind}: delivered once, not twice");
+                let notices = client.take_restart_notices();
+                assert!(notices.len() == 1 && notices[0].contains(kind), "{peer:?} {kind}: {notices:?}");
 
-        // Input whose request may have been applied is restarted but not repeated.
-        let mut client = NativeDriverClient::connect(accept_and_close()).unwrap();
-        let second = Replacement::new(APP);
-        client.set_restart(second.restart_fn());
-        let err = format!("{:#}", client.input_text("hello").unwrap_err());
-        assert!(err.contains("not repeated") && err.contains("`inputText`"), "{err}");
-        assert!(second.state.lock().unwrap().typed.is_empty(), "the text must not be typed twice");
-        assert_eq!(second.restarts(), 1);
-        // The driver is healthy again for the next step.
-        client.input_text("hello").unwrap();
-        assert_eq!(second.state.lock().unwrap().typed, vec!["hello".to_string()]);
-        assert_eq!(second.restarts(), 1);
+                // The new session serves the next step without another restart.
+                send_input(&mut client, kind).unwrap();
+                assert_eq!((replacement.restarts(), inputs_received(&replacement.state)), (1, 2), "{peer:?} {kind}");
+            }
+        }
+    }
+
+    #[test]
+    fn input_a_peer_read_before_it_reset_the_connection_is_never_replayed() {
+        // The peer took the whole request off the wire and then reset the connection. Whether
+        // it had sent its own preface or not, it may have applied the input.
+        for peer in [Peer::ReadsRequestThenResets, Peer::SilentReadsRequestThenResets] {
+            for kind in INPUTS {
+                let (port, seen) = serve_peer(peer);
+                let replacement = Replacement::new(APP);
+                let mut client = NativeDriverClient::connect(port).unwrap();
+                client.set_restart(replacement.restart_fn());
+
+                let err = format!("{:#}", send_input(&mut client, kind).unwrap_err());
+                assert!(err.contains("not repeated") && err.contains(kind), "{peer:?} {kind}: {err}");
+                assert!(seen.recv().unwrap(), "{peer:?} {kind}: the peer never got the request");
+                assert_eq!(replacement.restarts(), 1, "{peer:?} {kind}");
+                assert_eq!(inputs_received(&replacement.state), 0, "{peer:?} {kind}: must not be sent again");
+
+                // The driver is healthy again for the next step.
+                send_input(&mut client, kind).unwrap();
+                assert_eq!((replacement.restarts(), inputs_received(&replacement.state)), (1, 1), "{peer:?} {kind}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_live_driver_speaks_first_so_a_new_connection_never_waits_out_the_grace() {
+        let state = Arc::new(Mutex::new(FakeState { xml: APP.to_string(), ..Default::default() }));
+        let served = serve(state.clone());
+        // With a grace this long, a server that waited for the client's preface would
+        // make the first call time out instead of answering.
+        let mut client = NativeDriverClient::connect_with_grace(served.port, Duration::from_secs(600)).unwrap();
+        client.device_info_with_timeout(Duration::from_secs(10)).unwrap();
+        client.tap(1, 2).unwrap();
+        assert_eq!(state.lock().unwrap().taps, vec![(1, 2)]);
+    }
+
+    #[test]
+    fn reads_are_repeated_after_any_transport_failure() {
+        for peer in [Peer::Closes, Peer::ReadsRequestThenResets] {
+            let (port, _seen) = serve_peer(peer);
+            let replacement = Replacement::new(APP);
+            let mut client = NativeDriverClient::connect(port).unwrap();
+            client.set_restart(replacement.restart_fn());
+            let xml = client.view_hierarchy().unwrap();
+            assert!(xml.contains("Request Location Permission"), "{peer:?}: {xml}");
+            assert_eq!(replacement.restarts(), 1, "{peer:?}");
+        }
     }
 
     #[test]

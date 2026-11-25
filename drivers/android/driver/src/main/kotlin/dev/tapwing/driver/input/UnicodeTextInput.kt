@@ -38,7 +38,13 @@ internal class UnicodeTextInput(
     /** Which path the last [input] took (for logs and tests). */
     enum class Path { SET_TEXT, IME }
 
-    fun input(text: String): Path {
+    /**
+     * [isCancelled] is asked before anything is typed and between the chunks
+     * of the IME path; a cancelled call ends in [TypingCancelledException]
+     * (after the keyboard was put back).
+     */
+    fun input(text: String, isCancelled: () -> Boolean = { false }): Path {
+        if (isCancelled()) throw TypingCancelledException(0, text.length, "characters")
         val node = focusedEditable()
         val skipped = if (node == null) {
             "no input-focused node"
@@ -51,7 +57,7 @@ internal class UnicodeTextInput(
             }
         }
         Log.i(TAG, "ACTION_SET_TEXT not used ($skipped)")
-        inputThroughIme(text)
+        inputThroughIme(text, isCancelled)
         return Path.IME
     }
 
@@ -151,7 +157,7 @@ internal class UnicodeTextInput(
      * Serialized across gRPC threads so concurrent calls cannot race on
      * `ime enable` / `ime set` / `ime disable`.
      */
-    private fun inputThroughIme(text: String) = synchronized(imeLock) {
+    private fun inputThroughIme(text: String, isCancelled: () -> Boolean) = synchronized(imeLock) {
         // Read as the shell user: apps targeting API 34+ may not read
         // `enabled_input_methods` through Settings.Secure.
         val originalIme = shell.run("settings get secure ${Settings.Secure.DEFAULT_INPUT_METHOD}").trim()
@@ -171,7 +177,9 @@ internal class UnicodeTextInput(
             shell.run("ime enable ${TapwingInputMethodService.IME_ID}")
             shell.run("ime set ${TapwingInputMethodService.IME_ID}")
             awaitIme()
-            TextChunks.split(text).forEach(TapwingInputMethodService::commit)
+            val chunks = TextChunks.split(text)
+            val committed = CancellableLoop.run(chunks.size, isCancelled) { TapwingInputMethodService.commit(chunks[it]) }
+            if (committed < chunks.size) throw TypingCancelledException(committed, chunks.size, "text chunks")
             Thread.sleep(COMMIT_SETTLE_DELAY_MS)
         } finally {
             originalIme?.let { runCatching { shell.run("ime set $it") } }

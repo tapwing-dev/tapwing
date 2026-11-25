@@ -8,6 +8,8 @@ pub mod animations;
 mod helpers;
 mod permissions;
 mod recording;
+#[cfg(test)]
+mod script_tests;
 
 use anyhow::{Context, Result, bail};
 use image::DynamicImage;
@@ -32,7 +34,7 @@ pub use recording::{
     OrphanRecording, orphan_recordings, remote_recording_path, screenrecord_command, stop_orphan_recorders_script,
 };
 
-use helpers::{ADB_SERVER_START_TIMEOUT, media_scan_script, plan_media, validate_package_name};
+use helpers::{ADB_SERVER_START_TIMEOUT, media_scan_script, plan_media, sh_quote, validate_package_name};
 use permissions::{translate_appops_value, translate_permission_value};
 use recording::AndroidRecording;
 
@@ -272,6 +274,10 @@ impl Android {
         validate_package_name(app_id)?;
         let cached = self.app_cache.get(app_id).cloned();
         let mut script = String::with_capacity(1024);
+        // A failure is reported on one `TAPWING_ERR:` line, so the command's output is
+        // flattened onto it: the cause is rarely on the first line (`am start` begins
+        // with `Starting: Intent`, the `Error:` comes after).
+        let one_line = |var: &str| format!("$(printf '%s' \"${var}\" | tr '\\n' ' ')");
 
         let restarts = clear_state || stop_app;
         script.push_str("T0=$(date +%s%3N); ");
@@ -282,7 +288,8 @@ impl Android {
         }
         if clear_state {
             script.push_str(&format!(
-                "CLR=$(pm clear {app_id} 2>&1); case \"$CLR\" in *Success*) ;; *) echo \"TAPWING_ERR:pm clear failed: $CLR\"; exit 11 ;; esac; "
+                "CLR=$(pm clear {app_id} 2>&1); case \"$CLR\" in *Success*) ;; *) echo \"TAPWING_ERR:pm clear failed: {}\"; exit 11 ;; esac; ",
+                one_line("CLR")
             ));
         } else if stop_app {
             script.push_str(&format!("am force-stop {app_id}; "));
@@ -351,7 +358,8 @@ impl Android {
         script.push_str("T2=$(date +%s%3N); ");
 
         if let Some(info) = &cached {
-            script.push_str(&format!("COMP='{}'; ", info.launcher_component));
+            // The device reported it; it is quoted like any other data.
+            script.push_str(&format!("COMP={}; ", sh_quote(&info.launcher_component)));
         } else {
             script.push_str(&format!(
                 "COMP=$(cmd package resolve-activity --brief -c android.intent.category.LAUNCHER {app_id} 2>&1 | grep '/' | tail -n 1 | tr -d '\\r'); \
@@ -362,6 +370,8 @@ impl Android {
         let extra_flags = format_launch_arguments(launch_arguments);
         let extra_part = if extra_flags.is_empty() { String::new() } else { format!(" {extra_flags}") };
         script.push_str(&format!(
+            // `am` reports a failure on a non-zero exit code or a line that begins with `Error`.
+            // Looking for the word anywhere would also match the intent it echoes (a `.ErrorActivity` component).
             "START_OUT=$(am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n \"$COMP\"{extra_part} 2>&1); \
              START_RC=$?; \
              {}T3=$(date +%s%3N); ",
@@ -698,9 +708,10 @@ impl Drop for SessionGuards {
 /// Fails on a non-zero exit code or on a line starting with `Error` (`Error:`,
 /// `Error type ...`, `Error`), without false-positives on package/activity
 /// names containing `"Error"` such as `com.example/.ErrorActivity`.
+/// Flattens `START_OUT` onto one line so `TAPWING_ERR:` carries the cause.
 fn am_start_check_snippet() -> &'static str {
     "if [ \"$START_RC\" -ne 0 ] || printf '%s\\n' \"$START_OUT\" | tr -d '\\r' | grep -qE '^[ \\t]*Error($|[: \\t])'; then \
-     echo \"TAPWING_ERR:am start failed: $START_OUT\"; exit 13; fi; "
+     echo \"TAPWING_ERR:am start failed: $(printf '%s' \"$START_OUT\" | tr '\\n' ' ')\"; exit 13; fi; "
 }
 
 /// Shell command behind [`Android::liveness_probe`].

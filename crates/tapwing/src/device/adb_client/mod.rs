@@ -6,6 +6,8 @@
 //! of shelling out to the `adb` CLI binary for every operation.
 
 mod emu;
+#[cfg(test)]
+pub(crate) mod fake;
 mod legacy_shell;
 mod sync;
 
