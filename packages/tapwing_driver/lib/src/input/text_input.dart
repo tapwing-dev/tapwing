@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 
 import '../diagnostics/text_input_log.dart';
+import '../idle/channel_tracker.dart';
 import 'back_signals.dart';
 
 /// Observes `flutter/textinput` messages between the framework and the engine
@@ -11,9 +12,10 @@ import 'back_signals.dart';
 /// requests, and injects edits at the engine boundary like an IME.
 ///
 /// Edits are delivered via `ui.channelBuffers.push`
-/// (`TextInputClient.updateEditingState`) so `TextInputFormatter`s and
-/// `onChanged` callbacks run normally, and mirrored to the native IME via
-/// `TextInput.setEditingState`.
+/// (`TextInputClient.updateEditingState` or
+/// `TextInputClient.updateEditingStateWithDeltas` when `enableDeltaModel` is
+/// configured) so `TextInputFormatter`s and `onChanged` callbacks run normally,
+/// and mirrored to the native IME via `TextInput.setEditingState`.
 class TextInputController {
   /// Creates a controller with its own diagnostic [log].
   TextInputController({TextInputLog? log}) : log = log ?? TextInputLog();
@@ -28,6 +30,7 @@ class TextInputController {
   String? _inputAction;
   String? _inputTypeName;
   bool _readOnly = false;
+  bool _enableDeltaModel = false;
   Map<String, Object?>? _editingState;
   bool _keyboardRequested = false;
   final Stopwatch _sinceKeyboard = Stopwatch();
@@ -46,6 +49,10 @@ class TextInputController {
   /// a hardware-keyboard device.
   bool get suppressesSoftKeyboard =>
       _readOnly || _inputTypeName == 'TextInputType.none';
+
+  /// Whether the active client opted into the delta editing model
+  /// (`TextInputConfiguration.enableDeltaModel`).
+  bool get enableDeltaModel => _enableDeltaModel;
 
   /// Last observed or committed editing state map for the active client.
   Map<String, Object?>? get editingState => _editingState;
@@ -87,6 +94,7 @@ class TextInputController {
           if (config is Map<Object?, Object?>) {
             _inputAction = config['inputAction'] as String?;
             _readOnly = config['readOnly'] == true;
+            _enableDeltaModel = config['enableDeltaModel'] == true;
             final Object? inputType = config['inputType'];
             _inputTypeName = inputType is Map<Object?, Object?>
                 ? inputType['name'] as String?
@@ -94,6 +102,7 @@ class TextInputController {
           } else {
             _inputAction = null;
             _readOnly = false;
+            _enableDeltaModel = false;
             _inputTypeName = null;
           }
         }
@@ -102,6 +111,7 @@ class TextInputController {
         _inputAction = null;
         _inputTypeName = null;
         _readOnly = false;
+        _enableDeltaModel = false;
         _editingState = null;
         _setKeyboardRequested(false);
       case 'TextInput.setEditingState':
@@ -163,7 +173,14 @@ class TextInputController {
       final int from = start == end
           ? _prevCodePointBoundary(text, start)
           : start;
-      _commit(text.replaceRange(from, end, ''), from);
+      _commit(
+        oldText: text,
+        deltaText: '',
+        deltaStart: from,
+        deltaEnd: end,
+        newText: text.replaceRange(from, end, ''),
+        cursor: from,
+      );
       await Future<void>.delayed(Duration.zero);
     }
   }
@@ -238,12 +255,26 @@ class TextInputController {
     final Map<String, Object?> state = _requireState();
     final String text = (state['text'] as String?) ?? '';
     final (int start, int end) = _normalizedSelection(state, text.length);
-    _commit(text.replaceRange(start, end, insert), start + insert.length);
+    _commit(
+      oldText: text,
+      deltaText: insert,
+      deltaStart: start,
+      deltaEnd: end,
+      newText: text.replaceRange(start, end, insert),
+      cursor: start + insert.length,
+    );
   }
 
-  void _commit(String text, int cursor) {
+  void _commit({
+    required String oldText,
+    required String deltaText,
+    required int deltaStart,
+    required int deltaEnd,
+    required String newText,
+    required int cursor,
+  }) {
     final Map<String, Object?> value = <String, Object?>{
-      'text': text,
+      'text': newText,
       'selectionBase': cursor,
       'selectionExtent': cursor,
       'selectionAffinity': 'TextAffinity.downstream',
@@ -252,14 +283,33 @@ class TextInputController {
       'composingExtent': -1,
     };
     _editingState = value;
+    final MethodCall clientCall = _enableDeltaModel
+        ? MethodCall('TextInputClient.updateEditingStateWithDeltas', <Object?>[
+            _clientId,
+            <String, Object?>{
+              'deltas': <Map<String, Object?>>[
+                <String, Object?>{
+                  'oldText': oldText,
+                  'deltaText': deltaText,
+                  'deltaStart': deltaStart,
+                  'deltaEnd': deltaEnd,
+                  'selectionBase': cursor,
+                  'selectionExtent': cursor,
+                  'selectionAffinity': 'TextAffinity.downstream',
+                  'selectionIsDirectional': false,
+                  'composingBase': -1,
+                  'composingExtent': -1,
+                },
+              ],
+            },
+          ])
+        : MethodCall('TextInputClient.updateEditingState', <Object?>[
+            _clientId,
+            value,
+          ]);
     ui.channelBuffers.push(
       SystemChannels.textInput.name,
-      const JSONMethodCodec().encodeMethodCall(
-        MethodCall('TextInputClient.updateEditingState', <Object?>[
-          _clientId,
-          value,
-        ]),
-      ),
+      const JSONMethodCodec().encodeMethodCall(clientCall),
       (ByteData? _) {},
     );
     // Keep the native IME's model in sync, as the framework does after a
@@ -285,30 +335,40 @@ class TextInputController {
 }
 
 /// Transparent [BinaryMessenger] wrapper that lets [TextInputController]
-/// observe `flutter/textinput` messages in both directions without altering
-/// them.
+/// observe `flutter/textinput` messages in both directions, [BackSignals]
+/// observe Back deliveries, and [ChannelTracker] track pending non-system
+/// platform-channel replies without altering them.
 class ObservingBinaryMessenger implements BinaryMessenger {
   /// Wraps [_inner] and attaches it to [controller] (defaults to
-  /// [TextInputController.instance]).
+  /// [TextInputController.instance]), [backSignals] (defaults to
+  /// [BackSignals.instance]), and [channelTracker] (defaults to
+  /// [ChannelTracker.instance]).
   ObservingBinaryMessenger(
     this._inner, {
     TextInputController? controller,
     BackSignals? backSignals,
+    ChannelTracker? channelTracker,
   }) : _controller = controller ?? TextInputController.instance,
-       _backSignals = backSignals ?? BackSignals.instance {
+       _backSignals = backSignals ?? BackSignals.instance,
+       _channelTracker = channelTracker ?? ChannelTracker.instance {
     _controller.attach(_inner);
   }
 
   final BinaryMessenger _inner;
   final TextInputController _controller;
   final BackSignals _backSignals;
+  final ChannelTracker _channelTracker;
 
   @override
   Future<ByteData?>? send(String channel, ByteData? message) {
     if (channel == SystemChannels.textInput.name && message != null) {
       _controller.onOutgoing(message);
     }
-    return _inner.send(channel, message);
+    final Future<ByteData?>? reply = _inner.send(channel, message);
+    if (reply != null && _channelTracker.tracks(channel)) {
+      _channelTracker.track(channel, reply);
+    }
+    return reply;
   }
 
   @override

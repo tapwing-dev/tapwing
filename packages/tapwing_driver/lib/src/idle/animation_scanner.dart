@@ -305,9 +305,43 @@ class AnimationScanner {
         element.state is ImplicitlyAnimatedWidgetState) {
       listenable = (element.state as ImplicitlyAnimatedWidgetState).animation;
     }
-    return listenable is Animation<Object?> && listenable.isAnimating
+    return listenable is Animation<Object?> && _isActuallyAnimating(listenable)
         ? listenable
         : null;
+  }
+
+  /// Returns `true` only when [animation] is backed by an actively ticking
+  /// driver.
+  ///
+  /// Flutter's [Animation.isAnimating] defaults to `status.isAnimating`, which
+  /// stays `true` for [AlwaysStoppedAnimation], stopped mid-range
+  /// [AnimationController]s (whose `status` remains `forward`/`reverse` after
+  /// `stop()`), and wrapper animations (`CurvedAnimation`, `ProxyAnimation`,
+  /// `ReverseAnimation`, `Tween.animate`) around them.
+  static bool _isActuallyAnimating(
+    Animation<Object?> animation, [
+    int depth = 0,
+  ]) {
+    if (depth > 16) return animation.isAnimating;
+    return switch (animation) {
+      AlwaysStoppedAnimation<Object?>() => false,
+      AnimationController() => animation.isAnimating,
+      ProxyAnimation(:final Animation<Object?>? parent) =>
+        parent != null && _isActuallyAnimating(parent, depth + 1),
+      ReverseAnimation(:final Animation<Object?> parent) =>
+        _isActuallyAnimating(parent, depth + 1),
+      TrainHoppingAnimation(:final Animation<Object?>? currentTrain) =>
+        currentTrain != null && _isActuallyAnimating(currentTrain, depth + 1),
+      CompoundAnimation<Object?>(
+        :final Animation<Object?> first,
+        :final Animation<Object?> next,
+      ) =>
+        _isActuallyAnimating(first, depth + 1) ||
+            _isActuallyAnimating(next, depth + 1),
+      AnimationWithParentMixin<Object?>(:final Animation<Object?> parent) =>
+        _isActuallyAnimating(parent, depth + 1),
+      _ => animation.isAnimating,
+    };
   }
 
   static double? _visibleScreenFraction(

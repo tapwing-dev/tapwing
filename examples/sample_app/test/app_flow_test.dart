@@ -226,6 +226,7 @@ void main() {
         'Screenshot & Theme',
         'Endless Animation',
         'Request Location Permission',
+        'Async Channel Nav',
         'Network',
         'App Health',
       ]) {
@@ -274,6 +275,37 @@ void main() {
         expect(find.text('Permission: unknown'), findsNothing);
       });
     }
+
+    testWidgets(
+      'Async Channel Nav awaits method channel reply and then navigates',
+      (WidgetTester tester) async {
+        const MethodChannel channel = MethodChannel(
+          'dev.tapwing.sample_app/async',
+        );
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          (MethodCall call) async {
+            expect(call.method, 'fetchAndNavigate');
+            return 'ready';
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            channel,
+            null,
+          ),
+        );
+
+        await _pumpApp(tester);
+        await tester.tap(find.text('F2 Playground'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Async Channel Nav'));
+        await tester.pumpAndSettle();
+        expect(find.text('Async Channel Done'), findsOneWidget);
+        expect(find.text('Channel result: ready'), findsOneWidget);
+      },
+    );
 
     testWidgets(
       'Selectors & Taps handles taps, double taps, long presses and the retry button',

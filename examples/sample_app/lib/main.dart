@@ -241,6 +241,8 @@ class PlaygroundScreen extends StatefulWidget {
 class _PlaygroundScreenState extends State<PlaygroundScreen> {
   /// Android-only runtime permission channel (see `MainActivity.kt`).
   static const MethodChannel _permissions = MethodChannel('dev.tapwing.sample_app/permissions');
+  /// Async plugin-style channel used to verify settle waits on pending replies.
+  static const MethodChannel _asyncChannel = MethodChannel('dev.tapwing.sample_app/async');
 
   String _permissionStatus = 'Permission: unknown';
 
@@ -259,6 +261,26 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     if (mounted) {
       setState(() => _permissionStatus = status);
     }
+  }
+
+  /// Awaits an async method-channel reply before navigating, without showing a
+  /// spinner or scheduling a frame while the platform call is in flight.
+  Future<void> _awaitChannelAndNavigate() async {
+    String result = 'completed';
+    try {
+      result = await _asyncChannel.invokeMethod<String>('fetchAndNavigate') ?? 'completed';
+    } on MissingPluginException {
+      result = 'unsupported';
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Async Channel Done')),
+          body: Center(child: Text('Channel result: $result')),
+        ),
+      ),
+    );
   }
 
   @override
@@ -330,6 +352,14 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
             child: ListTile(
               title: const Text('Request Location Permission'),
               onTap: _requestLocationPermission,
+            ),
+          ),
+          Semantics(
+            identifier: 'async_channel_nav',
+            child: ListTile(
+              title: const Text('Async Channel Nav'),
+              subtitle: const Text('awaits method channel reply then navigates'),
+              onTap: _awaitChannelAndNavigate,
             ),
           ),
           Semantics(

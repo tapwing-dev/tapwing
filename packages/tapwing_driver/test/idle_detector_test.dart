@@ -1,16 +1,22 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tapwing_driver/src/idle/animation_scanner.dart';
+import 'package:tapwing_driver/src/idle/channel_tracker.dart';
 import 'package:tapwing_driver/src/idle/http_tracker.dart';
 import 'package:tapwing_driver/src/idle/idle_detector.dart';
+import 'package:tapwing_driver/src/input/pointer_input.dart';
 import 'package:tapwing_driver/src/input/text_input.dart';
+import 'package:tapwing_driver/src/server/command_handlers.dart';
+import 'package:tapwing_driver/src/server/driver_context.dart';
 
 void main() {
-  IdleDetector createDetector() => IdleDetector(
+  IdleDetector createDetector({ChannelTracker? channelTracker}) => IdleDetector(
     httpTracker: HttpTracker(),
+    channelTracker: channelTracker ?? ChannelTracker(),
     textInput: TextInputController(),
     readBottomInset: () => 0,
     waitForFirstFrame: (_) async {},
@@ -129,12 +135,9 @@ void main() {
                 transitionDuration: const Duration(milliseconds: 300),
                 pageBuilder: (_, _, _) =>
                     const Scaffold(body: Center(child: Text('Second'))),
-                transitionsBuilder: (
-                  _,
-                  Animation<double> anim,
-                  _,
-                  Widget child,
-                ) => FadeTransition(opacity: anim, child: child),
+                transitionsBuilder:
+                    (_, Animation<double> anim, _, Widget child) =>
+                        FadeTransition(opacity: anim, child: child),
               ),
             ),
           );
@@ -475,7 +478,9 @@ void main() {
       (WidgetTester tester) async {
         final TextInputController ti = TextInputController();
         const JSONMethodCodec codec = JSONMethodCodec();
-        ti.onOutgoing(codec.encodeMethodCall(const MethodCall('TextInput.show')));
+        ti.onOutgoing(
+          codec.encodeMethodCall(const MethodCall('TextInput.show')),
+        );
 
         final IdleDetector detector = IdleDetector(
           httpTracker: HttpTracker(),
@@ -532,5 +537,301 @@ void main() {
         expect(rendered, isTrue);
       },
     );
+
+    testWidgets(
+      'AnimationScanner ignores AlwaysStoppedAnimation, stopped mid-range '
+      'AnimationController, and wrappers around them',
+      (WidgetTester tester) async {
+        final SemanticsHandle handle = tester.ensureSemantics();
+        final AnimationController stoppedValueCtrl = AnimationController(
+          vsync: tester,
+          duration: const Duration(milliseconds: 500),
+        )..value = 0.5;
+        final AnimationController stoppedMidCtrl = AnimationController(
+          vsync: tester,
+          duration: const Duration(milliseconds: 500),
+        );
+        final AnimationController runningCtrl = AnimationController(
+          vsync: tester,
+          duration: const Duration(milliseconds: 500),
+        );
+        final CurvedAnimation curvedStopped = CurvedAnimation(
+          parent: stoppedMidCtrl,
+          curve: Curves.easeInOut,
+        );
+        final ProxyAnimation proxyStopped = ProxyAnimation(stoppedMidCtrl);
+        final ReverseAnimation reverseStopped = ReverseAnimation(
+          stoppedMidCtrl,
+        );
+        final CurvedAnimation curvedRunning = CurvedAnimation(
+          parent: runningCtrl,
+          curve: Curves.easeIn,
+        );
+
+        try {
+          // Verify Flutter's status quirk: stopped mid-range controllers still
+          // report status == forward (so status.isAnimating == true), while
+          // controller.isAnimating is false.
+          unawaited(stoppedMidCtrl.forward());
+          stoppedMidCtrl.stop();
+          expect(stoppedValueCtrl.status, AnimationStatus.forward);
+          expect(stoppedValueCtrl.isAnimating, isFalse);
+          expect(stoppedMidCtrl.status, AnimationStatus.forward);
+          expect(stoppedMidCtrl.isAnimating, isFalse);
+
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    const FadeTransition(
+                      opacity: AlwaysStoppedAnimation<double>(0.5),
+                      child: SizedBox(width: 200, height: 200),
+                    ),
+                    FadeTransition(
+                      opacity: stoppedValueCtrl,
+                      child: const SizedBox(width: 200, height: 200),
+                    ),
+                    FadeTransition(
+                      opacity: curvedStopped,
+                      child: const SizedBox(width: 200, height: 200),
+                    ),
+                    FadeTransition(
+                      opacity: proxyStopped,
+                      child: const SizedBox(width: 200, height: 200),
+                    ),
+                    FadeTransition(
+                      opacity: reverseStopped,
+                      child: const SizedBox(width: 200, height: 200),
+                    ),
+                    FadeTransition(
+                      opacity: Tween<double>(
+                        begin: 0.2,
+                        end: 0.8,
+                      ).animate(stoppedMidCtrl),
+                      child: const SizedBox(width: 200, height: 200),
+                    ),
+                    FadeTransition(
+                      opacity: curvedRunning,
+                      child: const SizedBox(width: 200, height: 200),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+          // None of the static animations should be reported.
+          expect(AnimationScanner().scan(), isEmpty);
+
+          // An actively ticking controller (even wrapped in CurvedAnimation)
+          // MUST still be detected and block v2 settle until it finishes.
+          unawaited(runningCtrl.forward());
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 16));
+          final List<SignificantAnimation> running = AnimationScanner().scan();
+          expect(running, hasLength(1));
+
+          final IdleDetector detector = createDetector();
+          String? settleState;
+          unawaited(
+            detector
+                .waitForIdle(const Duration(seconds: 2))
+                .then((String s) => settleState = s),
+          );
+          for (int i = 0; i < 4; i++) {
+            await tester.pump(const Duration(milliseconds: 16));
+          }
+          expect(
+            settleState,
+            isNull,
+            reason: 'ticking CurvedAnimation must block settle',
+          );
+
+          await tester.pump(const Duration(milliseconds: 500));
+          await tester.pump(Duration.zero);
+          await tester.pump(Duration.zero);
+          expect(settleState, anyOf('idle', 'stable'));
+        } finally {
+          curvedRunning.dispose();
+          curvedStopped.dispose();
+          stoppedValueCtrl.dispose();
+          stoppedMidCtrl.dispose();
+          runningCtrl.dispose();
+          handle.dispose();
+        }
+      },
+    );
+
+    testWidgets(
+      'waitForIdle waits for pending non-system MethodChannel reply before '
+      'post-reply navigation instead of returning idle prematurely',
+      (WidgetTester tester) async {
+        final SemanticsHandle handle = tester.ensureSemantics();
+        final ChannelTracker channelTracker = ChannelTracker();
+        try {
+          final _MockAsyncMessenger rawMessenger = _MockAsyncMessenger();
+          final ObservingBinaryMessenger messenger = ObservingBinaryMessenger(
+            rawMessenger,
+            controller: TextInputController(),
+            channelTracker: channelTracker,
+          );
+          final MethodChannel appChannel = MethodChannel(
+            'dev.tapwing.sample_app/async',
+            const StandardMethodCodec(),
+            messenger,
+          );
+
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Builder(
+                builder: (BuildContext context) => Scaffold(
+                  body: Center(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        await appChannel.invokeMethod<String>('fetch');
+                        if (!context.mounted) return;
+                        await Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const Scaffold(
+                              body: Center(child: Text('Async Channel Done')),
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text('Start Async Nav'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          final IdleDetector idle = createDetector(
+            channelTracker: channelTracker,
+          );
+          final CommandDispatcher dispatcher = CommandDispatcher(
+            DriverContext(
+              idle: idle,
+              pointer: PointerInput(),
+              textInput: TextInputController(),
+              readBottomInset: () => 0,
+            ),
+          );
+
+          String? rpcResultSettle;
+          bool rpcDone = false;
+          unawaited(
+            dispatcher
+                .dispatch('tapOn', <String, Object?>{
+                  'selector': <String, Object?>{'text': 'Start Async Nav'},
+                  'timeoutMs': 1000,
+                  'settleTimeoutMs': 2000,
+                })
+                .then((Object? value) {
+                  rpcResultSettle =
+                      (value! as Map<String, Object?>)['settle'] as String?;
+                  rpcDone = true;
+                }),
+          );
+
+          // Pump several frames while the MethodChannel reply is still in
+          // flight: frames are idle, but ChannelTracker keeps loadingIdle false.
+          for (int i = 0; i < 6; i++) {
+            await tester.pump(const Duration(milliseconds: 16));
+          }
+          expect(channelTracker.pending, 1);
+          expect(idle.loadingIdle, isFalse);
+          expect(idle.busyReport().pendingChannels, 1);
+          expect(
+            rpcDone,
+            isFalse,
+            reason:
+                'tapOn must not settle while MethodChannel reply is pending',
+          );
+          expect(find.text('Async Channel Done'), findsNothing);
+
+          // Now complete the platform channel reply; tapOn should stay waiting
+          // through the subsequent Navigator.push transition and then settle.
+          rawMessenger.pendingReplies.single.complete(
+            const StandardMethodCodec().encodeSuccessEnvelope('ok'),
+          );
+          for (int i = 0; i < 40 && !rpcDone; i++) {
+            await tester.pump(const Duration(milliseconds: 16));
+          }
+          expect(rpcDone, isTrue);
+          expect(rpcResultSettle, anyOf('idle', 'stable'));
+          expect(channelTracker.pending, 0);
+          expect(find.text('Async Channel Done'), findsOneWidget);
+        } finally {
+          channelTracker.reset();
+          handle.dispose();
+        }
+      },
+    );
   });
+
+  group('ChannelTracker', () {
+    test(
+      'ignores flutter/* channels and releases on error or safety timeout',
+      () async {
+        final ChannelTracker tracker = ChannelTracker(
+          safetyTimeout: const Duration(milliseconds: 40),
+        );
+        final _MockAsyncMessenger raw = _MockAsyncMessenger();
+        final ObservingBinaryMessenger messenger = ObservingBinaryMessenger(
+          raw,
+          controller: TextInputController(),
+          channelTracker: tracker,
+        );
+
+        // System channel send is ignored.
+        unawaited(messenger.send('flutter/platform', ByteData(0)));
+        expect(tracker.pending, 0);
+        expect(raw.pendingReplies, hasLength(1));
+        raw.pendingReplies.removeLast().complete(null);
+
+        // Error reply decrements pending.
+        final Future<ByteData?>? errFuture = messenger.send(
+          'dev.tapwing/plugin',
+          ByteData(0),
+        );
+        expect(tracker.pending, 1);
+        raw.pendingReplies.removeLast().completeError(StateError('boom'));
+        await expectLater(errFuture, throwsStateError);
+        expect(tracker.pending, 0);
+
+        // Never-replying channel call is released by the safety cap.
+        unawaited(messenger.send('dev.tapwing/hanging', ByteData(0)));
+        expect(tracker.pending, 1);
+        await tracker.waitForIdle(const Duration(milliseconds: 200));
+        expect(tracker.pending, 0);
+        expect(tracker.isIdle, isTrue);
+      },
+    );
+  });
+}
+
+class _MockAsyncMessenger implements BinaryMessenger {
+  final List<Completer<ByteData?>> pendingReplies = <Completer<ByteData?>>[];
+
+  @override
+  Future<ByteData?>? send(String channel, ByteData? message) {
+    final Completer<ByteData?> completer = Completer<ByteData?>();
+    pendingReplies.add(completer);
+    return completer.future;
+  }
+
+  @override
+  void setMessageHandler(String channel, MessageHandler? handler) {}
+
+  @override
+  // Required by Flutter's BinaryMessenger abstract interface.
+  // ignore: deprecated_member_use
+  Future<void> handlePlatformMessage(
+    String channel,
+    ByteData? data,
+    ui.PlatformMessageResponseCallback? callback,
+  ) async {}
 }

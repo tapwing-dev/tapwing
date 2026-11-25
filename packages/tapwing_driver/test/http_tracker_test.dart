@@ -44,6 +44,43 @@ class _ChainingOverrides extends HttpOverrides {
   }
 }
 
+/// An app-level override that wraps the inner client in its own [HttpClient]
+/// facade (e.g. custom headers / pinning wrapper chaining to previous).
+class _WrappingOverrides extends HttpOverrides {
+  _WrappingOverrides(this._previous);
+
+  final HttpOverrides? _previous;
+  int created = 0;
+
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    created++;
+    final HttpClient inner =
+        _previous?.createHttpClient(context) ?? super.createHttpClient(context);
+    return _WrappedHttpClient(inner);
+  }
+}
+
+class _WrappedHttpClient implements HttpClient {
+  _WrappedHttpClient(this._inner);
+
+  final HttpClient _inner;
+
+  @override
+  Future<HttpClientRequest> openUrl(String method, Uri url) =>
+      _inner.openUrl(method, url);
+
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) => _inner.getUrl(url);
+
+  @override
+  void close({bool force = false}) => _inner.close(force: force);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName}');
+}
+
 Future<HttpServer> _server() async {
   final HttpServer server = await HttpServer.bind(
     InternetAddress.loopbackIPv4,
@@ -65,7 +102,11 @@ Future<HttpServer> _server() async {
       await Future<void>.delayed(const Duration(milliseconds: 150));
       res.write('slow');
     } else if (req.uri.path == '/sse') {
-      res.headers.contentType = ContentType('text', 'event-stream', charset: 'utf-8');
+      res.headers.contentType = ContentType(
+        'text',
+        'event-stream',
+        charset: 'utf-8',
+      );
       res.bufferOutput = false;
       res.write('data: first\n\n');
       await res.flush();
@@ -166,8 +207,8 @@ void main() {
     expect(tracker.log.since(0), hasLength(1));
   });
 
-  test('re-wraps an override the app installs later with a log-only '
-      'layer, without double logging or idle counting', () async {
+  test('re-wraps an override the app installs later with idle counting '
+      'enabled and without double logging', () async {
     final HttpTracker tracker = HttpTracker()..install();
     tracker.log.enabled = true;
     final _AppOverrides app = _AppOverrides();
@@ -181,38 +222,95 @@ void main() {
     final HttpClientRequest req = await client.getUrl(
       base.replace(path: '/slow'),
     );
-    expect(tracker.inFlight, 0, reason: 'log-only layer never counts idle');
+    expect(tracker.inFlight, 1, reason: 'idle counting stays active');
     final HttpClientResponse res = await req.close();
     await res.drain<void>();
     client.close();
 
-    expect(app.created, 1);
-    expect(tracker.log.since(0), hasLength(1));
-
-    // Switching logging off removes the log-only layer again.
-    tracker.removeLogLayer();
-    expect(identical(HttpOverrides.current, app), isTrue);
-  });
-
-  test('an app override chaining to ours is logged exactly once', () async {
-    final HttpTracker tracker = HttpTracker()..install();
-    tracker.log.enabled = true;
-    final _ChainingOverrides app = _ChainingOverrides(HttpOverrides.current);
-    HttpOverrides.global = app;
-    tracker.ensureInstalled();
-    expect(await _get(base.replace(path: '/ok')), 200);
-    expect(app.created, 1);
-    expect(tracker.log.since(0), hasLength(1));
     expect(tracker.inFlight, 0);
+    expect(app.created, 1);
+    expect(tracker.log.since(0), hasLength(1));
   });
 
-  test('ensureInstalled is a no-op while the log is disabled', () async {
-    final HttpTracker tracker = HttpTracker()..install();
-    final _AppOverrides app = _AppOverrides();
-    HttpOverrides.global = app;
-    tracker.ensureInstalled();
-    expect(identical(HttpOverrides.current, app), isTrue);
-  });
+  test(
+    'an app override chaining to ours counts idle and logs exactly once',
+    () async {
+      final HttpTracker tracker = HttpTracker()..install();
+      tracker.log.enabled = true;
+      final _ChainingOverrides app = _ChainingOverrides(HttpOverrides.current);
+      HttpOverrides.global = app;
+      tracker.ensureInstalled();
+
+      final HttpClient client = HttpClient();
+      final HttpClientRequest req = await client.getUrl(
+        base.replace(path: '/slow'),
+      );
+      expect(
+        tracker.inFlight,
+        1,
+        reason: 'chained override must not double-count',
+      );
+      final HttpClientResponse res = await req.close();
+      await res.drain<void>();
+      client.close();
+
+      expect(app.created, 1);
+      expect(tracker.log.since(0), hasLength(1));
+      expect(tracker.inFlight, 0);
+    },
+  );
+
+  test(
+    'an app override wrapping the chained HttpClient does not double-count',
+    () async {
+      final HttpTracker tracker = HttpTracker()..install();
+      tracker.log.enabled = true;
+      final _WrappingOverrides app = _WrappingOverrides(HttpOverrides.current);
+      HttpOverrides.global = app;
+      tracker.ensureInstalled();
+
+      final HttpClient client = HttpClient();
+      final HttpClientRequest req = await client.getUrl(
+        base.replace(path: '/slow'),
+      );
+      expect(
+        tracker.inFlight,
+        1,
+        reason: 'wrapped chained HttpClient must not double-count',
+      );
+      final HttpClientResponse res = await req.close();
+      await res.drain<void>();
+      client.close();
+
+      expect(app.created, 1);
+      expect(tracker.log.since(0), hasLength(1));
+      expect(tracker.inFlight, 0);
+    },
+  );
+
+  test(
+    'ensureInstalled keeps idle counting active while the log is disabled',
+    () async {
+      final HttpTracker tracker = HttpTracker()..install();
+      final _AppOverrides app = _AppOverrides();
+      HttpOverrides.global = app;
+      tracker.ensureInstalled();
+
+      final HttpClient client = HttpClient();
+      expect(client.userAgent, 'app-agent', reason: "app's override applies");
+      final HttpClientRequest req = await client.getUrl(
+        base.replace(path: '/slow'),
+      );
+      expect(tracker.inFlight, 1, reason: 'idle counting active with log off');
+      final HttpClientResponse res = await req.close();
+      await res.drain<void>();
+      client.close();
+
+      expect(tracker.inFlight, 0);
+      expect(app.created, 1);
+      expect(tracker.log.since(0), isEmpty);
+    },
+  );
 
   test('redacts secrets in URLs and headers and never stores bodies', () async {
     final HttpTracker tracker = HttpTracker()..install();
@@ -395,7 +493,7 @@ void main() {
     );
     expect(app.proxyCalls, 1);
 
-    // Log-only wrapper added via ensureInstalled also delegates proxy lookup.
+    // Re-wrapped override added via ensureInstalled also delegates proxy lookup.
     tracker.log.enabled = true;
     final _ProxyOverrides laterApp = _ProxyOverrides();
     HttpOverrides.global = laterApp;
