@@ -26,6 +26,13 @@ pub(in crate::device) const RECORDER_EXIT_TIMEOUT: Duration = Duration::from_sec
 /// Maestro records Android at 100 kbit/s (`--bit-rate '100000'`).
 const SCREENRECORD_BIT_RATE: u32 = 100_000;
 
+/// Start of every recording temp file on the device; the host pid follows.
+const REMOTE_RECORDING_PREFIX: &str = "/sdcard/tapwing_rec_";
+
+/// ADB timeouts of the orphan sweep: it must never delay a session start for long.
+const SWEEP_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+const SWEEP_IO_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Counter that keeps on-device recording temp files unique within a process.
 static RECORDING_SEQ: AtomicU32 = AtomicU32::new(0);
 
@@ -179,6 +186,84 @@ impl Android {
     pub fn is_recording(&self) -> bool {
         self.recording.is_some()
     }
+
+    /// Removes recordings a hard-killed earlier run left on the device (see
+    /// [`orphan_recordings`] for which ones) and stops their recorders, which
+    /// on API 34+ would otherwise record forever. Returns how many files were
+    /// removed. Best effort: call it at session start and at most warn on an error.
+    pub fn sweep_orphan_recordings(&self) -> Result<usize> {
+        let quick = self.adb.clone().with_timeouts(SWEEP_CONNECT_TIMEOUT, SWEEP_IO_TIMEOUT);
+        let shell = |cmd: &str| self.with_adb(|_| quick.shell(&self.serial, cmd));
+        let listing = shell(&format!("ls {REMOTE_RECORDING_PREFIX}* 2>/dev/null; true"))?;
+        let orphans = orphan_recordings(&listing.stdout, crate::process::pid_alive);
+        if orphans.is_empty() {
+            return Ok(0);
+        }
+        // Two round-trips on purpose: `pkill -f` also matches the shell that
+        // runs it, so the file names must not be on the same command line.
+        shell(&stop_orphan_recorders_script(&orphans))?;
+        let paths: Vec<&str> = orphans.iter().map(|o| o.path.as_str()).collect();
+        shell(&format!("rm -f {}; true", paths.join(" ")))?;
+        Ok(orphans.len())
+    }
+}
+
+/// A recording temp file whose owning Tapwing process is gone.
+#[derive(Debug, PartialEq, Eq)]
+pub struct OrphanRecording {
+    /// Host pid in the file name.
+    pub owner_pid: u32,
+    /// The file on the device (`.mp4` or its `.mp4.log`).
+    pub path: String,
+}
+
+/// Picks the files of an `ls /sdcard/tapwing_rec_*` listing that may be removed.
+///
+/// The rule: a file is an orphan only when its name is exactly what
+/// [`remote_recording_path`] produces (`tapwing_rec_<host pid>_<seq>.mp4`,
+/// optionally with `.log`) and no process with that pid runs on this host.
+/// Every live Tapwing process, whether another shard thread of this process (same
+/// pid, other `<seq>`) or a concurrent `tapwing` on the same device (its own
+/// live pid), therefore keeps its recordings; anything else called
+/// `tapwing_rec_*` is not ours and is left alone. A recycled pid only delays
+/// the cleanup. The pid is checked on this host, so a device that several
+/// hosts record on at the same time is not supported.
+pub fn orphan_recordings(listing: &str, pid_alive: impl Fn(u32) -> bool) -> Vec<OrphanRecording> {
+    let mut orphans: Vec<OrphanRecording> = listing
+        .split_whitespace()
+        .filter_map(|path| Some(OrphanRecording { owner_pid: recording_owner(path)?, path: path.to_string() }))
+        .filter(|o| !pid_alive(o.owner_pid))
+        .collect();
+    orphans.sort_by(|a, b| (a.owner_pid, &a.path).cmp(&(b.owner_pid, &b.path)));
+    orphans.dedup();
+    orphans
+}
+
+/// The host pid in a recording temp file name, when `path` is exactly one.
+fn recording_owner(path: &str) -> Option<u32> {
+    let name = path.strip_prefix(REMOTE_RECORDING_PREFIX)?;
+    let stem = name.strip_suffix(".mp4").or_else(|| name.strip_suffix(".mp4.log"))?;
+    let (pid, seq) = stem.split_once('_')?;
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    if !digits(pid) || !digits(seq) {
+        return None;
+    }
+    pid.parse().ok()
+}
+
+/// Device script that signals the recorders still writing `orphans`. The
+/// `[_]` keeps the pattern from matching the shell that runs `pkill`, whose
+/// own command line contains the pattern text; a device without `pkill`
+/// (API < 23) just skips this, its recorders stop at the 180 s limit.
+pub fn stop_orphan_recorders_script(orphans: &[OrphanRecording]) -> String {
+    let mut pids: Vec<u32> = orphans.iter().map(|o| o.owner_pid).collect();
+    pids.dedup();
+    let mut script = String::new();
+    for pid in pids {
+        script.push_str(&format!("pkill -f 'tapwing_rec_{pid}[_]' >/dev/null 2>&1; "));
+    }
+    script.push_str("true");
+    script
 }
 
 /// Temp file the recorder writes to on the device.
@@ -209,6 +294,94 @@ mod tests {
         assert!(old.starts_with("echo $$; exec screenrecord --bit-rate '100000' /sdcard/tapwing_rec_4242_1.mp4"));
         let new = screenrecord_command(34, &path);
         assert!(new.contains("exec screenrecord --time-limit 0 --bit-rate"));
+    }
+
+    #[test]
+    fn only_recordings_of_dead_host_processes_are_orphans() {
+        let listing = "/sdcard/tapwing_rec_100_0.mp4\n/sdcard/tapwing_rec_100_0.mp4.log\n\
+                       /sdcard/tapwing_rec_200_3.mp4\r\n/sdcard/tapwing_rec_4242_1.mp4\n\
+                       /sdcard/tapwing_rec_100_7.mp4 /sdcard/tapwing_rec_100_7.mp4\n\
+                       /sdcard/tapwing_rec_test.mp4\n/sdcard/tapwing_rec_300_notes.mp4\n\
+                       /sdcard/tapwing_rec_300_1.mp4.bak\n/sdcard/tapwing_rec__1.mp4\n\
+                       /sdcard/tapwing_rec_300_.mp4\n/sdcard/tapwing_rec_99999999999_0.mp4\n\
+                       /sdcard/Movies/tapwing_rec_100_0.mp4\n/sdcard/tapwing_rec_300_1.mp4;reboot\n";
+        // 200 is a concurrent session and 4242 this process; 100 and 300 are dead.
+        let alive = |pid: u32| pid == 200 || pid == 4242;
+        let orphans = orphan_recordings(listing, alive);
+        let paths: Vec<&str> = orphans.iter().map(|o| o.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            vec!["/sdcard/tapwing_rec_100_0.mp4", "/sdcard/tapwing_rec_100_0.mp4.log", "/sdcard/tapwing_rec_100_7.mp4"]
+        );
+        assert!(orphans.iter().all(|o| o.owner_pid == 100));
+        assert!(orphan_recordings(listing, |_| true).is_empty(), "nothing is removed while every owner lives");
+        assert!(orphan_recordings("", |_| false).is_empty());
+        // The path this process records to is recognised as its own.
+        assert_eq!(recording_owner(&remote_recording_path(4242, 1)), Some(4242));
+    }
+
+    #[test]
+    fn stopping_orphan_recorders_signals_each_owner_once_without_matching_its_own_shell() {
+        let orphans = orphan_recordings(
+            "/sdcard/tapwing_rec_7_0.mp4 /sdcard/tapwing_rec_7_0.mp4.log /sdcard/tapwing_rec_9_2.mp4",
+            |_| false,
+        );
+        let script = stop_orphan_recorders_script(&orphans);
+        assert_eq!(
+            script,
+            "pkill -f 'tapwing_rec_7[_]' >/dev/null 2>&1; pkill -f 'tapwing_rec_9[_]' >/dev/null 2>&1; true"
+        );
+        assert!(!script.contains("tapwing_rec_7_"), "the literal file name would make pkill hit its own shell");
+    }
+
+    #[test]
+    fn the_sweep_lists_stops_and_removes_orphans_over_adb() {
+        use std::io::{Read, Write};
+
+        // A pid that cannot be alive: `pid_alive` is asked about a reaped child.
+        let mut child = Command::new("true").spawn().unwrap();
+        let dead = child.id();
+        child.wait().unwrap();
+        let own = std::process::id();
+        let listing = format!("/sdcard/tapwing_rec_{dead}_0.mp4\n/sdcard/tapwing_rec_{own}_0.mp4\n");
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let mut commands = Vec::new();
+            for idx in 0..3 {
+                let (mut stream, _) = listener.accept().unwrap();
+                for _ in 0..2 {
+                    let mut len = [0u8; 4];
+                    stream.read_exact(&mut len).unwrap();
+                    let len = usize::from_str_radix(std::str::from_utf8(&len).unwrap(), 16).unwrap();
+                    let mut cmd = vec![0u8; len];
+                    stream.read_exact(&mut cmd).unwrap();
+                    commands.push(String::from_utf8(cmd).unwrap());
+                    stream.write_all(b"OKAY").unwrap();
+                }
+                let stdout = if idx == 0 { listing.as_bytes() } else { b"" };
+                let mut reply = vec![1u8];
+                reply.extend((stdout.len() as u32).to_le_bytes());
+                reply.extend(stdout);
+                reply.extend([3u8, 1, 0, 0, 0, 0]);
+                stream.write_all(&reply).unwrap();
+            }
+            commands
+        });
+
+        let android = Android::with_adb_client("emulator-5554".into(), AdbClient::with_addr(addr));
+        assert_eq!(android.sweep_orphan_recordings().unwrap(), 1);
+        let commands = server.join().unwrap();
+        let shells: Vec<&str> = commands.iter().filter_map(|c| c.strip_prefix("shell,v2,TERM=dumb:")).collect();
+        assert_eq!(
+            shells,
+            vec![
+                "ls /sdcard/tapwing_rec_* 2>/dev/null; true".to_string(),
+                format!("pkill -f 'tapwing_rec_{dead}[_]' >/dev/null 2>&1; true"),
+                format!("rm -f /sdcard/tapwing_rec_{dead}_0.mp4; true"),
+            ]
+        );
     }
 
     fn sleeper() -> Child {

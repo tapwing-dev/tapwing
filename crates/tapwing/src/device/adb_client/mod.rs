@@ -6,6 +6,7 @@
 //! of shelling out to the `adb` CLI binary for every operation.
 
 mod emu;
+mod legacy_shell;
 mod sync;
 
 pub use sync::SYNC_DATA_MAX;
@@ -160,33 +161,49 @@ impl AdbClient {
     /// Executes a command on `serial` via `shell,v2,TERM=dumb:<cmd>`, returning
     /// separated `stdout`, `stderr`, and `exit_code`.
     ///
-    /// Automatically falls back to legacy `shell:<cmd>` only when the daemon or
-    /// device explicitly rejects `shell,v2` with `FAIL` (never on socket drops
-    /// or timeouts).
+    /// Falls back to the legacy `shell:<cmd>` service (stdout and stderr
+    /// merged into `stdout`, exit status recovered by [`legacy_shell`]) only
+    /// when the `shell,v2` request is rejected with `FAIL` **and** the device
+    /// does not advertise the `shell_v2` feature. Any other `FAIL`, a socket
+    /// drop or a timeout is returned as the error it is.
     pub fn shell(&self, serial: &str, cmd: &str) -> Result<ShellOutput> {
         let mut stream = self.connect_transport(serial)?;
         let v2_cmd = format!("shell,v2,TERM=dumb:{cmd}");
         match send_command(&mut stream, &v2_cmd) {
             Ok(()) => read_shell_v2_output(&mut stream).with_context(|| format!("reading shell,v2 output for `{cmd}`")),
-            Err(err) if err.is::<AdbFailError>() => {
-                // The server explicitly rejected `shell,v2` with FAIL and closed
-                // the transport stream; reconnect and fall back to legacy `shell:<cmd>`.
-                let mut fallback_stream = self.connect_transport(serial)?;
-                let legacy_cmd = format!("shell:{cmd}");
-                send_command(&mut fallback_stream, &legacy_cmd)
-                    .with_context(|| format!("sending legacy `{legacy_cmd}`"))?;
-                let mut raw = Vec::new();
-                fallback_stream
-                    .read_to_end(&mut raw)
-                    .with_context(|| format!("reading legacy shell output for `{cmd}`"))?;
-                Ok(ShellOutput {
-                    stdout: String::from_utf8_lossy(&raw).into_owned(),
-                    stderr: String::new(),
-                    exit_code: 0,
-                })
+            // A device that cannot open the service answers a bare `FAIL closed`,
+            // the same as for any other refused service, so the reason is taken
+            // from the feature list instead of the message. When that cannot be
+            // read either, the rejection is reported rather than guessed around.
+            Err(err) if err.is::<AdbFailError>() && matches!(self.supports_shell_v2(serial), Ok(false)) => {
+                self.legacy_shell(serial, cmd)
             }
             Err(err) => Err(err).with_context(|| format!("sending `{v2_cmd}`")),
         }
+    }
+
+    /// Whether `serial` advertises the `shell_v2` feature
+    /// (`host-serial:<serial>:features`, what the `adb` CLI checks before it
+    /// picks a shell protocol). Devices before Android 7 report no features.
+    fn supports_shell_v2(&self, serial: &str) -> Result<bool> {
+        let mut stream = self.connect()?;
+        let cmd = format!("host-serial:{serial}:features");
+        send_command(&mut stream, &cmd).with_context(|| format!("sending `{cmd}`"))?;
+        let features = read_hex_length_prefixed_string(&mut stream).with_context(|| format!("reading `{cmd}`"))?;
+        Ok(features.split(',').any(|feature| feature.trim() == "shell_v2"))
+    }
+
+    /// Runs `cmd` over the legacy `shell:` service on a fresh transport (the
+    /// rejected `shell,v2` request closed the previous one).
+    fn legacy_shell(&self, serial: &str, cmd: &str) -> Result<ShellOutput> {
+        let marker = legacy_shell::next_exit_marker();
+        let mut stream = self.connect_transport(serial)?;
+        let legacy_cmd = format!("shell:{}", legacy_shell::legacy_shell_script(cmd, &marker));
+        send_command(&mut stream, &legacy_cmd).with_context(|| format!("sending legacy `shell:{cmd}`"))?;
+        let mut raw = Vec::new();
+        stream.read_to_end(&mut raw).with_context(|| format!("reading legacy shell output for `{cmd}`"))?;
+        legacy_shell::parse_legacy_shell_output(&raw, &marker)
+            .with_context(|| format!("reading legacy shell output for `{cmd}`"))
     }
 
     /// Executes `exec:<cmd>` on `serial` and streams raw, unmangled binary
@@ -561,26 +578,119 @@ mod tests {
         handle.join().unwrap();
     }
 
-    #[test]
-    fn shell_falls_back_to_legacy_when_shell_v2_is_rejected() {
-        let (client, handle) = spawn_mock_adb_server(2, |idx, mut stream| {
-            assert_eq!(mock_read_command(&mut stream), "host:transport:emulator-5554");
-            mock_write_okay(&mut stream);
-            if idx == 0 {
-                assert_eq!(mock_read_command(&mut stream), "shell,v2,TERM=dumb:getprop ro.build.version.sdk");
-                mock_write_fail(&mut stream, "unknown service shell,v2");
-            } else {
-                assert_eq!(mock_read_command(&mut stream), "shell:getprop ro.build.version.sdk");
+    /// A device as the ADB server presents it: the `shell,v2` request is
+    /// answered with `v2_reply`, the feature query with `features`, and a
+    /// legacy `shell:` request with whatever `legacy` returns for the command
+    /// and its exit marker. Requests arrive on separate connections, in order.
+    fn spawn_mock_legacy_device<L>(
+        connections: usize,
+        v2_fail: &'static str,
+        features: Option<&'static str>,
+        legacy: L,
+    ) -> (AdbClient, thread::JoinHandle<()>)
+    where
+        L: Fn(&str, &str) -> Vec<u8> + Send + Sync + 'static,
+    {
+        spawn_mock_adb_server(connections, move |idx, mut stream| match idx {
+            0 => {
+                assert_eq!(mock_read_command(&mut stream), "host:transport:old-device");
                 mock_write_okay(&mut stream);
-                stream.write_all(b"34\n").unwrap();
+                assert!(mock_read_command(&mut stream).starts_with("shell,v2,TERM=dumb:"));
+                mock_write_fail(&mut stream, v2_fail);
             }
-        });
+            1 => {
+                assert_eq!(mock_read_command(&mut stream), "host-serial:old-device:features");
+                match features {
+                    Some(list) => {
+                        mock_write_okay(&mut stream);
+                        stream.write_all(format!("{:04x}{list}", list.len()).as_bytes()).unwrap();
+                    }
+                    None => mock_write_fail(&mut stream, "device offline"),
+                }
+            }
+            _ => {
+                assert_eq!(mock_read_command(&mut stream), "host:transport:old-device");
+                mock_write_okay(&mut stream);
+                let request = mock_read_command(&mut stream);
+                // `shell:(<cmd>\n); echo "<marker>$?"`
+                let script = request.strip_prefix("shell:(").expect("a legacy shell request");
+                let (cmd, echo) = script.split_once("\n); echo \"").expect("the exit status wrapper");
+                let marker = echo.strip_suffix("$?\"").expect("the exit marker");
+                mock_write_okay(&mut stream);
+                stream.write_all(&legacy(cmd, marker)).unwrap();
+            }
+        })
+    }
 
-        let out = client.shell("emulator-5554", "getprop ro.build.version.sdk").unwrap();
-        assert_eq!(out.stdout, "34\n");
-        assert_eq!(out.stderr, "");
-        assert_eq!(out.exit_code, 0);
+    #[test]
+    fn shell_falls_back_to_legacy_only_when_the_device_lacks_shell_v2() {
+        // A pre-Android 7 device: the service is refused and no feature is advertised.
+        let (client, handle) = spawn_mock_legacy_device(3, "closed", Some(""), |cmd, marker| {
+            assert_eq!(cmd, "getprop ro.build.version.sdk");
+            format!("23\r\n{marker}0\r\n").into_bytes()
+        });
+        let out = client.shell("old-device", "getprop ro.build.version.sdk").unwrap();
+        assert_eq!(out, ShellOutput { stdout: "23\r\n".into(), stderr: String::new(), exit_code: 0 });
         assert!(out.success());
+        handle.join().unwrap();
+
+        // Features without `shell_v2` (an exact name, not a prefix match) also mean legacy.
+        let (client, handle) = spawn_mock_legacy_device(3, "closed", Some("cmd,stat_v2,shell_v2x"), |_, marker| {
+            format!("{marker}0\n").into_bytes()
+        });
+        assert!(client.shell("old-device", "true").unwrap().success());
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn legacy_shell_reports_the_real_exit_code() {
+        let (client, handle) = spawn_mock_legacy_device(3, "closed", Some(""), |cmd, marker| {
+            assert_eq!(cmd, "pm clear dev.missing");
+            // Output without a trailing newline, then the status line.
+            format!("Error: package not found{marker}1\n").into_bytes()
+        });
+        let out = client.shell("old-device", "pm clear dev.missing").unwrap();
+        assert_eq!(out.stdout, "Error: package not found");
+        assert_eq!(out.exit_code, 1);
+        assert!(!out.success());
+        handle.join().unwrap();
+
+        // Bytes that are not UTF-8 before the marker do not hide the status.
+        let (client, handle) = spawn_mock_legacy_device(3, "closed", Some(""), |_, marker| {
+            let mut raw = vec![0x89, b'P', b'N', b'G', 0x00, 0xff, b'\n'];
+            raw.extend_from_slice(format!("{marker}127\n").as_bytes());
+            raw
+        });
+        let out = client.shell("old-device", "cat /sdcard/a.png; nope").unwrap();
+        assert_eq!(out.exit_code, 127);
+        assert_eq!(out.stdout, String::from_utf8_lossy(&[0x89, b'P', b'N', b'G', 0x00, 0xff, b'\n']));
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn legacy_shell_without_an_exit_marker_is_an_error_not_exit_code_zero() {
+        // The device went away mid-command: EOF before the status line.
+        let (client, handle) = spawn_mock_legacy_device(3, "closed", Some(""), |_, _| b"partial outp".to_vec());
+        let err = format!("{:#}", client.shell("old-device", "long-cmd").unwrap_err());
+        assert!(err.contains("reading legacy shell output for `long-cmd`"), "{err}");
+        assert!(err.contains("ended without an exit status"), "{err}");
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn a_shell_v2_fail_on_a_device_with_shell_v2_is_an_error_not_a_fallback() {
+        // Two connections only: the rejected request and the feature query. A
+        // third (legacy) one would hang the mock's `join`.
+        let (client, handle) =
+            spawn_mock_legacy_device(2, "device offline", Some("shell_v2,cmd,stat_v2"), |_, _| unreachable!());
+        let err = format!("{:#}", client.shell("old-device", "echo hi").unwrap_err());
+        assert_eq!(err, "sending `shell,v2,TERM=dumb:echo hi`: ADB error: device offline");
+        handle.join().unwrap();
+
+        // The feature query itself fails: the original rejection is reported.
+        let (client, handle) = spawn_mock_legacy_device(2, "closed", None, |_, _| unreachable!());
+        let err = format!("{:#}", client.shell("old-device", "echo hi").unwrap_err());
+        assert_eq!(err, "sending `shell,v2,TERM=dumb:echo hi`: ADB error: closed");
         handle.join().unwrap();
     }
 

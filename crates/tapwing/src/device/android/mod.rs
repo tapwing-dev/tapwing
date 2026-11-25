@@ -13,7 +13,6 @@ use anyhow::{Context, Result, bail};
 use image::DynamicImage;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
-use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::LaunchMetrics;
@@ -29,9 +28,11 @@ pub use helpers::{
 pub(super) use helpers::{run, wait_with_timeout};
 pub use permissions::{PermissionOutcome, all_permission_targets_from_dump, translate_permission_name};
 pub(super) use recording::{MIN_RECORDING, RECORDER_EXIT_TIMEOUT};
-pub use recording::{remote_recording_path, screenrecord_command};
+pub use recording::{
+    OrphanRecording, orphan_recordings, remote_recording_path, screenrecord_command, stop_orphan_recorders_script,
+};
 
-use helpers::{media_scan_script, plan_media, validate_package_name};
+use helpers::{ADB_SERVER_START_TIMEOUT, media_scan_script, plan_media, validate_package_name};
 use permissions::{translate_appops_value, translate_permission_value};
 use recording::AndroidRecording;
 
@@ -67,7 +68,7 @@ pub fn list_devices() -> Vec<String> {
         return devs;
     }
     // If the ADB server daemon was not running yet, `adb devices` auto-starts it.
-    match run("adb", &["devices"]) {
+    match run("adb", &["devices"], ADB_SERVER_START_TIMEOUT) {
         Ok(out) => parse_adb_devices(&out),
         Err(_) => Vec::new(),
     }
@@ -110,7 +111,7 @@ impl Android {
         match op(&self.adb) {
             Ok(val) => Ok(val),
             Err(_) if !self.adb.is_available() => {
-                let _ = Command::new("adb").arg("start-server").output();
+                let _ = run("adb", &["start-server"], ADB_SERVER_START_TIMEOUT);
                 op(&self.adb)
             }
             Err(err) => Err(err),

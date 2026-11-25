@@ -12,6 +12,7 @@
 //! * [`hierarchy`]: `AXElement` JSON into the shared selector engine.
 //! * [`tapwing_driver`]: finds the runner (env override, release bundle, checkout build).
 //! * [`ops`]: Maestro-style commands (tap, assert, swipe, ...) on top of the client.
+//! * `orphans`: removes runners a hard-killed earlier run left on the simulator.
 //!
 //! The release bundle is unpacked once into `~/.tapwing/ios-native-driver/<key>/`
 //! (an atomic marker makes warm runs free). [`IosNativeLaneHandle`] starts the
@@ -23,6 +24,7 @@
 pub mod client;
 pub mod hierarchy;
 pub mod ops;
+mod orphans;
 pub mod tapwing_driver;
 
 use std::collections::HashSet;
@@ -392,12 +394,10 @@ impl Drop for RunnerGuard {
         let _ = self.child.wait();
         // Killing the host-side `xcodebuild` does not stop the runner app
         // inside the simulator; terminate it so the port is freed.
-        let _ = Command::new("xcrun")
-            .args(["simctl", "terminate", &self.udid, self.runner_bundle_id])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
+        // Bounded, so a wedged simulator cannot hold the exit.
+        let mut terminate = Command::new("xcrun");
+        terminate.args(["simctl", "terminate", &self.udid, self.runner_bundle_id]);
+        let _ = crate::process::run_cleanup_with_timeout(&mut terminate, crate::device::ios::SIMCTL_TERMINATE_TIMEOUT);
         let _ = fs::remove_dir_all(&self.dir);
     }
 }
@@ -440,6 +440,10 @@ fn start_session(udid: &str, cancel: &AtomicBool) -> Result<IosNativeClient> {
     let driver_label = "the Tapwing iOS driver";
     if cancel.load(Ordering::Relaxed) || crate::interrupt::is_interrupted() {
         bail!("cancelled");
+    }
+    // Best effort: a leftover runner only wastes resources, so a failed sweep never fails the start.
+    if let Err(e) = orphans::sweep(udid) {
+        eprintln!("warning: could not look for leftover iOS runners of an earlier run: {e:#}");
     }
     let port_guard = reserve_port()?;
     let port = port_guard.port();

@@ -4,13 +4,24 @@
 //! later runs install nothing (see [`ensure_installed`]). Where the APK comes
 //! from is the business of [`super::tapwing_apk`].
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 
 use crate::device::adb_client::AdbClient;
+use crate::process::{Output, run_cleanup_with_timeout, run_with_timeout, run_with_timeout_or_cancel};
+
+/// Deadline of a short `adb` CLI call (`forward`, `uninstall`, a `shell`
+/// fallback while the smartsocket is down). It includes the few seconds the
+/// CLI needs to start the ADB server when none is running.
+const ADB_COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
+/// Deadline of one `adb install`: the driver APKs are small, but a wireless
+/// or busy device verifies and optimizes them slowly.
+const ADB_INSTALL_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Thin ADB wrapper for a single device `serial`. Shell and port-forward
 /// commands go directly over the ADB smartsocket ([`AdbClient`]) to avoid
@@ -42,18 +53,26 @@ impl Adb {
         c
     }
 
-    /// Runs `adb -s <serial> <args>`; returns stdout, errors carry stderr.
+    /// Runs `adb -s <serial> <args>` for at most [`ADB_COMMAND_TIMEOUT`];
+    /// returns stdout, errors carry stderr.
     pub fn run(&self, args: &[&str]) -> Result<String> {
-        let out = self.command(args).output().with_context(|| format!("running adb {}", args.join(" ")))?;
-        if !out.status.success() {
-            bail!(
-                "adb {} failed: {}{}",
-                args.join(" "),
-                String::from_utf8_lossy(&out.stderr).trim(),
-                String::from_utf8_lossy(&out.stdout).trim()
-            );
-        }
-        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        checked_stdout(args, run_with_timeout(&mut self.command(args), ADB_COMMAND_TIMEOUT)?)
+    }
+
+    /// Runs a bounded `adb` teardown command from `Drop`, even when a signal is
+    /// already pending.
+    pub fn run_cleanup(&self, args: &[&str]) -> Result<String> {
+        checked_stdout(args, run_cleanup_with_timeout(&mut self.command(args), ADB_COMMAND_TIMEOUT)?)
+    }
+
+    /// `adb install` of `apk` (`-r`: replace, `-t`: allow test-only packages,
+    /// `-d`: allow a version downgrade), killed after [`ADB_INSTALL_TIMEOUT`]
+    /// or as soon as `cancel` is set.
+    fn install(&self, apk: &Path, cancel: &AtomicBool) -> Result<()> {
+        let path = apk.to_string_lossy();
+        let args = ["install", "-r", "-t", "-d", &path];
+        let out = run_with_timeout_or_cancel(&mut self.command(&args), ADB_INSTALL_TIMEOUT, cancel)?;
+        checked_stdout(&args, out).map(|_| ())
     }
 
     pub fn shell(&self, cmd: &str) -> Result<String> {
@@ -67,6 +86,14 @@ impl Adb {
         }
         Ok(out.stdout)
     }
+}
+
+/// Stdout of a finished `adb <args>`, or an error with its output when it failed.
+fn checked_stdout(args: &[&str], out: Output) -> Result<String> {
+    if !out.status.success() {
+        bail!("adb {} failed: {}{}", args.join(" "), out.stderr_lossy().trim(), out.stdout_lossy().trim());
+    }
+    Ok(out.stdout_lossy())
 }
 
 pub fn sha256_hex(parts: &[&[u8]]) -> String {
@@ -152,11 +179,7 @@ fn needs_uninstall(err: &anyhow::Error) -> bool {
 
 /// Installs the plan's APKs only when missing or when their hash differs from
 /// the device marker. A warm device costs one `adb shell` round-trip.
-pub fn ensure_installed(
-    adb: &Adb,
-    plan: &InstallPlan,
-    cancel: &std::sync::atomic::AtomicBool,
-) -> Result<InstallReport> {
+pub fn ensure_installed(adb: &Adb, plan: &InstallPlan, cancel: &AtomicBool) -> Result<InstallReport> {
     use std::sync::atomic::Ordering;
 
     if cancel.load(Ordering::Relaxed) {
@@ -170,14 +193,11 @@ pub fn ensure_installed(
         if cancel.load(Ordering::Relaxed) {
             bail!("cancelled");
         }
-        let path = apk.to_string_lossy();
-        // -r: replace, -t: allow test-only packages, -d: allow version downgrade.
-        match adb.run(&["install", "-r", "-t", "-d", &path]) {
-            Ok(_) => {}
+        match adb.install(apk, cancel) {
+            Ok(()) => {}
             Err(e) if needs_uninstall(&e) => {
                 let _ = adb.run(&["uninstall", pkg]);
-                adb.run(&["install", "-r", "-t", "-d", &path])
-                    .with_context(|| format!("installing {}", apk.display()))?;
+                adb.install(apk, cancel).with_context(|| format!("installing {}", apk.display()))?;
             }
             Err(e) => return Err(e).with_context(|| format!("installing {}", apk.display())),
         }

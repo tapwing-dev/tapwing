@@ -312,7 +312,7 @@ impl Drop for ForwardGuard {
     fn drop(&mut self) {
         let local = format!("tcp:{}", self.host_port);
         if self.adb.client().forward_remove(&self.adb.serial, &local).is_err() {
-            let _ = self.adb.command(&["forward", "--remove", &local]).output();
+            let _ = self.adb.run_cleanup(&["forward", "--remove", &local]);
         }
     }
 }

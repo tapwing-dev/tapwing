@@ -507,6 +507,11 @@ fn run_device_shard(
                 let h_rev = scope.spawn(move || a.reverse(DEVICE_PORT, host_port));
                 let h_awk = scope.spawn(move || a.keep_awake());
                 let h_anim = if disable_anim { Some(scope.spawn(move || a.disable_animations())) } else { None };
+                // Best effort: leftovers of a hard-killed earlier run never fail this one.
+                let h_sweep = scope.spawn(move || a.sweep_orphan_recordings());
+                if let Ok(Err(e)) = h_sweep.join() {
+                    eprintln!("{prefix}warning: could not remove leftover screen recordings of an earlier run: {e:#}");
+                }
                 (
                     h_rev.join().map_err(|_| anyhow!("adb reverse setup thread panicked")),
                     h_awk.join().map_err(|_| anyhow!("keep_awake setup thread panicked")),
