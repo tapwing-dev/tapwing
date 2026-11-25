@@ -458,6 +458,7 @@ fn run(cli: Cli) -> Result<bool> {
 /// With `--dump-ir` stdout carries exactly one JSON document and every status
 /// line goes to stderr, so the output can be piped into a JSON tool.
 fn check(paths: &[PathBuf], dump_ir: bool) -> Result<bool> {
+    let loader = flow::Loader::new();
     let mut files = Vec::new();
     let mut path_errors = 0;
     for p in paths {
@@ -474,7 +475,7 @@ fn check(paths: &[PathBuf], dump_ir: bool) -> Result<bool> {
             }
         }
         let before = files.len();
-        collect_yaml(p, &mut files, &mut HashSet::new())?;
+        collect_yaml(p, &mut files, &mut HashSet::new(), &loader)?;
         if files.len() == before {
             // Only a directory can contribute nothing; passing CI on it would
             // hide a wrong path or an emptied flow folder.
@@ -486,7 +487,7 @@ fn check(paths: &[PathBuf], dump_ir: bool) -> Result<bool> {
     let (mut ok, mut failed) = (0, 0);
     let mut ir = Vec::new();
     for file in &files {
-        match flow::parse_file(file) {
+        match loader.parse_file(file) {
             Ok(f) => {
                 ok += 1;
                 if dump_ir {
@@ -523,7 +524,7 @@ fn check(paths: &[PathBuf], dump_ir: bool) -> Result<bool> {
 ///
 /// `visited` holds the canonical path of every directory walked so far: a
 /// symlink that leads back into the tree is entered once instead of forever.
-fn collect_yaml(p: &Path, out: &mut Vec<PathBuf>, visited: &mut HashSet<PathBuf>) -> Result<()> {
+fn collect_yaml(p: &Path, out: &mut Vec<PathBuf>, visited: &mut HashSet<PathBuf>, loader: &flow::Loader) -> Result<()> {
     if p.is_dir() {
         let canonical = p.canonicalize().with_context(|| format!("resolving {}", p.display()))?;
         if !visited.insert(canonical) {
@@ -534,8 +535,8 @@ fn collect_yaml(p: &Path, out: &mut Vec<PathBuf>, visited: &mut HashSet<PathBuf>
         entries.sort();
         for e in entries {
             if e.is_dir() {
-                collect_yaml(&e, out, visited)?;
-            } else if workspace::is_flow_file(&e, None) {
+                collect_yaml(&e, out, visited, loader)?;
+            } else if workspace::is_flow_file_with_loader(&e, None, loader) {
                 out.push(e);
             }
         }
