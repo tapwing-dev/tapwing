@@ -1058,6 +1058,7 @@ mod tests {
         Opts {
             settle_policy: "v2".into(),
             check_settle: false,
+            settle_load: Default::default(),
             cli_env: HashMap::new(),
             test_output_dir: PathBuf::from("out"),
             strict_input: false,

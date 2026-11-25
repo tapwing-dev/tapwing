@@ -60,6 +60,12 @@ pub struct TapwingConfig {
     /// `nativeDriver`: deprecated and ignored (Tapwing's own driver is always used); kept so
     /// existing configs still load, see [`crate::native_lane::deprecated_native_driver_warning`].
     pub native_driver: Option<String>,
+    /// `settleLoadTimeoutMs`: how long one HTTP request or pending image
+    /// blocks settle (`0`: no bound).
+    pub settle_load_timeout_ms: Option<u64>,
+    /// `settleHttpIgnore`: regexes (single string or list) for request URLs
+    /// that never block settle.
+    pub settle_http_ignore: Vec<String>,
 }
 
 /// Platform-specific workspace settings (`WorkspaceConfig.PlatformConfiguration`).
@@ -224,10 +230,17 @@ fn tapwing_config(node: &Node) -> Result<TapwingConfig, Problem> {
             "appErrorsIgnore" => cfg.app_errors_ignore = string_list(value, "appErrorsIgnore")?.unwrap_or_default(),
             "appErrorsScreenshot" => cfg.app_errors_screenshot = boolean(value, "appErrorsScreenshot")?,
             "nativeDriver" => cfg.native_driver = string(value, "nativeDriver")?,
+            "settleLoadTimeoutMs" => cfg.settle_load_timeout_ms = millis(value, "settleLoadTimeoutMs")?,
+            "settleHttpIgnore" => {
+                cfg.settle_http_ignore = string_list(value, "settleHttpIgnore")?.unwrap_or_default();
+            }
             other => {
                 return Err(Problem::new(
                     "Unknown tapwing setting",
-                    format!("`{other}` (valid: appErrors, appErrorsIgnore, appErrorsScreenshot, nativeDriver)"),
+                    format!(
+                        "`{other}` (valid: appErrors, appErrorsIgnore, appErrorsScreenshot, nativeDriver, \
+                         settleLoadTimeoutMs, settleHttpIgnore)"
+                    ),
                     value.pos(),
                 ));
             }
@@ -306,6 +319,16 @@ fn ios_platform_config(node: &Node) -> Result<IosPlatformConfig, Problem> {
     Ok(cfg)
 }
 
+/// A non-negative whole number of milliseconds.
+fn millis(node: &Node, field: &str) -> Result<Option<u64>, Problem> {
+    let Node::Scalar(s) = node else { return Err(Problem::format(field, node.pos())) };
+    match s.typed() {
+        Typed::Null => Ok(None),
+        Typed::Int(i) => u64::try_from(i).map(Some).map_err(|_| Problem::format(field, s.pos)),
+        _ => Err(Problem::format(field, s.pos)),
+    }
+}
+
 /// A Jackson `Boolean` with default scalar coercion (`"true"`, `1`).
 fn boolean(node: &Node, field: &str) -> Result<Option<bool>, Problem> {
     let Node::Scalar(s) = node else { return Err(Problem::format(field, node.pos())) };
@@ -337,8 +360,23 @@ mod tests {
                 app_errors_ignore: vec!["overflowed".into()],
                 app_errors_screenshot: Some(true),
                 native_driver: Some("Tapwing".into()),
+                settle_load_timeout_ms: None,
+                settle_http_ignore: Vec::new(),
             }
         );
+        let settle = parse(
+            "tapwing:\n  settleLoadTimeoutMs: 2500\n  settleHttpIgnore:\n    - '^https://analytics\\.'\n    - /poll\n",
+        )
+        .unwrap();
+        assert!(settle.unknown_keys.is_empty());
+        assert_eq!(settle.config.tapwing.settle_load_timeout_ms, Some(2500));
+        assert_eq!(settle.config.tapwing.settle_http_ignore, vec![r"^https://analytics\.".to_string(), "/poll".into()]);
+        let one = parse("tapwing:\n  settleLoadTimeoutMs: 0\n  settleHttpIgnore: /poll\n").unwrap();
+        assert_eq!(one.config.tapwing.settle_load_timeout_ms, Some(0));
+        assert_eq!(one.config.tapwing.settle_http_ignore, vec!["/poll".to_string()]);
+        assert!(parse("tapwing:\n  settleLoadTimeoutMs: -1\n").is_err());
+        assert!(parse("tapwing:\n  settleLoadTimeoutMs: soon\n").is_err());
+        assert!(parse("tapwing:\n  settleHttpIgnore:\n    a: b\n").is_err());
         assert!(parse("tapwing:\n  appErrors: loud\n").is_err());
         // Deprecated and ignored: any value loads (the CLI warns about it).
         let old = parse("tapwing:\n  nativeDriver: maestro\n").unwrap();

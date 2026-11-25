@@ -124,6 +124,14 @@ struct TestArgs {
     /// After every action, verify no significant animation is still running.
     #[arg(long)]
     check_settle: bool,
+    /// How long one in-flight HTTP request or pending image keeps a step waiting to settle, in ms
+    /// (`0`: until it ends). Default: `config.yaml` `tapwing.settleLoadTimeoutMs`, else 5000.
+    #[arg(long, value_name = "MS")]
+    settle_load_timeout_ms: Option<u64>,
+    /// Regex for request URLs that never keep a step waiting to settle, such as analytics or
+    /// long-poll endpoints (repeatable; added to `tapwing.settleHttpIgnore`).
+    #[arg(long, value_name = "REGEX")]
+    settle_http_ignore: Vec<String>,
     /// Fail `inputText`/`eraseText` when no text field is focused.
     #[arg(long)]
     strict_input: bool,
@@ -357,6 +365,8 @@ fn run(cli: Cli) -> Result<bool> {
                 &ignore,
                 args.app_errors_screenshot || tapwing_cfg.app_errors_screenshot.unwrap_or(false),
             )?;
+            let settle_load =
+                run::SettleLoadOpts::resolve(args.settle_load_timeout_ms, &args.settle_http_ignore, tapwing_cfg)?;
             run_test_suite(SuiteRunConfig {
                 plan,
                 shard_split: args.shard_split,
@@ -375,6 +385,7 @@ fn run(cli: Cli) -> Result<bool> {
                 cli_env,
                 settle_policy: args.settle_policy,
                 check_settle: args.check_settle,
+                settle_load,
                 strict_input: args.strict_input,
                 maestro_compat_strict: args.maestro_compat == MaestroCompat::Strict,
                 input_mode: args.input,
@@ -417,6 +428,7 @@ fn run(cli: Cli) -> Result<bool> {
             let opts = Opts {
                 settle_policy: "v2".into(),
                 check_settle: false,
+                settle_load: Default::default(),
                 cli_env: HashMap::new(),
                 test_output_dir: PathBuf::new(),
                 strict_input: false,
