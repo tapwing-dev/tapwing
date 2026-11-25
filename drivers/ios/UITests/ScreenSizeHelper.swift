@@ -19,7 +19,12 @@ enum ScreenSizeHelper {
     }
 
     static func physicalScreenSize() -> (Double, Double) {
-        let info = RunningApp.getForegroundAppInfo()
+        physicalScreenSize(foregroundInfo: RunningApp.getForegroundAppInfo())
+    }
+
+    static func physicalScreenSize(
+        foregroundInfo info: (app: XCUIApplication, bundleId: String)?
+    ) -> (Double, Double) {
         let app = info?.app ?? XCUIApplication(bundleIdentifier: RunningApp.springboardBundleId)
         let currentAppBundleId = info?.bundleId ?? RunningApp.springboardBundleId
         let currentOrientation = XCUIDevice.shared.orientation

@@ -8,7 +8,7 @@
 import Foundation
 
 /// Platform-neutral mirror of `UIDeviceOrientation` for unit-testable math.
-public enum LogicalOrientation: Equatable, Sendable {
+public enum LogicalOrientation: Equatable, Hashable, Sendable {
     case portrait
     case portraitUpsideDown
     case landscapeLeft

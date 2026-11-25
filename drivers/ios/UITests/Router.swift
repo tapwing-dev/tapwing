@@ -28,7 +28,9 @@ final class Router {
         case ("POST", "/pressButton"):
             return Actions.pressButton(request)
         case ("POST", "/setOrientation"):
-            return Actions.setOrientation(request)
+            return Actions.setOrientation(request) { [hierarchy] in
+                hierarchy.invalidateCache()
+            }
         case ("GET", "/isScreenStatic"):
             return ScreenProbe.isScreenStatic()
         case ("POST", "/runningApp"):
