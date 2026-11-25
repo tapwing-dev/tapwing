@@ -35,14 +35,23 @@ class DriverError implements Exception {
   DriverError(this.code, this.message, [this.details]);
 
   /// Creates an `ELEMENT_NOT_FOUND` error carrying up to 40 visible screen
-  /// texts for diagnostic output on the host.
+  /// texts for diagnostic output on the host, plus optional
+  /// [platformViewCoverage] (`0.0`–`1.0`) when a visible platform view is on
+  /// screen.
   factory DriverError.elementNotFound(
     Selector selector,
-    List<String> visibleTexts,
-  ) => DriverError(
+    List<String> visibleTexts, {
+    double? platformViewCoverage,
+  }) => DriverError(
     DriverErrorCode.elementNotFound,
     'Element not found: ${selector.describe()}',
-    <String, Object?>{'visibleTexts': visibleTexts},
+    <String, Object?>{
+      'visibleTexts': visibleTexts,
+      if (platformViewCoverage != null &&
+          platformViewCoverage.isFinite &&
+          platformViewCoverage > 0)
+        'platformViewCoverage': platformViewCoverage.clamp(0.0, 1.0),
+    },
   );
 
   /// Creates an `ASSERTION` error when `assertNotVisible` fails.

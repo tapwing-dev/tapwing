@@ -274,7 +274,8 @@ class DriverContext {
   }
 
   /// Builds an `ELEMENT_NOT_FOUND` [DriverError] populated with up to 40
-  /// non-empty texts currently visible in the semantics tree.
+  /// non-empty texts currently visible in the semantics tree and any visible
+  /// platform-view coverage.
   DriverError elementNotFound(Selector selector) {
     final Snapshot snap = captureSnapshot();
     final List<String> texts = snap.nodes
@@ -284,7 +285,11 @@ class DriverContext {
         .whereType<String>()
         .take(_maxVisibleTextsInError)
         .toList();
-    return DriverError.elementNotFound(selector, texts);
+    return DriverError.elementNotFound(
+      selector,
+      texts,
+      platformViewCoverage: snap.platformViewCoverage,
+    );
   }
 
   /// Parses Maestro point syntax: `"50%, 50%"` (relative to the screen size)

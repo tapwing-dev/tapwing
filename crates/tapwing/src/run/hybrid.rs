@@ -36,6 +36,15 @@ const NATIVE_WAIT: Duration = Duration::from_secs(45);
 const IOS_NATIVE_WAIT: Duration = Duration::from_secs(65);
 /// Native look at an element the Flutter driver cannot see (platform views, WebViews).
 const NATIVE_FALLBACK_MS: u64 = 1000;
+/// Minimum visible platform-view coverage to pre-warm a lazy iOS XCTest runner
+/// on a lookup whose timeout falls between `FLUTTER_PROBE_MS` and
+/// `IOS_LAZY_PROBE_MS` (e.g. an in-app `UiKitView` WebView or Map).
+const IOS_LAZY_PLATFORM_VIEW_COVERAGE: f64 = 0.20;
+/// Visible platform-view coverage at or above which an immediate post-probe
+/// native look gets up to `NATIVE_FALLBACK_MS` instead of a 0 ms instant check.
+/// Smaller platform views (such as banner ads) only take a 0 ms snapshot so
+/// async Flutter widgets are not delayed.
+const MAJOR_PLATFORM_VIEW_COVERAGE: f64 = 0.5;
 /// With the iOS overlay hint set, how long a Flutter miss looks natively before
 /// the Flutter lane gets the rest of the budget.
 const OVERLAY_NATIVE_SLICE_MS: u64 = 2500;
@@ -332,6 +341,24 @@ pub(super) fn is_lookup_miss(e: &anyhow::Error) -> bool {
 
 pub(super) fn is_flutter_not_found(e: &anyhow::Error) -> bool {
     e.downcast_ref::<DriverError>().is_some_and(|d| d.code == "ELEMENT_NOT_FOUND")
+}
+
+/// Fraction of the screen covered by visible platform views (`WebView`,
+/// `AndroidView`, `UiKitView`) reported on a Flutter `ELEMENT_NOT_FOUND` miss.
+fn platform_view_coverage(err: &anyhow::Error) -> Option<f64> {
+    err.downcast_ref::<DriverError>()
+        .and_then(|d| d.details.get("platformViewCoverage"))
+        .and_then(Value::as_f64)
+        .filter(|&c| c.is_finite() && c > 0.0)
+}
+
+/// Whether a cold (`IosNativeSlot::Lazy`) iOS native lane should pre-warm after
+/// the initial Flutter probe misses.
+fn should_prewarm_ios_lazy(ios_lazy: bool, negative: bool, timeout_ms: u64, pv_coverage: Option<f64>) -> bool {
+    ios_lazy
+        && !negative
+        && (timeout_ms > IOS_LAZY_PROBE_MS
+            || (timeout_ms > FLUTTER_PROBE_MS && pv_coverage.is_some_and(|c| c >= IOS_LAZY_PLATFORM_VIEW_COVERAGE)))
 }
 
 /// Result of probing which window currently owns input focus.
@@ -873,22 +900,24 @@ impl DeviceFlutterBackend<'_> {
         // iOS: the element was last found natively and no system app is in
         // front (XCTest reports the app itself, e.g. under a web-auth sheet), so
         // look natively right away instead of waiting out the Flutter budget.
+        let mut overlay_probed = false;
         if !negative && self.ios_overlay_active() {
             let slice = left(started).min(OVERLAY_NATIVE_SLICE_MS);
             match self.try_native(|ops| native(ops, slice)) {
                 Some(Ok(v)) => return Ok(v),
                 Some(Err(e)) if crate::interrupt::is_interrupted_error(&e) => return Err(e),
-                _ => {}
+                Some(Err(_)) => overlay_probed = true,
+                None => {}
             }
         }
+        let pv_coverage = if !negative && is_flutter_not_found(&miss) { platform_view_coverage(&miss) } else { None };
         // iOS, lane still warming up (either Lazy about to spawn, or eagerly
         // Started and still Pending): overlap Flutter lookup slices with runner
         // warm-up so cold startup never blocks past the lookup budget.
         let ios_pending = self.platform() == Platform::Ios
             && self.ios_native.as_deref_mut().is_some_and(|s| s.is_started() && s.try_get().is_none() && s.is_usable());
-        let prewarmed = self.platform() == Platform::Ios
-            && !negative
-            && ((ios_lazy && timeout_ms > IOS_LAZY_PROBE_MS) || ios_pending);
+        let prewarmed =
+            should_prewarm_ios_lazy(ios_lazy, negative, timeout_ms, pv_coverage) || (!negative && ios_pending);
         if prewarmed {
             if ios_lazy && let Some(slot) = self.ios_native.as_deref_mut() {
                 slot.ensure_started();
@@ -938,6 +967,25 @@ impl DeviceFlutterBackend<'_> {
                 }
             }
             return Err(miss);
+        }
+        // A visible PlatformView (`WebView`, `AndroidView`, `UiKitView`) lives
+        // inside `flow_app`'s own window, so `external_focus_within()` returned
+        // `None`. Probe the warm native lane immediately instead of burning the
+        // full second Flutter wait (~16.6 s). On a miss, keep going into the
+        // second Flutter wait + final native fallback so async Flutter widgets
+        // (e.g. on screens with a small banner-ad PlatformView) and
+        // slow-loading WebViews both succeed.
+        if !overlay_probed && let Some(cov) = pv_coverage {
+            let native_slice =
+                if cov >= MAJOR_PLATFORM_VIEW_COVERAGE { left(started).min(NATIVE_FALLBACK_MS) } else { 0 };
+            match self.try_native(|ops| native(ops, native_slice)) {
+                Some(Ok(v)) => {
+                    self.note_native_fallback();
+                    return Ok(v);
+                }
+                Some(Err(e)) if crate::interrupt::is_interrupted_error(&e) => return Err(e),
+                _ => {}
+            }
         }
         let second_budget = left(started);
         match flutter(self, second_budget) {
@@ -2317,5 +2365,273 @@ dumpsys() {
         drop(native);
         let _ = stop_grpc.send(());
         grpc_srv.join().unwrap();
+    }
+
+    fn miss_with_platform_view(coverage: f64) -> anyhow::Error {
+        anyhow::Error::new(DriverError {
+            code: "ELEMENT_NOT_FOUND".into(),
+            message: "Element not found".into(),
+            details: json!({
+                "code": "ELEMENT_NOT_FOUND",
+                "visibleTexts": ["Header"],
+                "platformViewCoverage": coverage,
+            }),
+        })
+    }
+
+    #[test]
+    fn platform_view_coverage_extracts_positive_finite_values_and_stays_backward_compatible() {
+        assert_eq!(platform_view_coverage(&miss_with_platform_view(0.85)), Some(0.85));
+        assert_eq!(platform_view_coverage(&miss_with_platform_view(0.08)), Some(0.08));
+        assert_eq!(platform_view_coverage(&miss_with_platform_view(0.0)), None);
+        assert_eq!(platform_view_coverage(&miss_with_platform_view(-0.5)), None);
+        assert_eq!(platform_view_coverage(&miss("ELEMENT_NOT_FOUND")), None);
+        assert_eq!(
+            platform_view_coverage(&anyhow::Error::new(DriverError {
+                code: "ELEMENT_NOT_FOUND".into(),
+                message: "x".into(),
+                details: json!({ "visibleTexts": ["A"] }),
+            })),
+            None
+        );
+        assert_eq!(platform_view_coverage(&anyhow!("transport error")), None);
+    }
+
+    #[test]
+    fn ios_lazy_prewarm_policy_honors_platform_view_coverage_on_intermediate_timeouts() {
+        // Pure Flutter: tight timeout <= IOS_LAZY_PROBE_MS stays lazy; > IOS_LAZY_PROBE_MS prewarms.
+        assert!(!should_prewarm_ios_lazy(true, false, FLUTTER_PROBE_MS, None));
+        assert!(!should_prewarm_ios_lazy(true, false, 1500, None));
+        assert!(!should_prewarm_ios_lazy(true, false, IOS_LAZY_PROBE_MS, None));
+        assert!(should_prewarm_ios_lazy(true, false, IOS_LAZY_PROBE_MS + 1, None));
+
+        // Significant UiKitView (>= 0.20): prewarms when FLUTTER_PROBE_MS < timeout_ms <= IOS_LAZY_PROBE_MS.
+        assert!(!should_prewarm_ios_lazy(true, false, FLUTTER_PROBE_MS, Some(0.85)));
+        assert!(should_prewarm_ios_lazy(true, false, FLUTTER_PROBE_MS + 1, Some(0.20)));
+        assert!(should_prewarm_ios_lazy(true, false, 1500, Some(0.85)));
+        assert!(should_prewarm_ios_lazy(true, false, IOS_LAZY_PROBE_MS, Some(0.85)));
+
+        // Small banner-ad platform view (< 0.20): does not spawn xcodebuild on tight timeouts.
+        assert!(!should_prewarm_ios_lazy(true, false, 1500, Some(0.08)));
+
+        // Negative assertions (`assertNotVisible`) and non-lazy lanes never prewarm.
+        assert!(!should_prewarm_ios_lazy(true, true, 17_000, Some(0.95)));
+        assert!(!should_prewarm_ios_lazy(false, false, 17_000, Some(0.95)));
+    }
+
+    #[test]
+    fn platform_view_miss_probes_native_immediately_without_second_flutter_wait() {
+        // 1. Android WebView (`platformViewCoverage: 0.85`) with 17 s budget:
+        //    only the initial 400 ms Flutter probe runs, then immediate native hit
+        //    with NATIVE_FALLBACK_MS budget — zero 16.6 s second Flutter wait.
+        {
+            let mut dev = Device::Android(crate::device::Android::new("unreachable".into()));
+            let mut drv = Driver::listen(0).unwrap();
+            let opts = test_opts(InputMode::Auto);
+            let mut native = warm_native_handle();
+            let mut session = Session {
+                dev: &mut dev,
+                drv: &mut drv,
+                opts: &opts,
+                units_scale: 1.0,
+                native: Some(&mut native),
+                ios_native: None,
+            };
+            let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+
+            let flutter_seen = std::cell::RefCell::new(Vec::new());
+            let native_seen = std::cell::RefCell::new(Vec::new());
+            let out = backend
+                .route_selector(
+                    17_000,
+                    false,
+                    |_, t| {
+                        flutter_seen.borrow_mut().push(t);
+                        Err(miss_with_platform_view(0.85))
+                    },
+                    |_, t| {
+                        native_seen.borrow_mut().push(t);
+                        Ok("webview-button")
+                    },
+                )
+                .unwrap();
+            assert_eq!(out, "webview-button");
+            assert_eq!(flutter_seen.into_inner(), vec![FLUTTER_PROBE_MS], "must skip second 16.6 s Flutter wait");
+            assert_eq!(native_seen.into_inner(), vec![NATIVE_FALLBACK_MS]);
+            assert_eq!(backend.lane_stats(), LaneStats { flutter: 1, native: 1, ..Default::default() });
+        }
+
+        // 2. Warm iOS UiKitView (`platformViewCoverage: 0.85`): immediate native hit
+        //    skips the second Flutter wait and sets `overlay_hint`.
+        {
+            use crate::ios_native_lane::client::mock::{MockRunner, Resp};
+
+            let runner = MockRunner::start(Box::new(|_| Resp::json("{}")));
+            let (mut dev, mut drv) = ios_backend_session_parts();
+            let opts = test_opts(InputMode::Auto);
+            let mut slot = IosNativeSlot::Started(IosNativeLaneHandle::ready_for_test(
+                crate::ios_native_lane::IosNativeClient::connect(runner.port),
+            ));
+            let mut session = Session {
+                dev: &mut dev,
+                drv: &mut drv,
+                opts: &opts,
+                units_scale: 1.0,
+                native: None,
+                ios_native: Some(&mut slot),
+            };
+            let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+
+            let flutter_seen = std::cell::RefCell::new(Vec::new());
+            let out = backend
+                .route_selector(
+                    17_000,
+                    false,
+                    |_, t| {
+                        flutter_seen.borrow_mut().push(t);
+                        Err(miss_with_platform_view(0.85))
+                    },
+                    |_, t| {
+                        assert_eq!(t, NATIVE_FALLBACK_MS);
+                        Ok("ios-webview-button")
+                    },
+                )
+                .unwrap();
+            assert_eq!(out, "ios-webview-button");
+            assert_eq!(flutter_seen.into_inner(), vec![FLUTTER_PROBE_MS]);
+            assert!(backend.overlay_hint, "native fallback on iOS remembers overlay_hint");
+        }
+
+        // 3. Backward compatibility: when `details` has no `platformViewCoverage`,
+        //    the router keeps waiting on Flutter before falling back to native.
+        {
+            let mut dev = Device::Android(crate::device::Android::new("unreachable".into()));
+            let mut drv = Driver::listen(0).unwrap();
+            let opts = test_opts(InputMode::Auto);
+            let mut native = warm_native_handle();
+            let mut session = Session {
+                dev: &mut dev,
+                drv: &mut drv,
+                opts: &opts,
+                units_scale: 1.0,
+                native: Some(&mut native),
+                ios_native: None,
+            };
+            let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+
+            let flutter_seen = std::cell::RefCell::new(Vec::new());
+            let native_seen = std::cell::RefCell::new(Vec::new());
+            let out = backend
+                .route_selector(
+                    17_000,
+                    false,
+                    |_, t| {
+                        flutter_seen.borrow_mut().push(t);
+                        Err(miss("ELEMENT_NOT_FOUND"))
+                    },
+                    |_, t| {
+                        native_seen.borrow_mut().push(t);
+                        Ok("late-native-hit")
+                    },
+                )
+                .unwrap();
+            assert_eq!(out, "late-native-hit");
+            let seen = flutter_seen.into_inner();
+            assert_eq!(seen.len(), 2, "without platformViewCoverage, second Flutter wait still runs");
+            assert_eq!(seen[0], FLUTTER_PROBE_MS);
+            assert!(seen[1] > 15_000 && seen[1] <= 17_000, "unexpected second wait: {}", seen[1]);
+            assert_eq!(native_seen.into_inner(), vec![NATIVE_FALLBACK_MS]);
+        }
+    }
+
+    #[test]
+    fn banner_ad_and_async_webview_platform_views_never_abort_flutter_or_final_fallback() {
+        // 1. Small banner-ad PlatformView (`platformViewCoverage: 0.08`): immediate
+        //    0 ms native probe misses without incrementing `lanes.native`, and the
+        //    async Flutter widget succeeds on the second Flutter wait.
+        {
+            let mut dev = Device::Android(crate::device::Android::new("unreachable".into()));
+            let mut drv = Driver::listen(0).unwrap();
+            let opts = test_opts(InputMode::Auto);
+            let mut native = warm_native_handle();
+            let mut session = Session {
+                dev: &mut dev,
+                drv: &mut drv,
+                opts: &opts,
+                units_scale: 1.0,
+                native: Some(&mut native),
+                ios_native: None,
+            };
+            let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+
+            let flutter_calls = std::cell::Cell::new(0u32);
+            let flutter_seen = std::cell::RefCell::new(Vec::new());
+            let native_seen = std::cell::RefCell::new(Vec::new());
+            let out = backend
+                .route_selector(
+                    7_000,
+                    false,
+                    |_, t| {
+                        flutter_seen.borrow_mut().push(t);
+                        let n = flutter_calls.get() + 1;
+                        flutter_calls.set(n);
+                        if n == 1 { Err(miss_with_platform_view(0.08)) } else { Ok("async-flutter-widget") }
+                    },
+                    |_, t| {
+                        native_seen.borrow_mut().push(t);
+                        Err(anyhow!("not in banner ad"))
+                    },
+                )
+                .unwrap();
+            assert_eq!(out, "async-flutter-widget");
+            assert_eq!(native_seen.into_inner(), vec![0], "small platform view gets an instant 0 ms probe");
+            let seen = flutter_seen.into_inner();
+            assert_eq!(seen.len(), 2);
+            assert_eq!(seen[0], FLUTTER_PROBE_MS);
+            assert!(seen[1] > 5_000 && seen[1] <= 7_000, "second Flutter wait keeps remaining budget: {}", seen[1]);
+            assert_eq!(
+                backend.lane_stats(),
+                LaneStats { flutter: 1, native: 0, ..Default::default() },
+                "missed speculative native probe must not report hybrid"
+            );
+        }
+
+        // 2. Slow-loading WebView (`platformViewCoverage: 0.85`): immediate native
+        //    probe misses while HTML is loading, second Flutter wait misses, and
+        //    the final native fallback finds the loaded WebView element.
+        {
+            let mut dev = Device::Android(crate::device::Android::new("unreachable".into()));
+            let mut drv = Driver::listen(0).unwrap();
+            let opts = test_opts(InputMode::Auto);
+            let mut native = warm_native_handle();
+            let mut session = Session {
+                dev: &mut dev,
+                drv: &mut drv,
+                opts: &opts,
+                units_scale: 1.0,
+                native: Some(&mut native),
+                ios_native: None,
+            };
+            let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+
+            let native_calls = std::cell::Cell::new(0u32);
+            let native_seen = std::cell::RefCell::new(Vec::new());
+            let out = backend
+                .route_selector(
+                    7_000,
+                    false,
+                    |_, _| Err(miss_with_platform_view(0.85)),
+                    |_, t| {
+                        native_seen.borrow_mut().push(t);
+                        let n = native_calls.get() + 1;
+                        native_calls.set(n);
+                        if n == 1 { Err(anyhow!("still loading")) } else { Ok("loaded-webview-element") }
+                    },
+                )
+                .unwrap();
+            assert_eq!(out, "loaded-webview-element");
+            assert_eq!(native_seen.into_inner(), vec![NATIVE_FALLBACK_MS, NATIVE_FALLBACK_MS]);
+            assert_eq!(backend.lane_stats(), LaneStats { flutter: 1, native: 1, ..Default::default() });
+        }
     }
 }

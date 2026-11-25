@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tapwing_driver/src/platform.dart';
+import 'package:tapwing_driver/src/protocol/rpc_error.dart';
+import 'package:tapwing_driver/src/selector/selector.dart';
+import 'package:tapwing_driver/src/server/driver_context.dart';
 import 'package:tapwing_driver/src/snapshot/snapshot.dart';
 
 void main() {
@@ -243,5 +248,151 @@ void main() {
         }
       },
     );
+
+    testWidgets(
+      'Snapshot.capture tracks visible platformViewCoverage and omits it when absent or off-screen',
+      (WidgetTester tester) async {
+        final SemanticsHandle handle = tester.ensureSemantics();
+        try {
+          // 1. Pure Flutter tree: coverage is 0 and omitted from ELEMENT_NOT_FOUND JSON.
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(body: Center(child: Text('Pure Flutter'))),
+            ),
+          );
+          final Snapshot pure = Snapshot.capture();
+          expect(pure.platformViewCoverage, 0.0);
+          expect(pure.hasPlatformView, isFalse);
+
+          final DriverContext ctx = DriverContext();
+          final Map<String, Object?> pureErr = ctx
+              .elementNotFound(Selector(text: 'Missing'))
+              .toJson();
+          expect(pureErr['code'], DriverErrorCode.elementNotFound);
+          expect(pureErr.containsKey('platformViewCoverage'), isFalse);
+
+          // 2. Off-screen and hidden platform views report 0 coverage.
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: Stack(
+                  clipBehavior: Clip.none,
+                  children: <Widget>[
+                    const Positioned(
+                      left: 5000,
+                      top: 0,
+                      width: 400,
+                      height: 300,
+                      child: _FakePlatformView(platformViewId: 1),
+                    ),
+                    Semantics(
+                      hidden: true,
+                      child: const SizedBox(
+                        width: 400,
+                        height: 300,
+                        child: _FakePlatformView(platformViewId: 2),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+          final Snapshot offscreen = Snapshot.capture();
+          expect(offscreen.platformViewCoverage, 0.0);
+          expect(offscreen.hasPlatformView, isFalse);
+          expect(
+            ctx
+                .elementNotFound(Selector(text: 'Missing'))
+                .toJson()
+                .containsKey('platformViewCoverage'),
+            isFalse,
+          );
+
+          // 3. Visible on-screen platform view covering exactly half the screen
+          //    (plus an overlapping off-screen overhang clipped to screen bounds).
+          final Size logicalScreen =
+              tester.view.physicalSize / tester.view.devicePixelRatio;
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: Stack(
+                  clipBehavior: Clip.none,
+                  children: <Widget>[
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      width: logicalScreen.width,
+                      height: logicalScreen.height / 2,
+                      child: const _FakePlatformView(platformViewId: 7),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+          final Snapshot androidSnap = Snapshot.capture();
+          expect(androidSnap.hasPlatformView, isTrue);
+          expect(androidSnap.platformViewCoverage, closeTo(0.5, 0.01));
+
+          final Snapshot iosSnap = Snapshot.capture(
+            platform: DriverPlatform.ios,
+            appName: 'Sample',
+          );
+          expect(iosSnap.hasPlatformView, isTrue);
+          expect(iosSnap.platformViewCoverage, closeTo(0.5, 0.01));
+
+          final Map<String, Object?> pvErr = ctx
+              .elementNotFound(Selector(text: 'WebView Submit'))
+              .toJson();
+          expect(pvErr['code'], DriverErrorCode.elementNotFound);
+          expect(pvErr['platformViewCoverage']! as double, closeTo(0.5, 0.01));
+        } finally {
+          handle.dispose();
+        }
+      },
+    );
   });
+}
+
+class _FakePlatformView extends LeafRenderObjectWidget {
+  const _FakePlatformView({required this.platformViewId});
+
+  final int platformViewId;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderFakePlatformView(platformViewId: platformViewId);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderFakePlatformView renderObject,
+  ) {
+    renderObject.platformViewId = platformViewId;
+  }
+}
+
+class _RenderFakePlatformView extends RenderBox {
+  _RenderFakePlatformView({required int platformViewId})
+    : _platformViewId = platformViewId;
+
+  int _platformViewId;
+
+  set platformViewId(int value) {
+    if (_platformViewId == value) return;
+    _platformViewId = value;
+    markNeedsSemanticsUpdate();
+  }
+
+  @override
+  void performLayout() {
+    size = constraints.biggest;
+  }
+
+  @override
+  void describeSemanticsConfiguration(SemanticsConfiguration config) {
+    super.describeSemanticsConfiguration(config);
+    config.platformViewId = _platformViewId;
+  }
 }
