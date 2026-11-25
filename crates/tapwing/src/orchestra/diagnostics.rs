@@ -229,13 +229,13 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
             let stem = failure::artifact_stem(&self.opts.flow_path, step_index);
             if let Some(png) = self.driver.capture_failure_screenshot() {
                 let path = failures_dir.join(format!("{stem}_failure.png"));
-                if std::fs::create_dir_all(&failures_dir).is_ok() && std::fs::write(&path, png).is_ok() {
+                if std::fs::create_dir_all(&failures_dir).is_ok() && crate::atomic_write::write(&path, png).is_ok() {
                     diag.screenshot = Some(path.to_string_lossy().to_string());
                 }
             }
             if let Some(full) = full_tree_text {
                 let path = failures_dir.join(format!("{stem}_hierarchy.txt"));
-                if std::fs::create_dir_all(&failures_dir).is_ok() && std::fs::write(&path, full).is_ok() {
+                if std::fs::create_dir_all(&failures_dir).is_ok() && crate::atomic_write::write(&path, full).is_ok() {
                     diag.hierarchy_file = Some(path.to_string_lossy().to_string());
                 }
             }

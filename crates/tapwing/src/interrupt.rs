@@ -9,9 +9,10 @@
 //!
 //! Installing this handler turns the **first** `SIGINT`/`SIGTERM` into a
 //! cooperative cancellation: blocking loops return [`InterruptedError`],
-//! the stack unwinds so every RAII guard cleans up the device, and the CLI
-//! exits with the standard Unix status `128 + signal` (`130` for `SIGINT`,
-//! `143` for `SIGTERM`). A **second** signal exits immediately via `_exit` so
+//! the stack unwinds so every RAII guard cleans up the device, `tapwing test`
+//! then writes a partial report marked as interrupted, and the CLI exits with
+//! the standard Unix status `128 + signal` (`130` for `SIGINT`, `143` for
+//! `SIGTERM`). A **second** signal exits immediately via `_exit` so
 //! an unresponsive ADB daemon or device never traps the user.
 
 use std::fmt;
@@ -164,6 +165,15 @@ pub fn is_interrupted() -> bool {
 /// The first interrupting signal received (`SIGINT` = 2, `SIGTERM` = 15), if any.
 pub fn signal() -> Option<i32> {
     STATE.signal()
+}
+
+/// Report name of an interrupting signal (`SIGINT`, `SIGTERM`, else `signal N`).
+pub fn signal_name(signal: i32) -> String {
+    match signal {
+        2 => "SIGINT".to_string(),
+        15 => "SIGTERM".to_string(),
+        n => format!("signal {n}"),
+    }
 }
 
 /// Standard Unix exit status (`128 + signal`) if interrupted, else `None`.

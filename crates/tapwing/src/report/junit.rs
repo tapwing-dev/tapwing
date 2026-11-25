@@ -38,11 +38,16 @@ pub fn render_junit(summary: &TestExecutionSummary) -> Result<String> {
                 ts.push_attribute(("device", dev_clean.as_str()));
             }
             let tests_str = suite.flows.len().to_string();
-            let failures_str = suite.flows.iter().filter(|f| f.status == FlowStatus::Error).count().to_string();
+            let failures_str = suite.failed_count().to_string();
             let time_str = format_junit_seconds(suite.duration_ms);
             let timestamp_str = format_iso_local_seconds(suite.start_epoch_ms, summary.utc_offset_secs);
             ts.push_attribute(("tests", tests_str.as_str()));
             ts.push_attribute(("failures", failures_str.as_str()));
+            // Only on an interrupted run, so a normal run keeps Maestro's exact XML.
+            let skipped_str = suite.not_run_count().to_string();
+            if suite.not_run_count() > 0 {
+                ts.push_attribute(("skipped", skipped_str.as_str()));
+            }
             ts.push_attribute(("time", time_str.as_str()));
             ts.push_attribute(("timestamp", timestamp_str.as_str()));
 
@@ -111,8 +116,16 @@ pub fn render_junit(summary: &TestExecutionSummary) -> Result<String> {
                 if !issue_lines.is_empty() {
                     system_err_sections.push(format!("App issues:\n{}", issue_lines.join("\n")));
                 }
-                let has_children =
-                    !props.is_empty() || flow.failure_message.is_some() || !system_err_sections.is_empty();
+                // A flow the interrupt kept from starting is `<skipped>`, the
+                // JUnit way to say "neither passed nor failed".
+                let skipped_message = (flow.status == FlowStatus::NotRun).then(|| {
+                    let cause = summary.interrupted.map(|sig| crate::interrupt::InterruptedError { signal: sig });
+                    cause.map_or_else(|| "not run".to_string(), |c| format!("not run: {c}"))
+                });
+                let has_children = !props.is_empty()
+                    || flow.failure_message.is_some()
+                    || skipped_message.is_some()
+                    || !system_err_sections.is_empty();
                 if !has_children {
                     writer.write_event(Event::Empty(tc))?;
                 } else {
@@ -141,6 +154,11 @@ pub fn render_junit(summary: &TestExecutionSummary) -> Result<String> {
                         };
                         let clean_failure = sanitize_xml_text(&prefixed);
                         writer.create_element("failure").write_text_content(BytesText::new(&clean_failure))?;
+                    }
+                    if let Some(message) = &skipped_message {
+                        let mut skipped = BytesStart::new("skipped");
+                        skipped.push_attribute(("message", message.as_str()));
+                        writer.write_event(Event::Empty(skipped))?;
                     }
                     if !system_err_sections.is_empty() {
                         let text = system_err_sections.join("\n\n");
@@ -225,6 +243,7 @@ mod tests {
             input_mode: "auto".into(),
             total_ms: 1958072.0,
             utc_offset_secs: 0,
+            interrupted: None,
             suites: vec![SuiteResult {
                 shard_index: None,
                 device_id: Some("Pixel 6".into()),
@@ -235,6 +254,7 @@ mod tests {
                 duration_ms: 1958072.0,
                 start_epoch_ms: TS_MS,
                 skipped_count: 0,
+                error: None,
                 flows: vec![flow_a, flow_b],
             }],
         };
@@ -272,6 +292,7 @@ mod tests {
             input_mode: "auto".into(),
             total_ms: 10.0,
             utc_offset_secs: 0,
+            interrupted: None,
             suites: vec![SuiteResult {
                 shard_index: None,
                 device_id: None,
@@ -282,6 +303,7 @@ mod tests {
                 duration_ms: 10.0,
                 start_epoch_ms: TS_MS,
                 skipped_count: 0,
+                error: None,
                 flows: vec![flow],
             }],
         };
@@ -312,6 +334,7 @@ mod tests {
             input_mode: "auto".into(),
             total_ms: 8500.0,
             utc_offset_secs: 0,
+            interrupted: None,
             suites: vec![SuiteResult {
                 shard_index: None,
                 device_id: None,
@@ -322,6 +345,7 @@ mod tests {
                 duration_ms: 8500.0,
                 start_epoch_ms: TS_MS,
                 skipped_count: 0,
+                error: None,
                 flows: vec![flow_a, flow_b],
             }],
         };
@@ -360,6 +384,7 @@ mod tests {
             input_mode: "auto".into(),
             total_ms: 2000.0,
             utc_offset_secs: 0,
+            interrupted: None,
             suites: vec![
                 SuiteResult {
                     shard_index: Some(0),
@@ -371,6 +396,7 @@ mod tests {
                     duration_ms: 1000.0,
                     start_epoch_ms: TS_MS,
                     skipped_count: 0,
+                    error: None,
                     flows: vec![flow_s1],
                 },
                 SuiteResult {
@@ -383,6 +409,7 @@ mod tests {
                     duration_ms: 2000.0,
                     start_epoch_ms: TS_MS,
                     skipped_count: 0,
+                    error: None,
                     flows: vec![flow_s2],
                 },
             ],
@@ -411,6 +438,7 @@ mod tests {
             input_mode: "auto".into(),
             total_ms: 1000.0,
             utc_offset_secs: 0,
+            interrupted: None,
             suites: vec![SuiteResult {
                 shard_index: None,
                 device_id: None,
@@ -421,6 +449,7 @@ mod tests {
                 duration_ms: 1000.0,
                 start_epoch_ms: TS_MS,
                 skipped_count: 0,
+                error: None,
                 flows: vec![flow],
             }],
         };

@@ -70,6 +70,7 @@ fn suite(shard: Option<usize>, device: Option<&str>, flows: Vec<FlowRunRecord>) 
         duration_ms: 2500.0,
         start_epoch_ms: TS_MS,
         skipped_count: 0,
+        error: None,
         flows,
     }
 }
@@ -81,6 +82,7 @@ fn summary(suites: Vec<SuiteResult>) -> TestExecutionSummary {
         input_mode: "auto".into(),
         total_ms: 2500.0,
         utc_offset_secs: 0,
+        interrupted: None,
         suites,
     }
 }

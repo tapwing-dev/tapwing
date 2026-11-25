@@ -1,6 +1,7 @@
 //! Tapwing: a Flutter-first runner for Maestro YAML flows.
 
 pub mod app_health;
+pub mod atomic_write;
 pub mod backend;
 pub mod cli_args;
 pub mod device;

@@ -109,6 +109,7 @@ fn multi_shard_split_executes_in_parallel_isolates_artifacts_and_writes_all_repo
         input_mode: "auto".into(),
         total_ms: 120.0,
         utc_offset_secs: 0,
+        interrupted: None,
         suites,
     };
     assert!(summary.passed);
@@ -191,6 +192,7 @@ fn multi_shard_all_runs_all_flows_on_every_shard_and_prefixes_junit_failure() {
         input_mode: "auto".into(),
         total_ms: 50.0,
         utc_offset_secs: 0,
+        interrupted: None,
         suites,
     };
 
@@ -241,6 +243,7 @@ fn single_shard_execution_order_aborts_sequence_on_failure_and_runs_remaining_fl
         input_mode: "auto".into(),
         total_ms: 25.0,
         utc_offset_secs: 0,
+        interrupted: None,
         suites: vec![suite],
     };
 

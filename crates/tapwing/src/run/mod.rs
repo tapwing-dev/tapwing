@@ -6,6 +6,7 @@ mod flutter_ops;
 mod hybrid;
 mod launch;
 mod mapping;
+mod shard_outcome;
 pub mod suite;
 
 use std::collections::{BTreeMap, HashMap, HashSet};

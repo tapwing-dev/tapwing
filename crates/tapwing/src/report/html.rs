@@ -176,8 +176,9 @@ impl Mark {
     fn for_flow(flow: &FlowRunRecord) -> Self {
         match flow.status {
             FlowStatus::Success => Self::Pass,
-            FlowStatus::Error => Self::Fail,
+            FlowStatus::Error | FlowStatus::Interrupted => Self::Fail,
             FlowStatus::Warning => Self::Warn,
+            FlowStatus::NotRun => Self::Skip,
         }
     }
 
@@ -320,6 +321,12 @@ pub fn render_html(summary: &TestExecutionSummary, detailed: bool) -> String {
     if let Some(start) = summary.suites.iter().map(|s| s.start_epoch_ms).min() {
         sub.push(format!("started {}", format_iso_local_seconds(start, summary.utc_offset_secs).replacen('T', " ", 1)));
     }
+    if let Some(signal) = summary.interrupted {
+        sub.push(format!(
+            "<span class=\"warn\">interrupted by {}, partial results</span>",
+            escape_html(&crate::interrupt::signal_name(signal))
+        ));
+    }
     let sub = sub.join(dot);
 
     let _ = write!(
@@ -351,7 +358,7 @@ pub fn render_html(summary: &TestExecutionSummary, detailed: bool) -> String {
         total = summary.total_executed(),
         passed = summary.passed_count(),
         fail_cls = if failed_flows > 0 { " class=\"fail\"" } else { "" },
-        skipped = summary.skipped_count(),
+        skipped = summary.skipped_count() + summary.not_run_count(),
         duration = format_duration(summary.total_ms),
     );
 
@@ -364,7 +371,7 @@ pub fn render_html(summary: &TestExecutionSummary, detailed: bool) -> String {
         );
         for (idx, suite) in summary.suites.iter().enumerate() {
             let shard_num = suite.shard_index.unwrap_or(idx) + 1;
-            for (flow_idx, flow) in suite.flows.iter().enumerate().filter(|(_, f)| !f.passed()) {
+            for (flow_idx, flow) in suite.flows.iter().enumerate().filter(|(_, f)| f.failed()) {
                 let first_line = flow.failure_message.as_deref().and_then(|m| m.lines().next()).unwrap_or("");
                 let device = if shard_count > 1 {
                     format!(
@@ -399,6 +406,9 @@ pub fn render_html(summary: &TestExecutionSummary, detailed: bool) -> String {
         if suite.skipped_count > 0 {
             let _ = write!(counts, ", {} skipped", suite.skipped_count);
         }
+        if suite.not_run_count() > 0 {
+            let _ = write!(counts, ", {} not run", suite.not_run_count());
+        }
         meta.push(counts);
         meta.push(format_duration(suite.duration_ms));
         let meta = meta.join(dot);
@@ -413,7 +423,7 @@ pub fn render_html(summary: &TestExecutionSummary, detailed: bool) -> String {
             let mark = Mark::for_flow(flow);
             // F7: a passing flow with app issues stays open, so it never looks clean.
             let issue_count: usize = flow.steps.iter().map(|s| s.app_issues.len()).sum();
-            let open_attr = if flow.status == FlowStatus::Error || issue_count > 0 { " open" } else { "" };
+            let open_attr = if flow.failed() || issue_count > 0 { " open" } else { "" };
             let mut flow_sub = vec![escape_html(&flow.lane)];
             if flow.blackbox {
                 flow_sub.push("blackbox".into());
@@ -594,6 +604,7 @@ mod tests {
             input_mode: "auto".into(),
             total_ms: 1250.0,
             utc_offset_secs: 0,
+            interrupted: None,
             suites: vec![SuiteResult {
                 shard_index: Some(0),
                 device_id: Some("emulator-5554".into()),
@@ -604,6 +615,7 @@ mod tests {
                 duration_ms: 1250.0,
                 start_epoch_ms: 1_764_167_405_000,
                 skipped_count: 1,
+                error: None,
                 flows: vec![flow],
             }],
         };
