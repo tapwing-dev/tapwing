@@ -586,6 +586,15 @@ impl IosNativeLaneHandle {
         }
     }
 
+    /// Starts a fake warm-up thread for tests (e.g. a `Pending` runner that
+    /// blocks until cancelled) without invoking `xcodebuild` or `simctl`.
+    #[cfg(test)]
+    pub(crate) fn spawn_for_test(
+        start: impl Fn(&AtomicBool) -> Result<IosNativeClient> + Send + Sync + 'static,
+    ) -> Self {
+        Self::spawn_with("SIM-UDID", start)
+    }
+
     /// A lane that is known not to work (no driver, not iOS, ...).
     pub fn unavailable(reason: impl Into<String>) -> Self {
         Self {

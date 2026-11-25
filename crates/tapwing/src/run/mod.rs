@@ -168,6 +168,10 @@ pub struct DeviceFlutterBackend<'a> {
     /// A system / foreign window was last in front: look at the focus again
     /// before trusting the Flutter lane.
     pub(super) native_hint: bool,
+    /// Short-lived cache of the last affirmative Android `mCurrentFocus` probe,
+    /// invalidated on every mutating command so consecutive read-only checks
+    /// (`assertNotVisible`, etc.) avoid redundant `dumpsys` round-trips.
+    focus_cache: Option<(hybrid::FocusProbe, Instant)>,
     /// iOS: an element was last found only by the native lane (a system web-auth
     /// sheet, `WKWebView`, a remote view hosted inside the app's own window),
     /// where XCTest still reports the app as foreground. Plain commands
@@ -210,6 +214,7 @@ impl<'a> DeviceFlutterBackend<'a> {
             ios_native: session.ios_native.as_deref_mut(),
             lanes: LaneStats::default(),
             native_hint: false,
+            focus_cache: None,
             overlay_hint: false,
             cold_app: None,
             flow_blackbox_apps: HashSet::new(),
@@ -339,6 +344,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
 
     fn set_flow_app_id(&mut self, app_id: &str) {
         self.flow_app = app_id.to_string();
+        self.invalidate_focus_cache();
     }
 
     fn launch_app(&mut self, req: &LaunchRequest) -> Result<Value> {
@@ -347,6 +353,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
         let app_changed = !self.flow_app.is_empty() && self.flow_app != req.app_id;
         self.flow_app = req.app_id.clone();
         self.native_hint = false;
+        self.invalidate_focus_cache();
         self.overlay_hint = false;
         self.cold_app = None;
         // Clear any flow-scoped black-box mark so the next `launchApp` tries
@@ -483,6 +490,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
 
     fn stop_app(&mut self, app_id: &str) -> Result<Value> {
         self.cold_app = None;
+        self.invalidate_focus_cache();
         self.dev.stop_app(app_id)?;
         self.mark_intentionally_stopped(app_id);
         self.drv.disconnect();
@@ -491,6 +499,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
 
     fn kill_app(&mut self, app_id: &str) -> Result<Value> {
         self.cold_app = None;
+        self.invalidate_focus_cache();
         self.dev.kill_app(app_id)?;
         self.mark_intentionally_stopped(app_id);
         self.drv.disconnect();
@@ -499,6 +508,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
 
     fn clear_state(&mut self, app_id: &str) -> Result<Value> {
         self.cold_app = None;
+        self.invalidate_focus_cache();
         self.dev.clear_state(app_id)?;
         self.mark_intentionally_stopped(app_id);
         self.drv.disconnect();
@@ -514,6 +524,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     }
 
     fn set_permissions(&mut self, app_id: &str, permissions: &BTreeMap<String, String>) -> Result<Value> {
+        self.invalidate_focus_cache();
         if let Some(sim) = self.dev.as_ios() {
             let (applied, unsupported) = sim.set_permissions(app_id, permissions)?;
             if applied > 0 {
@@ -537,17 +548,21 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     }
 
     fn tap_on_element(&mut self, req: &TapElementRequest) -> Result<Value> {
-        self.route_selector_opt(
+        let res = self.route_selector_opt(
             req.timeout_ms,
             false,
             req.optional,
             |s, t| s.flutter_tap_on_element(&TapElementRequest { timeout_ms: t, ..req.clone() }),
             |ops, t| ops.tap_on_element(&TapElementRequest { timeout_ms: t, ..req.clone() }),
-        )
+        );
+        self.invalidate_focus_cache();
+        res
     }
 
     fn tap_on_point(&mut self, req: &TapPointRequest) -> Result<Value> {
-        self.route_plain(false, |s| s.flutter_tap_on_point(req), |ops| ops.tap_on_point(req))
+        let res = self.route_plain(false, |s| s.flutter_tap_on_point(req), |ops| ops.tap_on_point(req));
+        self.invalidate_focus_cache();
+        res
     }
 
     fn assert_visible(&mut self, selector: &ElementSelector, timeout_ms: u64, optional: bool) -> Result<Value> {
@@ -582,11 +597,15 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     }
 
     fn input_text(&mut self, text: &str) -> Result<Value> {
-        self.route_plain(false, |s| s.flutter_input_text(text), |ops| ops.input_text(text))
+        let res = self.route_plain(false, |s| s.flutter_input_text(text), |ops| ops.input_text(text));
+        self.invalidate_focus_cache();
+        res
     }
 
     fn erase_text(&mut self, characters: i32) -> Result<Value> {
-        self.route_plain(false, |s| s.flutter_erase_text(characters), |ops| ops.erase_text(characters))
+        let res = self.route_plain(false, |s| s.flutter_erase_text(characters), |ops| ops.erase_text(characters));
+        self.invalidate_focus_cache();
+        res
     }
 
     fn copy_text_from(
@@ -607,19 +626,25 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     fn back_press(&mut self) -> Result<Value> {
         // Back must reach the window that owns the screen (a permission
         // dialog is not part of the Flutter navigator), so always look.
-        self.route_plain(true, |s| s.flutter_back_press(), |ops| ops.back_press())
+        let res = self.route_plain(true, |s| s.flutter_back_press(), |ops| ops.back_press());
+        self.invalidate_focus_cache();
+        res
     }
 
     fn hide_keyboard(&mut self) -> Result<Value> {
         let strict = self.opts.maestro_compat_strict;
-        self.route_plain(false, |s| s.flutter_hide_keyboard(), |ops| ops.hide_keyboard(strict))
+        let res = self.route_plain(false, |s| s.flutter_hide_keyboard(), |ops| ops.hide_keyboard(strict));
+        self.invalidate_focus_cache();
+        res
     }
 
     fn press_key(&mut self, code: KeyCode) -> Result<Value> {
         // Dispatch BEFORE setting `native_hint = true` for `KeyCode::Home`:
         // otherwise `keys_use_host()` -> `decide(false)` probes focus while the
         // Flutter app is still in front and resets `native_hint` back to `false`.
-        let res = if self.keys_use_host() { self.host_press_key(code) } else { self.flutter_press_key(code) }?;
+        let res = if self.keys_use_host() { self.host_press_key(code) } else { self.flutter_press_key(code) };
+        self.invalidate_focus_cache();
+        let res = res?;
         if code == KeyCode::Home {
             self.native_hint = true;
             self.cold_app = None;
@@ -628,25 +653,32 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     }
 
     fn scroll(&mut self) -> Result<Value> {
-        self.route_plain(false, |s| s.flutter_scroll(), |ops| ops.scroll())
+        let res = self.route_plain(false, |s| s.flutter_scroll(), |ops| ops.scroll());
+        self.invalidate_focus_cache();
+        res
     }
 
     fn swipe(&mut self, req: &SwipeRequest) -> Result<Value> {
-        if req.element_selector.is_some() && req.direction.is_some() {
-            return self.route_selector(
+        let res = if req.element_selector.is_some() && req.direction.is_some() {
+            self.route_selector(
                 req.timeout_ms,
                 false,
                 |s, t| s.flutter_swipe(&SwipeRequest { timeout_ms: t, ..req.clone() }),
                 |ops, t| ops.swipe(&SwipeRequest { timeout_ms: t, ..req.clone() }),
-            );
-        }
-        self.route_plain(false, |s| s.flutter_swipe(req), |ops| ops.swipe(req))
+            )
+        } else {
+            self.route_plain(false, |s| s.flutter_swipe(req), |ops| ops.swipe(req))
+        };
+        self.invalidate_focus_cache();
+        res
     }
 
     fn scroll_until_visible(&mut self, req: &ScrollUntilVisibleRequest) -> Result<Value> {
         // Check focus before starting a scroll loop so scrolling works in
         // browsers, Settings, and other external apps in `auto` mode.
-        self.route_plain(true, |s| s.flutter_scroll_until_visible(req), |ops| ops.scroll_until_visible(req))
+        let res = self.route_plain(true, |s| s.flutter_scroll_until_visible(req), |ops| ops.scroll_until_visible(req));
+        self.invalidate_focus_cache();
+        res
     }
 
     fn wait_for_animation_to_end(&mut self, timeout_ms: Option<u64>) -> Result<Value> {
@@ -668,6 +700,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     fn open_link(&mut self, link: &str, app_id: Option<&str>, auto_verify: bool, browser: bool) -> Result<Value> {
         // Another app is in front now: a launch's cold-start retry must not carry over to it.
         self.cold_app = None;
+        self.invalidate_focus_cache();
         if let Some(sim) = self.dev.as_ios() {
             sim.open_url(link)?;
             if self.ios_native.as_deref().is_some_and(IosNativeSlot::is_started) {
@@ -711,6 +744,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     }
 
     fn set_orientation(&mut self, orientation: &str) -> Result<Value> {
+        self.invalidate_focus_cache();
         if self.platform() == Platform::Ios {
             if self.lane_mode() != InputMode::Flutter && self.native_usable() {
                 let res = self.run_ios_native(|ops| ops.set_orientation(orientation))?;
@@ -781,6 +815,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     }
 
     fn set_dark_mode(&mut self, enabled: bool) -> Result<Value> {
+        self.invalidate_focus_cache();
         if let Some(sim) = self.dev.as_ios() {
             sim.set_dark_mode(enabled)?;
             return Ok(self.settle_if_connected());
@@ -801,7 +836,12 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
         }
         if self.lanes.native != self.native_at_issue_take {
             self.native_at_issue_take = self.lanes.native;
-            self.drv.poll_issues();
+            // Skip probing the Flutter isolate while an external window owns
+            // focus (`native_hint`): the app may be OS-suspended, and issues
+            // stay buffered in Dart by `max_seq` until the next Flutter RPC.
+            if !self.native_hint {
+                self.drv.poll_issues();
+            }
         }
         self.drv.take_issue_batch()
     }
@@ -810,7 +850,9 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
         if !self.opts.app_errors.enabled() {
             return crate::app_health::IssueBatch::default();
         }
-        self.drv.poll_issues();
+        if !self.native_hint {
+            self.drv.poll_issues();
+        }
         self.drv.take_issue_batch()
     }
 
@@ -822,8 +864,10 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
         self.trace_lanes = now;
         let (flutter, native) = (now.flutter > before.flutter, now.native > before.native);
         self.trace_http_seen |= self.drv.http_log_enabled();
-        // Native-lane steps send no driver RPC: re-read what finished meanwhile.
-        if native {
+        // Native-lane steps send no driver RPC: re-read what finished meanwhile,
+        // unless an external window owns focus (`native_hint`) and the app may
+        // be OS-suspended.
+        if native && !self.native_hint {
             self.drv.poll_http();
         }
         let mut batch = self.drv.take_http_batch();
@@ -841,7 +885,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
             return crate::trace::TraceBatch::default();
         }
         self.trace_http_seen |= self.drv.http_log_enabled();
-        let in_flight = self.drv.poll_http();
+        let in_flight = if !self.native_hint { self.drv.poll_http() } else { Vec::new() };
         let mut batch = self.drv.take_http_batch();
         batch.in_flight = in_flight;
         batch
@@ -1033,5 +1077,65 @@ TAPWING_NOW:2026 11 25 13 15 00
 ";
         assert!(parse_android_crash_probe(log, "dev.tapwing.app", None, Duration::from_secs(5)).is_none());
         assert!(parse_android_crash_probe(log, "dev.tapwing.app", Some(1111), Duration::from_secs(5)).is_some());
+    }
+
+    #[test]
+    fn backgrounded_native_hint_skips_poll_issues_and_poll_http_without_dropping_connection() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpStream;
+
+        // Peer sends hello, then simulates an OS-suspended backgrounded app:
+        // stays completely silent until the host disconnects.
+        let mut drv = Driver::listen(0).unwrap();
+        let port = drv.port().unwrap();
+        let peer = std::thread::spawn(move || {
+            let mut app = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            writeln!(app, r#"{{"event":"hello","params":{{"protocol":1,"pid":88}}}}"#).unwrap();
+            let _ = BufReader::new(app).read_line(&mut String::new());
+        });
+        drv.accept(Duration::from_secs(2)).unwrap();
+        drv.set_http_log(true);
+        // Keep the production 10 s silence timeout so any unguarded poll stalls 10 s.
+        drv.set_silence_timeout(Duration::from_secs(10));
+
+        let mut dev = Device::Android(crate::device::Android::new("unreachable".into()));
+        let opts = Opts {
+            settle_policy: "v2".into(),
+            check_settle: false,
+            settle_load: Default::default(),
+            cli_env: HashMap::new(),
+            test_output_dir: PathBuf::from("out"),
+            strict_input: false,
+            soft_keyboard_hint: None,
+            maestro_compat_strict: false,
+            http_agent: None,
+            input_mode: InputMode::Auto,
+            shard_index: None,
+            log_prefix: String::new(),
+            app_errors: crate::app_health::AppErrorsPolicy::Report,
+            trace: true,
+        };
+        let mut session =
+            Session { dev: &mut dev, drv: &mut drv, opts: &opts, units_scale: 1.0, native: None, ios_native: None };
+        let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+        backend.native_hint = true;
+        backend.lanes.native = 1;
+
+        let t0 = Instant::now();
+        let step_issues = backend.take_app_issues();
+        let step_trace = backend.trace_step();
+        let end_issues = backend.drain_app_issues();
+        let end_trace = backend.trace_drain();
+        let elapsed = t0.elapsed();
+
+        assert!(elapsed < Duration::from_millis(200), "polls stalled on backgrounded peer: {elapsed:?}");
+        assert!(backend.drv.is_connected(), "skipping background polls must preserve the driver socket");
+        assert!(step_issues.current.is_empty() && end_issues.current.is_empty());
+        assert_eq!(step_trace.lane, Some("native"));
+        assert!(end_trace.in_flight.is_empty());
+
+        drop(backend);
+        drop(drv);
+        peer.join().unwrap();
     }
 }

@@ -22,6 +22,9 @@ use super::mapping::{android_keycode, ios_native_key_name};
 
 /// Reactive Flutter wait before checking who owns the screen (`auto` mode).
 pub(super) const FLUTTER_PROBE_MS: u64 = 400;
+/// TTL for cached Android `mCurrentFocus` probes. Invalidated immediately on
+/// every mutating command so only consecutive read-only checks share a probe.
+const FOCUS_CACHE_TTL: Duration = Duration::from_millis(200);
 /// Longer Flutter probe on iOS when `xcodebuild` has not been started yet
 /// (lazy mode), so normal async Flutter transitions (~600 ms logins, spinners)
 /// never spawn `xcodebuild` unnecessarily.
@@ -439,18 +442,46 @@ impl DeviceFlutterBackend<'_> {
         ids
     }
 
+    /// Clears any cached Android `mCurrentFocus` probe (called on every
+    /// mutating command and before final post-miss re-checks).
+    pub(super) fn invalidate_focus_cache(&mut self) {
+        self.focus_cache = None;
+    }
+
+    fn android_focus_probe(&mut self) -> FocusProbe {
+        if let Some((cached, at)) = &self.focus_cache
+            && at.elapsed() < FOCUS_CACHE_TTL
+        {
+            return cached.clone();
+        }
+        let probe = (|| {
+            let android = self.dev.as_android()?;
+            let out = android.shell(FOCUS_PROBE).ok()?;
+            let pkg = parse_focused_package(&out)?;
+            Some(classify_focused_package(&pkg, &self.flow_app))
+        })()
+        .unwrap_or(FocusProbe::Unknown);
+        // Only cache affirmative results (`InApp` / `External`), never transient
+        // `Unknown` states (`mCurrentFocus=null` mid-transition or adb hiccup).
+        if probe != FocusProbe::Unknown {
+            self.focus_cache = Some((probe.clone(), Instant::now()));
+        }
+        probe
+    }
+
     /// Queries the iOS XCTest runner for a SpringBoard alert or foreground app.
-    /// When `join_if_started` is `false`, never blocks or spawns `xcodebuild`;
-    /// when `true` and the slot is already `Started`, joins warm-up; when
-    /// `allow_lazy_spawn` is `true`, starts the runner on demand.
-    fn ios_focus_probe(&mut self, join_if_started: bool, allow_lazy_spawn: bool) -> FocusProbe {
+    /// When `allow_lazy_spawn` is `true`, starts a `Lazy` runner on demand and
+    /// waits up to `max_wait`; otherwise only checks an already-`Started`
+    /// runner, waiting up to `max_wait` (or polling non-blockingly via
+    /// `try_get()` when `max_wait.is_zero()`).
+    fn ios_focus_probe(&mut self, max_wait: Duration, allow_lazy_spawn: bool) -> FocusProbe {
         let app_ids = self.ios_app_ids();
         let flow_app = self.flow_app.clone();
         let Some(slot) = self.ios_native.as_deref_mut() else {
             return FocusProbe::Unknown;
         };
-        let Some(client) = (if allow_lazy_spawn || (join_if_started && slot.is_started()) {
-            slot.get_or_wait(IOS_NATIVE_WAIT).ok()
+        let Some(client) = (if allow_lazy_spawn || (!max_wait.is_zero() && slot.is_started()) {
+            slot.get_or_wait(max_wait).ok()
         } else {
             slot.try_get()
         }) else {
@@ -475,29 +506,32 @@ impl DeviceFlutterBackend<'_> {
         probe
     }
 
-    fn ios_external_focus(&mut self, join_if_started: bool, allow_lazy_spawn: bool) -> Option<String> {
-        match self.ios_focus_probe(join_if_started, allow_lazy_spawn) {
+    fn ios_external_focus(&mut self, max_wait: Duration, allow_lazy_spawn: bool) -> Option<String> {
+        match self.ios_focus_probe(max_wait, allow_lazy_spawn) {
             FocusProbe::External(app) => Some(app),
             FocusProbe::InApp | FocusProbe::Unknown => None,
         }
     }
 
-    /// Probes which window owns input focus without cold-spawning lazy iOS `xcodebuild`.
-    pub(super) fn probe_focus(&mut self) -> FocusProbe {
+    /// Probes which window owns input focus without cold-spawning lazy iOS
+    /// `xcodebuild`, bounding any wait on an already-started iOS runner to
+    /// `ios_max_wait`.
+    pub(super) fn probe_focus_within(&mut self, ios_max_wait: Duration) -> FocusProbe {
         match self.platform() {
-            Platform::Android => {
-                let Some(android) = self.dev.as_android() else { return FocusProbe::Unknown };
-                let Ok(out) = android.shell(FOCUS_PROBE) else { return FocusProbe::Unknown };
-                let Some(pkg) = parse_focused_package(&out) else { return FocusProbe::Unknown };
-                classify_focused_package(&pkg, &self.flow_app)
-            }
-            Platform::Ios => self.ios_focus_probe(true, false),
+            Platform::Android => self.android_focus_probe(),
+            Platform::Ios => self.ios_focus_probe(ios_max_wait, false),
         }
     }
 
-    /// Package / bundle owning the focused window when it is not the flow's app.
-    fn external_focus(&mut self) -> Option<String> {
-        match self.probe_focus() {
+    /// Probes which window owns input focus without cold-spawning lazy iOS `xcodebuild`.
+    pub(super) fn probe_focus(&mut self) -> FocusProbe {
+        self.probe_focus_within(IOS_NATIVE_WAIT)
+    }
+
+    /// Package / bundle owning the focused window when it is not the flow's app,
+    /// bounding any wait on an already-started iOS runner to `ios_max_wait`.
+    fn external_focus_within(&mut self, ios_max_wait: Duration) -> Option<String> {
+        match self.probe_focus_within(ios_max_wait) {
             FocusProbe::External(app) => Some(app),
             FocusProbe::InApp | FocusProbe::Unknown => None,
         }
@@ -587,10 +621,17 @@ impl DeviceFlutterBackend<'_> {
 
     fn focused_package_now(&mut self) -> Option<String> {
         match self.platform() {
-            Platform::Android => parse_focused_package(&self.dev.as_android()?.shell(FOCUS_PROBE).ok()?),
-            // On iOS, never spawn `xcodebuild` just to probe focus; only check
-            // when the runner is already warm (or remembered via `native_hint`).
-            Platform::Ios => self.ios_external_focus(self.native_hint, false),
+            Platform::Android => match self.android_focus_probe() {
+                FocusProbe::External(pkg) => Some(pkg),
+                FocusProbe::InApp => Some(self.flow_app.clone()),
+                FocusProbe::Unknown => None,
+            },
+            // On iOS, never spawn `xcodebuild` just to probe focus; only join a
+            // started runner when an external window was already remembered.
+            Platform::Ios => {
+                let max_wait = if self.native_hint { IOS_NATIVE_WAIT } else { Duration::ZERO };
+                self.ios_external_focus(max_wait, false)
+            }
         }
     }
 
@@ -790,7 +831,11 @@ impl DeviceFlutterBackend<'_> {
         }
         // (Not under the iOS overlay hint: Flutter looks first, so Flutter
         // elements are found again, and clear the hint, once the sheet is gone.)
-        if (negative || self.native_hint || !self.drv.is_connected())
+        // For `assertNotVisible` (`negative == true`) with a connected Flutter
+        // driver and no `native_hint`, ask Flutter first: if it immediately
+        // reports absence (`Ok`), one cached non-blocking focus check catches
+        // system dialogs without paying a pre-Flutter probe on waiting checks.
+        if (self.native_hint || !self.drv.is_connected())
             && !self.ios_overlay_active()
             && self.decide(true) == Lane::Native
         {
@@ -800,14 +845,22 @@ impl DeviceFlutterBackend<'_> {
         let ios_lazy = self.platform() == Platform::Ios && self.ios_native.as_deref().is_some_and(|s| !s.is_started());
         let probe = timeout_ms.min(if ios_lazy { IOS_LAZY_PROBE_MS } else { FLUTTER_PROBE_MS });
         let started = Instant::now();
+        let left = |started: Instant| timeout_ms.saturating_sub(started.elapsed().as_millis() as u64);
         self.lanes.flutter += 1;
         let first = flutter(self, probe);
         let Err(miss) = first else {
+            if negative && !self.ios_overlay_active() {
+                let remaining = left(started);
+                if self.external_focus_within(Duration::ZERO).is_some() {
+                    self.lanes.flutter = self.lanes.flutter.saturating_sub(1);
+                    self.native_hint = true;
+                    return self.run_native(|ops| native(ops, remaining));
+                }
+            }
             // Flutter owns the screen again.
             self.overlay_hint = false;
             return first;
         };
-        let left = |started: Instant| timeout_ms.saturating_sub(started.elapsed().as_millis() as u64);
         if is_driver_not_attached(&miss) {
             self.lanes.flutter = self.lanes.flutter.saturating_sub(1);
             let remaining = left(started);
@@ -828,12 +881,16 @@ impl DeviceFlutterBackend<'_> {
                 _ => {}
             }
         }
-        // iOS, lane still cold: start the XCTest runner in the background and
-        // keep waiting on Flutter while it warms up (the start costs ~7 s;
-        // blocking on it here used to add that on top of the whole budget).
-        let prewarmed = ios_lazy && !negative && timeout_ms > IOS_LAZY_PROBE_MS;
+        // iOS, lane still warming up (either Lazy about to spawn, or eagerly
+        // Started and still Pending): overlap Flutter lookup slices with runner
+        // warm-up so cold startup never blocks past the lookup budget.
+        let ios_pending = self.platform() == Platform::Ios
+            && self.ios_native.as_deref_mut().is_some_and(|s| s.is_started() && s.try_get().is_none() && s.is_usable());
+        let prewarmed = self.platform() == Platform::Ios
+            && !negative
+            && ((ios_lazy && timeout_ms > IOS_LAZY_PROBE_MS) || ios_pending);
         if prewarmed {
-            if let Some(slot) = self.ios_native.as_deref_mut() {
+            if ios_lazy && let Some(slot) = self.ios_native.as_deref_mut() {
                 slot.ensure_started();
             }
             let warm = wait_on_flutter_while_warming(
@@ -853,22 +910,23 @@ impl DeviceFlutterBackend<'_> {
                 WarmWait::Settled => {}
             }
         }
-        // Snapshot remaining budget BEFORE any focus probe that may still block
-        // on the native-lane warm-up, so startup time never drains the selector
-        // lookup budget to 0 ms (a system alert is already on screen, so a short
-        // native look is enough even when Flutter used the whole budget).
+        // Snapshot remaining budget BEFORE any focus probe that may wait on
+        // native-lane warm-up, and cap the iOS focus-probe wait to that
+        // remaining budget (never IOS_NATIVE_WAIT = 65 s) so a missing element
+        // on a cold runner never stalls past the command's own timeout.
         let remaining_before_focus = left(started);
-        let external = self.external_focus();
+        let external = self.external_focus_within(Duration::from_millis(remaining_before_focus));
         if external.is_some() {
             self.native_hint = true;
             let budget =
                 if prewarmed { remaining_before_focus.max(NATIVE_FALLBACK_MS) } else { remaining_before_focus };
             return self.run_native(|ops| native(ops, budget));
         }
-        if probe >= timeout_ms {
-            // Tight timeout (`timeout_ms <= probe`, e.g. `when: visible`): if the
-            // native lane is already warm, take one instant 0 ms look so WebView /
-            // PlatformView elements match without adding latency to cold runs.
+        if probe >= timeout_ms || (prewarmed && remaining_before_focus == 0) {
+            // Tight timeout (`timeout_ms <= probe`, e.g. `when: visible`), or
+            // `wait_on_flutter_while_warming` already spent the full budget:
+            // if the native lane is already warm, take one instant 0 ms look so
+            // WebView / PlatformView elements match without adding latency to cold runs.
             if !negative && is_flutter_not_found(&miss) {
                 match self.try_native(|ops| native(ops, 0)) {
                     Some(Ok(v)) => {
@@ -881,12 +939,12 @@ impl DeviceFlutterBackend<'_> {
             }
             return Err(miss);
         }
-        let second_started = Instant::now();
-        match flutter(self, remaining_before_focus) {
+        let second_budget = left(started);
+        match flutter(self, second_budget) {
             Err(e) if is_lookup_miss(&e) => {
-                let remaining_after_second =
-                    remaining_before_focus.saturating_sub(second_started.elapsed().as_millis() as u64);
-                if self.external_focus().is_some() {
+                let remaining_after_second = left(started);
+                self.invalidate_focus_cache();
+                if self.external_focus_within(Duration::from_millis(remaining_after_second)).is_some() {
                     self.native_hint = true;
                     return self.run_native(|ops| native(ops, remaining_after_second));
                 }
@@ -1738,7 +1796,7 @@ mod tests {
             ("run_native", |b| assert!(b.run_native(|ops| ops.input_text("x")).is_err())),
             ("run_ios_native", |b| assert!(b.run_ios_native(|ops| ops.hierarchy().map(drop)).is_err())),
             ("try_native", |b| assert!(b.try_native(|ops| ops.input_text("x")).is_some_and(|r| r.is_err()))),
-            ("ios_external_focus", |b| assert!(b.ios_external_focus(true, false).is_none())),
+            ("ios_external_focus", |b| assert!(b.ios_external_focus(IOS_NATIVE_WAIT, false).is_none())),
         ];
         for (name, path) in paths {
             let (mut dev, mut drv) = ios_backend_session_parts();
@@ -1778,8 +1836,8 @@ mod tests {
                     ios_native: Some(&mut slot),
                 };
                 let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
-                assert!(backend.ios_external_focus(false, false).is_none());
-                assert!(backend.ios_external_focus(true, false).is_none());
+                assert!(backend.ios_external_focus(Duration::ZERO, false).is_none());
+                assert!(backend.ios_external_focus(IOS_NATIVE_WAIT, false).is_none());
                 assert!(backend.focused_package_now().is_none());
                 assert!(backend.capture_failure_hierarchy_impl().is_none());
             }
@@ -1804,7 +1862,7 @@ mod tests {
                 ios_native: Some(&mut slot),
             };
             let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
-            assert!(backend.ios_external_focus(true, false).is_none());
+            assert!(backend.ios_external_focus(IOS_NATIVE_WAIT, false).is_none());
         }
         let IosNativeSlot::Started(h) = &mut slot else { panic!("slot stays started") };
         assert_eq!(
@@ -2054,5 +2112,163 @@ mod tests {
                 assert!(!flow2.is_blackbox(), "next flow starts clean");
             }
         }
+    }
+
+    #[test]
+    fn pending_ios_slot_caps_warm_up_wait_to_lookup_budget_on_miss() {
+        use std::sync::atomic::Ordering;
+
+        let (mut dev, mut drv) = ios_backend_session_parts();
+        let opts = test_opts(InputMode::Auto);
+        let mut slot = IosNativeSlot::Started(IosNativeLaneHandle::spawn_for_test(|cancel| {
+            while !cancel.load(Ordering::Relaxed) {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            anyhow::bail!("cancelled")
+        }));
+        let mut session = Session {
+            dev: &mut dev,
+            drv: &mut drv,
+            opts: &opts,
+            units_scale: 1.0,
+            native: None,
+            ios_native: Some(&mut slot),
+        };
+        let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+
+        // 1. Optional 500 ms lookup miss while iOS runner is still Pending:
+        //    overlaps warm-up and returns in ~500 ms instead of blocking 65 s.
+        let t0 = Instant::now();
+        let res: Result<()> = backend.route_selector_opt(
+            500,
+            false,
+            true,
+            |_, t| {
+                std::thread::sleep(Duration::from_millis(t));
+                Err(miss("ELEMENT_NOT_FOUND"))
+            },
+            |_, _| panic!("must not wait 65 s for a cold runner on a miss"),
+        );
+        let elapsed = t0.elapsed();
+        assert!(is_flutter_not_found(&res.unwrap_err()));
+        assert!(
+            elapsed >= Duration::from_millis(450) && elapsed < Duration::from_secs(2),
+            "expected ~500 ms lookup miss, took {elapsed:?}"
+        );
+
+        // 2. Non-blocking focus probe (`Duration::ZERO`) returns Unknown immediately.
+        let t1 = Instant::now();
+        assert_eq!(backend.ios_focus_probe(Duration::ZERO, false), FocusProbe::Unknown);
+        assert!(t1.elapsed() < Duration::from_millis(200), "zero-wait probe stalled: {:?}", t1.elapsed());
+
+        // 3. `assertNotVisible` when absent in Flutter does not wait on Pending runner.
+        let t2 = Instant::now();
+        let ok = backend
+            .route_selector(5000, true, |_, _| Ok("absent"), |_, _| panic!("must not block on Pending runner"))
+            .unwrap();
+        assert_eq!(ok, "absent");
+        assert!(t2.elapsed() < Duration::from_millis(200), "assertNotVisible stalled: {:?}", t2.elapsed());
+    }
+
+    #[test]
+    fn assert_not_visible_caches_focus_probe_invalidates_on_tap_and_catches_external_dialog() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpStream;
+
+        use crate::backend::FlowDriver;
+        use crate::device::adb_client::fake::{FakeAdb, ShDevice, sh_available};
+
+        if !sh_available() {
+            return;
+        }
+        let device = ShDevice::new(
+            r#"
+dumpsys() {
+  rec dumpsys "$@"
+  if [ "$1" = "window" ] && [ "$2" = "displays" ]; then
+    printf '  mCurrentFocus=Window{4cb6b2c u0 %s}\n' "$(cat "$TAPWING_FAKE_DIR/focus")"
+  fi
+}
+"#,
+        );
+        std::fs::write(device.dir().join("focus"), "com.example.app/.MainActivity").unwrap();
+        let fake = FakeAdb::with_device(&device);
+        let mut dev = Device::Android(crate::device::Android::with_adb_client("fake-serial".into(), fake.client()));
+
+        // Connected fake Flutter driver answering `assertNotVisible` and `tapOn` immediately.
+        let mut drv = Driver::listen(0).unwrap();
+        let port = drv.port().unwrap();
+        let peer = std::thread::spawn(move || {
+            let mut app = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            writeln!(app, r#"{{"event":"hello","params":{{"protocol":1,"pid":77}}}}"#).unwrap();
+            let mut reader = BufReader::new(app.try_clone().unwrap());
+            let mut line = String::new();
+            while reader.read_line(&mut line).unwrap_or(0) > 0 {
+                let req: Value = serde_json::from_str(&line).unwrap();
+                let id = req["id"].as_u64().unwrap();
+                writeln!(app, r#"{{"id":{id},"result":null,"us":1}}"#).unwrap();
+                line.clear();
+            }
+        });
+        drv.accept(Duration::from_secs(2)).unwrap();
+
+        // Native gRPC server showing a permission dialog with "Allow".
+        let dialog_xml = r#"<hierarchy rotation="0">
+  <node text="Allow" package="com.google.android.permissioncontroller" enabled="true" bounds="[0,0][200,100]"/>
+</hierarchy>"#;
+        let (mut native, stop_grpc, grpc_srv) = serve_static_native(dialog_xml);
+        let opts = test_opts(InputMode::Auto);
+        let mut session = Session {
+            dev: &mut dev,
+            drv: &mut drv,
+            opts: &opts,
+            units_scale: 1.0,
+            native: Some(&mut native),
+            ios_native: None,
+        };
+        let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+
+        // Four consecutive `assertNotVisible` steps share a single cached `dumpsys window displays`.
+        let sel_missing = ElementSelector { text_regex: Some("Missing".into()), ..Default::default() };
+        for _ in 0..4 {
+            backend.assert_not_visible(&sel_missing, 5000, false).unwrap();
+        }
+        assert_eq!(fake.shells().len(), 1, "consecutive assertNotVisible calls must reuse cached focus probe");
+        assert_eq!(device.lines("dumpsys"), vec!["dumpsys window displays"]);
+        fake.assert_scripts_parse();
+
+        // A mutating `tapOn` invalidates the cache, so a newly opened permission dialog is caught.
+        let tap_req = TapElementRequest {
+            selector: ElementSelector { text_regex: Some("Request Permission".into()), ..Default::default() },
+            timeout_ms: 1000,
+            long_press: false,
+            repeat: None,
+            relative_point: None,
+            retry_if_no_change: false,
+            wait_until_visible: true,
+            wait_to_settle_timeout_ms: None,
+            optional: false,
+            app_id: None,
+        };
+        backend.tap_on_element(&tap_req).unwrap();
+        std::fs::write(device.dir().join("focus"), "com.google.android.permissioncontroller/.GrantPermissionsActivity")
+            .unwrap();
+
+        // `assertNotVisible: "Allow"` must probe fresh focus, route natively, and FAIL.
+        let sel_allow = ElementSelector { text_regex: Some("Allow".into()), ..Default::default() };
+        let err = backend.assert_not_visible(&sel_allow, 150, false).unwrap_err();
+        assert!(backend.native_hint, "external permission dialog must set native_hint");
+        assert_eq!(fake.shells().len(), 2, "tapOn must invalidate focus cache so the dialog is probed");
+        assert!(
+            err.to_string().contains("Allow") || err.to_string().to_lowercase().contains("visible"),
+            "expected assertion failure for visible dialog button, got: {err}"
+        );
+
+        drop(backend);
+        drop(drv);
+        peer.join().unwrap();
+        drop(native);
+        let _ = stop_grpc.send(());
+        grpc_srv.join().unwrap();
     }
 }
