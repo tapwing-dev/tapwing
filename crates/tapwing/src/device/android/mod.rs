@@ -362,8 +362,9 @@ impl Android {
         let extra_part = if extra_flags.is_empty() { String::new() } else { format!(" {extra_flags}") };
         script.push_str(&format!(
             "START_OUT=$(am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n \"$COMP\"{extra_part} 2>&1); \
-             case \"$START_OUT\" in *Error*) echo \"TAPWING_ERR:am start failed: $START_OUT\"; exit 13 ;; esac; \
-             T3=$(date +%s%3N); ",
+             START_RC=$?; \
+             {}T3=$(date +%s%3N); ",
+            am_start_check_snippet()
         ));
         script.push_str(&format!(
             "PID=; N=0; while [ -z \"$PID\" ] && [ $N -lt 150 ]; do \
@@ -691,6 +692,16 @@ impl Drop for SessionGuards {
     }
 }
 
+/// Shell snippet checking `START_OUT` and `START_RC` right after `am start`.
+///
+/// Fails on a non-zero exit code or on a line starting with `Error` (`Error:`,
+/// `Error type ...`, `Error`), without false-positives on package/activity
+/// names containing `"Error"` such as `com.example/.ErrorActivity`.
+fn am_start_check_snippet() -> &'static str {
+    "if [ \"$START_RC\" -ne 0 ] || printf '%s\\n' \"$START_OUT\" | tr -d '\\r' | grep -qE '^[ \\t]*Error($|[: \\t])'; then \
+     echo \"TAPWING_ERR:am start failed: $START_OUT\"; exit 13; fi; "
+}
+
 /// Shell command behind [`Android::liveness_probe`].
 fn liveness_command(pid: i64) -> String {
     format!(
@@ -711,6 +722,8 @@ fn parse_liveness(stdout: &str) -> Option<bool> {
 
 #[cfg(test)]
 mod liveness_tests {
+    use std::process::Command;
+
     #[test]
     fn liveness_probe_command_and_parsing() {
         let cmd = super::liveness_command(4321);
@@ -719,5 +732,83 @@ mod liveness_tests {
         assert_eq!(super::parse_liveness("gone"), Some(false));
         assert_eq!(super::parse_liveness("crashed\r\n"), Some(false));
         assert_eq!(super::parse_liveness("error: device offline"), None);
+    }
+
+    #[test]
+    fn am_start_check_snippet_is_valid_posix_sh_and_handles_error_names_vs_real_errors() {
+        let snippet = super::am_start_check_snippet();
+        let full_script = format!(
+            "COMP='com.example/.ErrorActivity'; \
+             START_OUT=$(am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n \"$COMP\" 2>&1); \
+             START_RC=$?; \
+             {snippet}T3=0"
+        );
+        let syntax = Command::new("sh").args(["-n", "-c", &full_script]).output().unwrap();
+        assert!(syntax.status.success(), "sh -n failed: {}", String::from_utf8_lossy(&syntax.stderr));
+
+        let run_case = |start_out: &str, start_rc: i32| {
+            let script = format!("START_OUT=\"$1\"; START_RC=\"$2\"; {snippet}echo OK");
+            Command::new("sh").args(["-c", &script, "tapwing-test", start_out, &start_rc.to_string()]).output().unwrap()
+        };
+
+        struct Case {
+            name: &'static str,
+            out: &'static str,
+            rc: i32,
+            expect_fail: bool,
+        }
+        let cases = [
+            Case {
+                name: "activity name contains Error",
+                out: "Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] cmp=com.example/.ErrorActivity }",
+                rc: 0,
+                expect_fail: false,
+            },
+            Case {
+                name: "package and activity contain Error with Warning and CRLF",
+                out: "Starting: Intent { cmp=com.example.Error/.ErrorHandler }\r\nWarning: Activity not started, its current task has been brought to the front\r\n",
+                rc: 0,
+                expect_fail: false,
+            },
+            Case {
+                name: "line starting with ErrorActivity word is not am start Error",
+                out: "ErrorActivity: resumed",
+                rc: 0,
+                expect_fail: false,
+            },
+            Case { name: "empty output with rc 0 succeeds", out: "", rc: 0, expect_fail: false },
+            Case {
+                name: "Error type and Error: lines fail",
+                out: "Starting: Intent { cmp=com.example/.MissingActivity }\nError type 3\nError: Activity class {com.example/.MissingActivity} does not exist.",
+                rc: 0,
+                expect_fail: true,
+            },
+            Case {
+                name: "Error: line with CRLF and leading spaces fails",
+                out: "Starting: Intent { cmp=com.example/.Main }\r\n  Error: Activity not started, unable to resolve Intent\r\n",
+                rc: 0,
+                expect_fail: true,
+            },
+            Case { name: "bare Error line fails", out: "Error", rc: 0, expect_fail: true },
+            Case {
+                name: "non-zero exit without Error line fails",
+                out: "java.lang.SecurityException: Permission Denial",
+                rc: 1,
+                expect_fail: true,
+            },
+            Case { name: "non-zero exit with empty output fails", out: "", rc: 2, expect_fail: true },
+        ];
+
+        for c in cases {
+            let output = run_case(c.out, c.rc);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if c.expect_fail {
+                assert_eq!(output.status.code(), Some(13), "{}: stdout={stdout:?}", c.name);
+                assert!(stdout.contains("TAPWING_ERR:am start failed:"), "{}: stdout={stdout:?}", c.name);
+            } else {
+                assert!(output.status.success(), "{}: status={:?}, stdout={stdout:?}", c.name, output.status);
+                assert_eq!(stdout.trim(), "OK", "{}", c.name);
+            }
+        }
     }
 }

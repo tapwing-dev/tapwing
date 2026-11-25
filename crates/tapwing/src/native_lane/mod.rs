@@ -24,7 +24,7 @@ pub mod hierarchy;
 pub mod ops;
 pub mod tapwing_apk;
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
@@ -190,6 +190,61 @@ pub fn decide_lane(ctx: &RouteCtx<'_>) -> Lane {
 /// Whether a window owned by `package` is not the app under test.
 pub fn is_external_window(package: &str, flow_app: &str) -> bool {
     !package.is_empty() && package != flow_app
+}
+
+/// Number of consecutive `launchApp` handshake misses before an app is
+/// promoted to sticky shard-wide black-box mode.
+pub const STICKY_BLACKBOX_THRESHOLD: u32 = 2;
+
+/// Result of recording a missed `launchApp` `tapwing_driver` handshake.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackboxDemotion {
+    /// Below [`STICKY_BLACKBOX_THRESHOLD`]: black-box for the current flow only;
+    /// the next `launchApp` will retry the Flutter driver.
+    FlowOnly { consecutive_misses: u32 },
+    /// Reached [`STICKY_BLACKBOX_THRESHOLD`] consecutive misses: stays black-box
+    /// for the rest of the shard.
+    StickyShard { consecutive_misses: u32 },
+}
+
+/// Shard-scoped consecutive handshake-miss tracker per `app_id`.
+///
+/// One missed 15 s handshake falls back to black-box for that flow only; two
+/// misses in a row promote the app to sticky shard-wide black-box, and any
+/// successful Flutter handshake resets the counter.
+#[derive(Clone, Debug, Default)]
+pub struct BlackboxTracker {
+    consecutive_misses: HashMap<String, u32>,
+}
+
+impl BlackboxTracker {
+    /// Records a missed `launchApp` handshake for `app_id` and returns whether
+    /// the fallback is flow-only or sticky for the rest of the shard.
+    pub fn record_handshake_miss(&mut self, app_id: &str) -> BlackboxDemotion {
+        let count = self.consecutive_misses.entry(app_id.to_string()).or_insert(0);
+        *count = count.saturating_add(1);
+        if *count >= STICKY_BLACKBOX_THRESHOLD {
+            BlackboxDemotion::StickyShard { consecutive_misses: *count }
+        } else {
+            BlackboxDemotion::FlowOnly { consecutive_misses: *count }
+        }
+    }
+
+    /// Records a successful Flutter handshake for `app_id`, resetting its
+    /// consecutive-miss counter.
+    pub fn record_handshake_success(&mut self, app_id: &str) {
+        self.consecutive_misses.remove(app_id);
+    }
+
+    /// Whether `app_id` has been demoted to sticky shard-wide black-box.
+    pub fn is_sticky(&self, app_id: &str) -> bool {
+        self.consecutive_misses.get(app_id).copied().unwrap_or(0) >= STICKY_BLACKBOX_THRESHOLD
+    }
+
+    /// Number of consecutive missed handshakes recorded for `app_id`.
+    pub fn consecutive_misses(&self, app_id: &str) -> u32 {
+        self.consecutive_misses.get(app_id).copied().unwrap_or(0)
+    }
 }
 
 /// Packages of the usual Android system dialogs (runtime permissions,
@@ -495,8 +550,8 @@ pub struct NativeLaneHandle {
     adb: Option<Adb>,
     cancel: Arc<CancelSignal>,
     thread: Option<JoinHandle<()>>,
-    /// Apps that never completed the `tapwing_driver` handshake in this run.
-    blackbox_apps: HashSet<String>,
+    /// Consecutive `launchApp` handshake misses per app in this shard.
+    blackbox: BlackboxTracker,
     failure_reported: bool,
 }
 
@@ -532,7 +587,7 @@ impl NativeLaneHandle {
                 adb: Some(adb),
                 cancel,
                 thread: Some(thread),
-                blackbox_apps: HashSet::new(),
+                blackbox: BlackboxTracker::default(),
                 failure_reported: false,
             },
             Err(e) => Self::unavailable(format!("cannot start the warm-up thread: {e}")),
@@ -546,7 +601,7 @@ impl NativeLaneHandle {
             adb: None,
             cancel: Arc::new(CancelSignal::new()),
             thread: None,
-            blackbox_apps: HashSet::new(),
+            blackbox: BlackboxTracker::default(),
             failure_reported: false,
         }
     }
@@ -558,18 +613,24 @@ impl NativeLaneHandle {
             adb: Some(adb),
             cancel: Arc::new(CancelSignal::new()),
             thread: None,
-            blackbox_apps: HashSet::new(),
+            blackbox: BlackboxTracker::default(),
             failure_reported: false,
         }
     }
 
-    /// Remembers that `app_id` has no `tapwing_driver` (drive it black-box).
-    pub fn mark_blackbox(&mut self, app_id: &str) {
-        self.blackbox_apps.insert(app_id.to_string());
+    /// Records a missed `launchApp` handshake for `app_id`.
+    pub fn record_handshake_miss(&mut self, app_id: &str) -> BlackboxDemotion {
+        self.blackbox.record_handshake_miss(app_id)
     }
 
-    pub fn is_blackbox(&self, app_id: &str) -> bool {
-        self.blackbox_apps.contains(app_id)
+    /// Records a successful Flutter handshake for `app_id`, resetting misses.
+    pub fn record_handshake_success(&mut self, app_id: &str) {
+        self.blackbox.record_handshake_success(app_id);
+    }
+
+    /// Whether `app_id` is permanently demoted to black-box for this shard.
+    pub fn is_sticky_blackbox(&self, app_id: &str) -> bool {
+        self.blackbox.is_sticky(app_id)
     }
 
     /// The warm-up failure reason, once (for a single user-visible warning).
@@ -995,5 +1056,47 @@ mod tests {
         .unwrap_err();
         assert!(err.to_string().contains("device offline"), "{err}");
         assert!(t.elapsed() < Duration::from_millis(500), "cancellation stalled for {:?}", t.elapsed());
+    }
+
+    #[test]
+    fn blackbox_tracker_promotes_only_after_two_consecutive_misses() {
+        let mut tracker = BlackboxTracker::default();
+        assert!(!tracker.is_sticky("com.example.app"));
+        assert_eq!(tracker.consecutive_misses("com.example.app"), 0);
+
+        // First miss: flow-only fallback, not sticky.
+        assert_eq!(
+            tracker.record_handshake_miss("com.example.app"),
+            BlackboxDemotion::FlowOnly { consecutive_misses: 1 }
+        );
+        assert!(!tracker.is_sticky("com.example.app"));
+        assert_eq!(tracker.consecutive_misses("com.example.app"), 1);
+
+        // A successful handshake resets the consecutive counter.
+        tracker.record_handshake_success("com.example.app");
+        assert_eq!(tracker.consecutive_misses("com.example.app"), 0);
+        assert!(!tracker.is_sticky("com.example.app"));
+
+        // Another single miss is still flow-only.
+        assert_eq!(
+            tracker.record_handshake_miss("com.example.app"),
+            BlackboxDemotion::FlowOnly { consecutive_misses: 1 }
+        );
+        assert!(!tracker.is_sticky("com.example.app"));
+
+        // Different app is tracked independently.
+        assert_eq!(
+            tracker.record_handshake_miss("com.other.app"),
+            BlackboxDemotion::FlowOnly { consecutive_misses: 1 }
+        );
+        assert!(!tracker.is_sticky("com.other.app"));
+
+        // Second consecutive miss for `com.example.app` -> sticky shard-wide.
+        assert_eq!(
+            tracker.record_handshake_miss("com.example.app"),
+            BlackboxDemotion::StickyShard { consecutive_misses: 2 }
+        );
+        assert!(tracker.is_sticky("com.example.app"));
+        assert!(!tracker.is_sticky("com.other.app"));
     }
 }

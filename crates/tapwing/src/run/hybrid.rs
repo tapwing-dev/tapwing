@@ -13,8 +13,8 @@ use crate::flow::ParsedFlow;
 use crate::flow::ir::{ElementSelector, KeyCode, MaestroCommand};
 use crate::ios_native_lane::{IosNativeClient, IosNativeLaneHandle, IosNativeOps, SPRINGBOARD_BUNDLE_ID};
 use crate::native_lane::{
-    ColdStart, FOCUS_PROBE, InputMode, Lane, NativeLaneHandle, NativeOps, RouteCtx, decide_lane, is_external_window,
-    parse_focused_package,
+    BlackboxDemotion, BlackboxTracker, ColdStart, FOCUS_PROBE, InputMode, Lane, NativeLaneHandle, NativeOps, RouteCtx,
+    decide_lane, is_external_window, parse_focused_package,
 };
 
 use super::DeviceFlutterBackend;
@@ -50,13 +50,13 @@ pub(super) const COLD_START_EXTRA: Duration = Duration::from_secs(10);
 /// drop). Transitions to [`IosNativeSlot::Started`] on first native need, or
 /// starts eagerly when `--input native` / static native commands are present.
 pub enum IosNativeSlot {
-    Lazy { udid: String },
+    Lazy { udid: String, blackbox: BlackboxTracker },
     Started(IosNativeLaneHandle),
 }
 
 impl IosNativeSlot {
     pub fn lazy(udid: impl Into<String>) -> Self {
-        Self::Lazy { udid: udid.into() }
+        Self::Lazy { udid: udid.into(), blackbox: BlackboxTracker::default() }
     }
 
     pub fn spawn(udid: &str) -> Self {
@@ -92,21 +92,32 @@ impl IosNativeSlot {
         }
     }
 
-    pub fn is_blackbox(&self, app_id: &str) -> bool {
+    pub fn is_sticky_blackbox(&self, app_id: &str) -> bool {
         match self {
-            Self::Lazy { .. } => false,
-            Self::Started(h) => h.is_blackbox(app_id),
+            Self::Lazy { blackbox, .. } => blackbox.is_sticky(app_id),
+            Self::Started(h) => h.is_sticky_blackbox(app_id),
         }
     }
 
-    pub fn mark_blackbox(&mut self, app_id: &str) {
-        self.ensure_started().mark_blackbox(app_id);
+    pub fn record_handshake_miss(&mut self, app_id: &str) -> BlackboxDemotion {
+        match self {
+            Self::Lazy { blackbox, .. } => blackbox.record_handshake_miss(app_id),
+            Self::Started(h) => h.record_handshake_miss(app_id),
+        }
+    }
+
+    pub fn record_handshake_success(&mut self, app_id: &str) {
+        match self {
+            Self::Lazy { blackbox, .. } => blackbox.record_handshake_success(app_id),
+            Self::Started(h) => h.record_handshake_success(app_id),
+        }
     }
 
     pub fn ensure_started(&mut self) -> &mut IosNativeLaneHandle {
-        if let Self::Lazy { udid } = self {
-            let udid = udid.clone();
-            *self = Self::Started(IosNativeLaneHandle::spawn(&udid));
+        if let Self::Lazy { udid, blackbox } = self {
+            let mut handle = IosNativeLaneHandle::spawn(udid);
+            handle.set_blackbox_tracker(std::mem::take(blackbox));
+            *self = Self::Started(handle);
         }
         match self {
             Self::Started(h) => h,
@@ -320,6 +331,29 @@ pub(super) fn is_flutter_not_found(e: &anyhow::Error) -> bool {
     e.downcast_ref::<DriverError>().is_some_and(|d| d.code == "ELEMENT_NOT_FOUND")
 }
 
+/// Result of probing which window currently owns input focus.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum FocusProbe {
+    /// A system dialog or foreign app owns focus.
+    External(String),
+    /// The flow's own app affirmatively owns focus.
+    InApp,
+    /// Focus could not be determined (e.g. lazy iOS slot not started,
+    /// `mCurrentFocus=null`, or probe failure).
+    Unknown,
+}
+
+/// Classifies a reported foreground package/bundle against `flow_app`.
+pub(super) fn classify_focused_package(focused: &str, flow_app: &str) -> FocusProbe {
+    if focused.is_empty() {
+        FocusProbe::Unknown
+    } else if is_external_window(focused, flow_app) {
+        FocusProbe::External(focused.to_string())
+    } else {
+        FocusProbe::InApp
+    }
+}
+
 impl DeviceFlutterBackend<'_> {
     pub(super) fn lane_mode(&self) -> InputMode {
         self.opts.input_mode
@@ -332,29 +366,65 @@ impl DeviceFlutterBackend<'_> {
         }
     }
 
-    /// Whether `app_id` never completed the `tapwing_driver` handshake in this run.
-    pub(super) fn is_blackbox_app(&self, app_id: &str) -> bool {
+    /// Whether `app_id` was promoted to sticky shard-wide black-box after
+    /// consecutive missed `launchApp` handshakes.
+    pub(super) fn is_sticky_blackbox_app(&self, app_id: &str) -> bool {
         match self.platform() {
-            Platform::Android => self.native.as_deref().is_some_and(|n| n.is_blackbox(app_id)),
-            Platform::Ios => self.ios_native.as_deref().is_some_and(|n| n.is_blackbox(app_id)),
+            Platform::Android => self.native.as_deref().is_some_and(|n| n.is_sticky_blackbox(app_id)),
+            Platform::Ios => self.ios_native.as_deref().is_some_and(|s| s.is_sticky_blackbox(app_id)),
         }
     }
 
-    /// The active flow app never completed the `tapwing_driver` handshake in this run.
+    /// Whether `app_id` is currently black-box (either for this flow or sticky
+    /// for the rest of the shard).
+    pub(super) fn is_blackbox_app(&self, app_id: &str) -> bool {
+        self.flow_blackbox_apps.contains(app_id) || self.is_sticky_blackbox_app(app_id)
+    }
+
+    /// Whether the active flow app is currently black-box.
     pub(super) fn is_blackbox(&self) -> bool {
         self.is_blackbox_app(&self.flow_app)
     }
 
-    pub(super) fn mark_blackbox_app(&mut self, app_id: &str) {
+    pub(super) fn mark_flow_blackbox(&mut self, app_id: &str) {
+        if !app_id.is_empty() {
+            self.flow_blackbox_apps.insert(app_id.to_string());
+        }
+    }
+
+    pub(super) fn clear_flow_blackbox(&mut self, app_id: &str) {
+        self.flow_blackbox_apps.remove(app_id);
+    }
+
+    /// Marks `app_id` black-box for this flow and updates the shard-wide
+    /// consecutive handshake-miss counter.
+    pub(super) fn record_handshake_miss(&mut self, app_id: &str) -> BlackboxDemotion {
+        self.mark_flow_blackbox(app_id);
+        match self.platform() {
+            Platform::Android => self
+                .native
+                .as_deref_mut()
+                .map_or(BlackboxDemotion::FlowOnly { consecutive_misses: 1 }, |n| n.record_handshake_miss(app_id)),
+            Platform::Ios => self
+                .ios_native
+                .as_deref_mut()
+                .map_or(BlackboxDemotion::FlowOnly { consecutive_misses: 1 }, |s| s.record_handshake_miss(app_id)),
+        }
+    }
+
+    /// Clears flow-scoped black-box and resets the shard-wide consecutive-miss
+    /// counter after a healthy Flutter handshake.
+    pub(super) fn record_handshake_success(&mut self, app_id: &str) {
+        self.clear_flow_blackbox(app_id);
         match self.platform() {
             Platform::Android => {
                 if let Some(n) = self.native.as_deref_mut() {
-                    n.mark_blackbox(app_id);
+                    n.record_handshake_success(app_id);
                 }
             }
             Platform::Ios => {
-                if let Some(n) = self.ios_native.as_deref_mut() {
-                    n.mark_blackbox(app_id);
+                if let Some(s) = self.ios_native.as_deref_mut() {
+                    s.record_handshake_success(app_id);
                 }
             }
         }
@@ -369,46 +439,67 @@ impl DeviceFlutterBackend<'_> {
         ids
     }
 
-    /// Queries the iOS XCTest runner for a SpringBoard alert or foreign
-    /// foreground app. When `join_if_started` is `false`, never blocks or
-    /// spawns `xcodebuild`; when `true` and the slot is already `Started`,
-    /// joins warm-up; when `allow_lazy_spawn` is `true`, starts the runner
-    /// on demand.
-    fn ios_external_focus(&mut self, join_if_started: bool, allow_lazy_spawn: bool) -> Option<String> {
+    /// Queries the iOS XCTest runner for a SpringBoard alert or foreground app.
+    /// When `join_if_started` is `false`, never blocks or spawns `xcodebuild`;
+    /// when `true` and the slot is already `Started`, joins warm-up; when
+    /// `allow_lazy_spawn` is `true`, starts the runner on demand.
+    fn ios_focus_probe(&mut self, join_if_started: bool, allow_lazy_spawn: bool) -> FocusProbe {
         let app_ids = self.ios_app_ids();
         let flow_app = self.flow_app.clone();
-        let slot = self.ios_native.as_deref_mut()?;
-        let client = if allow_lazy_spawn || (join_if_started && slot.is_started()) {
-            slot.get_or_wait(IOS_NATIVE_WAIT).ok()?
+        let Some(slot) = self.ios_native.as_deref_mut() else {
+            return FocusProbe::Unknown;
+        };
+        let Some(client) = (if allow_lazy_spawn || (join_if_started && slot.is_started()) {
+            slot.get_or_wait(IOS_NATIVE_WAIT).ok()
         } else {
-            slot.try_get()?
+            slot.try_get()
+        }) else {
+            return FocusProbe::Unknown;
         };
         let mut ops = IosNativeOps::new(client, &app_ids);
-        let foreground =
-            |ops: &mut IosNativeOps<'_>| ops.foreground_app_id().ok().filter(|fg| is_external_window(fg, &flow_app));
-        let focus = match ops.has_springboard_alert() {
-            Ok(true) => Some(SPRINGBOARD_BUNDLE_ID.to_string()),
-            Ok(false) => foreground(&mut ops),
+        let classify_fg = |ops: &mut IosNativeOps<'_>| match ops.foreground_app_id() {
+            Ok(fg) => classify_focused_package(&fg, &flow_app),
+            Err(_) => FocusProbe::Unknown,
+        };
+        let probe = match ops.has_springboard_alert() {
+            Ok(true) => FocusProbe::External(SPRINGBOARD_BUNDLE_ID.to_string()),
+            Ok(false) => classify_fg(&mut ops),
             // The runner answered with an error (say, an accessibility snapshot that failed):
             // the foreground app can still be asked.
-            Err(e) if crate::ios_native_lane::is_runner_answer(&e) => foreground(&mut ops),
+            Err(e) if crate::ios_native_lane::is_runner_answer(&e) => classify_fg(&mut ops),
             // A dead or hung runner: a second question would restart it again, or wait out
             // another timeout, for a probe that only routes a command.
-            Err(_) => None,
+            Err(_) => FocusProbe::Unknown,
         };
         self.report_native_restarts();
-        focus
+        probe
+    }
+
+    fn ios_external_focus(&mut self, join_if_started: bool, allow_lazy_spawn: bool) -> Option<String> {
+        match self.ios_focus_probe(join_if_started, allow_lazy_spawn) {
+            FocusProbe::External(app) => Some(app),
+            FocusProbe::InApp | FocusProbe::Unknown => None,
+        }
+    }
+
+    /// Probes which window owns input focus without cold-spawning lazy iOS `xcodebuild`.
+    pub(super) fn probe_focus(&mut self) -> FocusProbe {
+        match self.platform() {
+            Platform::Android => {
+                let Some(android) = self.dev.as_android() else { return FocusProbe::Unknown };
+                let Ok(out) = android.shell(FOCUS_PROBE) else { return FocusProbe::Unknown };
+                let Some(pkg) = parse_focused_package(&out) else { return FocusProbe::Unknown };
+                classify_focused_package(&pkg, &self.flow_app)
+            }
+            Platform::Ios => self.ios_focus_probe(true, false),
+        }
     }
 
     /// Package / bundle owning the focused window when it is not the flow's app.
     fn external_focus(&mut self) -> Option<String> {
-        match self.platform() {
-            Platform::Android => {
-                let out = self.dev.as_android()?.shell(FOCUS_PROBE).ok()?;
-                let pkg = parse_focused_package(&out)?;
-                is_external_window(&pkg, &self.flow_app).then_some(pkg)
-            }
-            Platform::Ios => self.ios_external_focus(true, false),
+        match self.probe_focus() {
+            FocusProbe::External(app) => Some(app),
+            FocusProbe::InApp | FocusProbe::Unknown => None,
         }
     }
 
@@ -474,14 +565,23 @@ impl DeviceFlutterBackend<'_> {
         }
     }
 
-    /// Marks the current flow app as blackbox (or sets `native_hint` if another
-    /// package currently holds window focus) when no Flutter driver is attached.
+    /// Records what happened when a command ran without an attached Flutter
+    /// driver (`DriverNotAttachedError`):
+    /// - External window owns focus -> remember `native_hint`.
+    /// - Our own app affirmatively owns focus -> mark flow-scoped black-box
+    ///   (without touching the shard-wide consecutive `launchApp` miss counter).
+    /// - Unknown focus (e.g. lazy iOS slot where focus isn't probed, or
+    ///   `mCurrentFocus=null`) -> fall back for this command only, never mark black-box.
     fn record_unattached_fallback(&mut self) {
-        if self.external_focus().is_some() {
-            self.native_hint = true;
-        } else if !self.flow_app.is_empty() {
-            let app = self.flow_app.clone();
-            self.mark_blackbox_app(&app);
+        match self.probe_focus() {
+            FocusProbe::External(_) => {
+                self.native_hint = true;
+            }
+            FocusProbe::InApp => {
+                let app = self.flow_app.clone();
+                self.mark_flow_blackbox(&app);
+            }
+            FocusProbe::Unknown => {}
         }
     }
 
@@ -1139,9 +1239,9 @@ mod tests {
             assert!(seen[1] > 4000 && seen[1] <= 5000, "unexpected second wait: {}", seen[1]);
         }
 
-        // 3. Flow starting WITHOUT `launchApp` on an uninstrumented app:
+        // 3. Flow starting WITHOUT `launchApp` when focus is unknown (unreachable adb):
         //    `DriverNotAttachedError` in `route_selector` or `route_plain` falls back
-        //    cleanly to the native lane and marks the app as black-box.
+        //    cleanly to the native lane without marking the app black-box.
         {
             let mut dev = Device::Android(crate::device::Android::new("unreachable".into()));
             let mut drv = Driver::listen(0).unwrap();
@@ -1166,7 +1266,7 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(sel_res, "native-selector-ok");
-            assert!(backend.ran_blackbox());
+            assert!(!backend.ran_blackbox(), "unknown focus must never mark an app black-box");
             assert_eq!(backend.lane_stats(), LaneStats { flutter: 0, native: 1, ..Default::default() });
 
             let plain_res = backend
@@ -1177,6 +1277,7 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(plain_res, "native-scroll-ok");
+            assert!(!backend.ran_blackbox());
             assert_eq!(backend.lane_stats(), LaneStats { flutter: 0, native: 2, ..Default::default() });
         }
     }
@@ -1711,5 +1812,246 @@ mod tests {
             "one focus probe should not fall through from a transport failure in has_springboard_alert() \
              into foreground_app_id() and trigger a second restart"
         );
+    }
+
+    #[test]
+    fn classify_focused_package_distinguishes_unknown_in_app_and_external() {
+        assert_eq!(classify_focused_package("", "com.example.app"), FocusProbe::Unknown);
+        assert_eq!(classify_focused_package("com.example.app", "com.example.app"), FocusProbe::InApp);
+        assert_eq!(
+            classify_focused_package("com.apple.springboard", "com.example.app"),
+            FocusProbe::External("com.apple.springboard".into())
+        );
+    }
+
+    #[test]
+    fn blackbox_state_transitions_are_flow_scoped_until_two_consecutive_misses() {
+        let app = "com.example.app";
+        // Verify on both Android (NativeLaneHandle) and iOS (IosNativeSlot::Lazy).
+        for use_ios in [false, true] {
+            let mut dev = if use_ios {
+                Device::Ios(crate::device::IosSim::new(crate::device::SimInfo {
+                    udid: "SIM-UDID".into(),
+                    name: "iPhone".into(),
+                }))
+            } else {
+                Device::Android(crate::device::Android::new("unreachable".into()))
+            };
+            let mut drv = Driver::listen(0).unwrap();
+            let opts = test_opts(InputMode::Auto);
+            let mut native = (!use_ios).then(warm_native_handle);
+            let mut ios_slot = use_ios.then(|| IosNativeSlot::lazy("SIM-UDID"));
+
+            // Flow 1: single miss -> flow-scoped black-box for Flow 1, NOT sticky shard-wide.
+            {
+                let mut session = Session {
+                    dev: &mut dev,
+                    drv: &mut drv,
+                    opts: &opts,
+                    units_scale: 1.0,
+                    native: native.as_mut(),
+                    ios_native: ios_slot.as_mut(),
+                };
+                let mut flow1 = DeviceFlutterBackend::new(&mut session, app.into());
+                assert!(!flow1.is_blackbox());
+                assert_eq!(flow1.record_handshake_miss(app), BlackboxDemotion::FlowOnly { consecutive_misses: 1 });
+                assert!(flow1.ran_blackbox(), "current flow runs black-box after miss");
+                assert!(!flow1.is_sticky_blackbox_app(app));
+
+                // Next `launchApp` in the same flow clears the flow-scoped mark and retries Flutter.
+                flow1.clear_flow_blackbox(app);
+                assert!(!flow1.is_blackbox());
+                // Put flow1 back in miss=1 state via another flow simulation below.
+                flow1.mark_flow_blackbox(app);
+            }
+
+            // Flow 2: fresh backend starts non-black-box -> handshake succeeds -> resets miss counter!
+            {
+                let mut session = Session {
+                    dev: &mut dev,
+                    drv: &mut drv,
+                    opts: &opts,
+                    units_scale: 1.0,
+                    native: native.as_mut(),
+                    ios_native: ios_slot.as_mut(),
+                };
+                let mut flow2 = DeviceFlutterBackend::new(&mut session, app.into());
+                assert!(!flow2.is_blackbox(), "flow 2 must retry the fast Flutter path");
+                flow2.record_handshake_success(app);
+                assert!(!flow2.is_blackbox());
+                assert!(!flow2.is_sticky_blackbox_app(app));
+            }
+
+            // Flow 3: misses once (miss 1/2 because Flow 2 reset the counter!).
+            {
+                let mut session = Session {
+                    dev: &mut dev,
+                    drv: &mut drv,
+                    opts: &opts,
+                    units_scale: 1.0,
+                    native: native.as_mut(),
+                    ios_native: ios_slot.as_mut(),
+                };
+                let mut flow3 = DeviceFlutterBackend::new(&mut session, app.into());
+                assert_eq!(flow3.record_handshake_miss(app), BlackboxDemotion::FlowOnly { consecutive_misses: 1 });
+                assert!(flow3.ran_blackbox());
+                assert!(!flow3.is_sticky_blackbox_app(app));
+            }
+
+            // Flow 4: misses a second time in a row -> sticky shard-wide black-box!
+            {
+                let mut session = Session {
+                    dev: &mut dev,
+                    drv: &mut drv,
+                    opts: &opts,
+                    units_scale: 1.0,
+                    native: native.as_mut(),
+                    ios_native: ios_slot.as_mut(),
+                };
+                let mut flow4 = DeviceFlutterBackend::new(&mut session, app.into());
+                assert!(!flow4.is_blackbox(), "flow 4 still tries Flutter after 1 miss");
+                assert_eq!(flow4.record_handshake_miss(app), BlackboxDemotion::StickyShard { consecutive_misses: 2 });
+                assert!(flow4.is_sticky_blackbox_app(app));
+                // Clearing flow-scoped mark on next launchApp no longer clears sticky black-box.
+                flow4.clear_flow_blackbox(app);
+                assert!(flow4.is_blackbox_app(app));
+            }
+
+            // Flow 5: starts sticky black-box immediately on a fresh DeviceFlutterBackend.
+            {
+                let mut session = Session {
+                    dev: &mut dev,
+                    drv: &mut drv,
+                    opts: &opts,
+                    units_scale: 1.0,
+                    native: native.as_mut(),
+                    ios_native: ios_slot.as_mut(),
+                };
+                let flow5 = DeviceFlutterBackend::new(&mut session, app.into());
+                assert!(flow5.is_blackbox(), "sticky black-box persists across remaining flows in shard");
+            }
+
+            if let Some(slot) = ios_slot {
+                assert!(!slot.is_started(), "black-box tracking must not spawn lazy iOS xcodebuild");
+            }
+        }
+    }
+
+    #[test]
+    fn unattached_fallback_marks_flow_blackbox_only_when_focus_is_known_in_app() {
+        use crate::ios_native_lane::client::mock::{MockRunner, Resp};
+
+        // 1. Lazy iOS slot (focus unknown): never spawns xcodebuild and never marks black-box.
+        {
+            let (mut dev, mut drv) = ios_backend_session_parts();
+            let opts = test_opts(InputMode::Auto);
+            let mut slot = IosNativeSlot::lazy("SIM-UDID");
+            {
+                let mut session = Session {
+                    dev: &mut dev,
+                    drv: &mut drv,
+                    opts: &opts,
+                    units_scale: 1.0,
+                    native: None,
+                    ios_native: Some(&mut slot),
+                };
+                let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+                backend.record_unattached_fallback();
+                assert!(!backend.ran_blackbox(), "lazy iOS slot has unknown focus");
+                assert!(!backend.native_hint);
+                assert!(!backend.is_sticky_blackbox_app("com.example.app"));
+            }
+            assert!(!slot.is_started(), "record_unattached_fallback must not spawn lazy xcodebuild");
+        }
+
+        // 2. Started iOS slot with transport error (focus unknown): never marks black-box.
+        {
+            let (mut dev, mut drv) = ios_backend_session_parts();
+            let opts = test_opts(InputMode::Auto);
+            let mut slot = dead_ios_slot();
+            let mut session = Session {
+                dev: &mut dev,
+                drv: &mut drv,
+                opts: &opts,
+                units_scale: 1.0,
+                native: None,
+                ios_native: Some(&mut slot),
+            };
+            let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+            backend.record_unattached_fallback();
+            assert!(!backend.ran_blackbox());
+            assert!(!backend.native_hint);
+        }
+
+        // 3. Started iOS slot reporting SpringBoard alert (external focus): sets native_hint only.
+        {
+            let runner = MockRunner::start(Box::new(|req| match req.path() {
+                "/deviceInfo" => {
+                    Resp::json(r#"{"widthPixels":1206,"heightPixels":2622,"widthPoints":402,"heightPoints":874}"#)
+                }
+                "/viewHierarchy" => Resp::json(r#"{"axElement":{"elementType":7,"label":"Allow?"},"depth":1}"#),
+                _ => Resp::json("{}"),
+            }));
+            let (mut dev, mut drv) = ios_backend_session_parts();
+            let opts = test_opts(InputMode::Auto);
+            let mut slot = IosNativeSlot::Started(IosNativeLaneHandle::ready_for_test(
+                crate::ios_native_lane::IosNativeClient::connect(runner.port),
+            ));
+            let mut session = Session {
+                dev: &mut dev,
+                drv: &mut drv,
+                opts: &opts,
+                units_scale: 1.0,
+                native: None,
+                ios_native: Some(&mut slot),
+            };
+            let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+            backend.record_unattached_fallback();
+            assert!(backend.native_hint);
+            assert!(!backend.ran_blackbox());
+        }
+
+        // 4. Started iOS slot affirmatively reporting our app in foreground: marks flow-scoped black-box only.
+        {
+            let runner = MockRunner::start(Box::new(|req| match req.path() {
+                "/deviceInfo" => {
+                    Resp::json(r#"{"widthPixels":1206,"heightPixels":2622,"widthPoints":402,"heightPoints":874}"#)
+                }
+                "/viewHierarchy" => Resp::json(r#"{"axElement":{"label":"x"},"depth":1}"#),
+                "/runningApp" => Resp::json(r#"{"runningAppBundleId":"com.example.app"}"#),
+                _ => Resp::json("{}"),
+            }));
+            let (mut dev, mut drv) = ios_backend_session_parts();
+            let opts = test_opts(InputMode::Auto);
+            let mut slot = IosNativeSlot::Started(IosNativeLaneHandle::ready_for_test(
+                crate::ios_native_lane::IosNativeClient::connect(runner.port),
+            ));
+            {
+                let mut session = Session {
+                    dev: &mut dev,
+                    drv: &mut drv,
+                    opts: &opts,
+                    units_scale: 1.0,
+                    native: None,
+                    ios_native: Some(&mut slot),
+                };
+                let mut flow1 = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+                flow1.record_unattached_fallback();
+                assert!(flow1.ran_blackbox(), "known in-app unattached focus marks current flow black-box");
+                assert!(!flow1.is_sticky_blackbox_app("com.example.app"), "must not promote shard counter");
+            }
+            {
+                let mut session = Session {
+                    dev: &mut dev,
+                    drv: &mut drv,
+                    opts: &opts,
+                    units_scale: 1.0,
+                    native: None,
+                    ios_native: Some(&mut slot),
+                };
+                let flow2 = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+                assert!(!flow2.is_blackbox(), "next flow starts clean");
+            }
+        }
     }
 }

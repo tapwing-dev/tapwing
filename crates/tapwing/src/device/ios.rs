@@ -194,8 +194,10 @@ pub struct IosSim {
     pub name: String,
     data_containers: HashMap<String, PathBuf>,
     display_names: HashMap<String, Option<String>>,
-    /// Permissions applied per bundle in this session (reset by reinstall),
-    /// so repeated `launchApp`s skip redundant `simctl privacy` calls.
+    /// Last permissions set applied per bundle in this session (reset by reinstall).
+    /// Used only to skip redundant `simctl privacy` calls when `launchApp` is
+    /// called with `stopApp: false` and unchanged permissions, because
+    /// `simctl privacy` kills a running app on iOS.
     applied_permissions: HashMap<String, BTreeMap<String, String>>,
     recording: Option<IosRecording>,
 }
@@ -415,23 +417,52 @@ impl IosSim {
         result
     }
 
-    /// Applies Maestro permissions via `simctl privacy`; skips the calls when
-    /// the same set was already applied to this install during the session.
+    /// Applies Maestro permissions via `simctl privacy`.
     /// Returns (number of `simctl privacy` actions run, unsupported names).
     pub fn set_permissions(
         &mut self,
         bundle: &str,
         permissions: &BTreeMap<String, String>,
     ) -> Result<(usize, Vec<String>)> {
+        self.set_permissions_with(bundle, permissions, |udid, action, service, bundle| {
+            run("xcrun", &["simctl", "privacy", udid, action, service, bundle]).map(|_| ())
+        })
+    }
+
+    fn set_permissions_with(
+        &mut self,
+        bundle: &str,
+        permissions: &BTreeMap<String, String>,
+        mut apply_privacy: impl FnMut(&str, &str, &str, &str) -> Result<()>,
+    ) -> Result<(usize, Vec<String>)> {
         let (actions, unsupported) = privacy_actions(permissions)?;
-        if self.applied_permissions.get(bundle) == Some(permissions) {
+        if actions.is_empty() {
             return Ok((0, unsupported));
         }
+        // Clear any stale cache before applying so a partial failure cannot leave
+        // a later `stopApp: false` thinking the new set is already active.
+        self.applied_permissions.remove(bundle);
         for (action, service) in &actions {
-            self.simctl(&["privacy", &self.udid, action, service, bundle])?;
+            apply_privacy(&self.udid, action, service, bundle)?;
         }
         self.applied_permissions.insert(bundle.to_string(), permissions.clone());
         Ok((actions.len(), unsupported))
+    }
+
+    fn apply_launch_permissions_with(
+        &mut self,
+        bundle: &str,
+        clear_state: bool,
+        stop_app: bool,
+        permissions: &BTreeMap<String, String>,
+        apply_privacy: impl FnMut(&str, &str, &str, &str) -> Result<()>,
+    ) -> Result<(usize, Vec<String>)> {
+        if should_apply_permissions_on_launch(self.applied_permissions.get(bundle), clear_state, stop_app, permissions)
+        {
+            return self.set_permissions_with(bundle, permissions, apply_privacy);
+        }
+        let (_, unsupported) = privacy_actions(permissions)?;
+        Ok((0, unsupported))
     }
 
     /// Writes the port file and launches the app with optional `launchArguments`;
@@ -478,7 +509,15 @@ impl IosSim {
             self.terminate(bundle)?;
         }
         let t1 = Instant::now();
-        let (granted, unsupported) = self.set_permissions(bundle, permissions)?;
+        let (granted, unsupported) = self.apply_launch_permissions_with(
+            bundle,
+            clear_state,
+            stop_app,
+            permissions,
+            |udid, action, service, bundle| {
+                run("xcrun", &["simctl", "privacy", udid, action, service, bundle]).map(|_| ())
+            },
+        )?;
         let t2 = Instant::now();
         let pid = self.launch(bundle, launch_arguments, port)?;
         let t3 = Instant::now();
@@ -690,6 +729,22 @@ impl IosSim {
     pub fn running_apps(&self) -> Result<Vec<String>> {
         Ok(parse_running_apps(&self.simctl(&["spawn", &self.udid, "launchctl", "list"])?))
     }
+}
+
+/// Decides whether `launchApp` should invoke `simctl privacy`.
+///
+/// Re-applies whenever `clear_state` or `stop_app` is true (so two flows in
+/// one shard with `permissions: {location: unset}` both reset TCC and see the
+/// prompt). When `stopApp: false` and `!clear_state`, skips `simctl privacy`
+/// if the exact same permission set was already applied to `bundle` in this
+/// session, because `simctl privacy` kills a running app on iOS.
+fn should_apply_permissions_on_launch(
+    applied: Option<&BTreeMap<String, String>>,
+    clear_state: bool,
+    stop_app: bool,
+    permissions: &BTreeMap<String, String>,
+) -> bool {
+    clear_state || stop_app || applied != Some(permissions)
 }
 
 fn ms(d: std::time::Duration) -> u64 {
@@ -948,5 +1003,82 @@ mod tests {
         assert_eq!(leftovers, vec![PORT_FILE], "temp .tmp file must be cleaned up on rename failure");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn launch_reapplies_permissions_unless_stop_app_false_with_unchanged_set() {
+        let mut sim = IosSim::new(SimInfo { udid: "SIM-UDID".into(), name: "iPhone".into() });
+        let unset_loc = perms(&[("location", "unset")]);
+        let allow_all = perms(&[("all", "allow")]);
+        let deny_loc = perms(&[("location", "never"), ("camera", "allow")]);
+
+        let calls: std::cell::RefCell<Vec<(String, String, String, String)>> = std::cell::RefCell::new(Vec::new());
+        let record = |u: &str, a: &str, s: &str, b: &str| -> Result<()> {
+            calls.borrow_mut().push((u.into(), a.into(), s.into(), b.into()));
+            Ok(())
+        };
+
+        // Two flows in the same shard with `permissions: {location: unset}` (stop_app=true):
+        // both runs must invoke `simctl privacy reset location-always`.
+        let (n1, _) = sim.apply_launch_permissions_with("dev.app", false, true, &unset_loc, record).unwrap();
+        let (n2, _) = sim.apply_launch_permissions_with("dev.app", false, true, &unset_loc, record).unwrap();
+        assert_eq!((n1, n2), (1, 1));
+        assert_eq!(
+            *calls.borrow(),
+            vec![
+                ("SIM-UDID".into(), "reset".into(), "location-always".into(), "dev.app".into()),
+                ("SIM-UDID".into(), "reset".into(), "location-always".into(), "dev.app".into()),
+            ]
+        );
+
+        // First launch with default `{all: allow}` applies; follow-up `stopApp: false`
+        // with the same default skips `simctl privacy` so the running app is not killed.
+        calls.borrow_mut().clear();
+        let (n_first, _) = sim.apply_launch_permissions_with("dev.app", false, true, &allow_all, record).unwrap();
+        assert_eq!(n_first, 2);
+        let (n_resume, _) = sim.apply_launch_permissions_with("dev.app", false, false, &allow_all, record).unwrap();
+        assert_eq!(n_resume, 0);
+        assert_eq!(calls.borrow().len(), 2, "stopApp: false with unchanged permissions must not call simctl privacy");
+
+        // `stopApp: false` with CHANGED permissions DOES apply `simctl privacy`
+        // (and still reports unsupported permissions on both apply and skip).
+        calls.borrow_mut().clear();
+        let (n_changed, unsup1) =
+            sim.apply_launch_permissions_with("dev.app", false, false, &deny_loc, record).unwrap();
+        assert_eq!(n_changed, 1);
+        assert_eq!(unsup1, vec!["camera"]);
+        assert_eq!(
+            *calls.borrow(),
+            vec![("SIM-UDID".into(), "revoke".into(), "location-always".into(), "dev.app".into())]
+        );
+
+        // Subsequent `stopApp: false` with the same `deny_loc` skips `simctl privacy`
+        // while still reporting unsupported permissions.
+        calls.borrow_mut().clear();
+        let (n_same_again, unsup2) =
+            sim.apply_launch_permissions_with("dev.app", false, false, &deny_loc, record).unwrap();
+        assert_eq!(n_same_again, 0);
+        assert_eq!(unsup2, vec!["camera"]);
+        assert!(calls.borrow().is_empty());
+
+        // `setPermissions` command always applies even if the same map was applied before.
+        let (n_set1, _) = sim.set_permissions_with("dev.app", &unset_loc, record).unwrap();
+        let (n_set2, _) = sim.set_permissions_with("dev.app", &unset_loc, record).unwrap();
+        assert_eq!((n_set1, n_set2), (1, 1));
+        assert_eq!(calls.borrow().len(), 2);
+
+        // Failed `set_permissions_with` clears stale cache so a later `stopApp: false` retries.
+        let mut fail_once = true;
+        let err = sim.set_permissions_with("dev.app", &allow_all, |_, _, _, _| {
+            if fail_once {
+                fail_once = false;
+                bail!("simctl failed");
+            }
+            Ok(())
+        });
+        assert!(err.is_err());
+        calls.borrow_mut().clear();
+        let (n_retry, _) = sim.apply_launch_permissions_with("dev.app", false, false, &unset_loc, record).unwrap();
+        assert_eq!(n_retry, 1, "stale cache was cleared on failure");
     }
 }

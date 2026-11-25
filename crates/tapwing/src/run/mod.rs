@@ -4,10 +4,11 @@
 
 mod flutter_ops;
 mod hybrid;
+mod launch;
 mod mapping;
 pub mod suite;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
@@ -37,7 +38,7 @@ pub use mapping::{
     scale_crop_bounds, screen_swipe_ratios, scroll_duration_ms,
 };
 
-use hybrid::HANDSHAKE_FALLBACK_TIMEOUT;
+use launch::{LaunchPlan, LaunchPlanInput, decide_launch_plan, format_blackbox_demotion_warning};
 
 pub struct Opts {
     pub settle_policy: String,
@@ -114,6 +115,9 @@ pub struct DeviceFlutterBackend<'a> {
     /// screen when the launch settled, so the next required native lookup
     /// gets the bounded cold-start retry (see `native_lookup`).
     pub(super) cold_app: Option<String>,
+    /// Apps marked black-box for this flow only (cleared on the next
+    /// `launchApp` for that app unless promoted to sticky shard-wide black-box).
+    pub(super) flow_blackbox_apps: HashSet<String>,
     /// Native-lane command count at the last [`FlowDriver::take_app_issues`]
     /// (native steps send no driver RPC, so issues are re-read after them).
     native_at_issue_take: u32,
@@ -142,6 +146,7 @@ impl<'a> DeviceFlutterBackend<'a> {
             native_hint: false,
             overlay_hint: false,
             cold_app: None,
+            flow_blackbox_apps: HashSet::new(),
             native_at_issue_take: 0,
             started: SystemTime::now(),
             trace_lanes: LaneStats::default(),
@@ -262,7 +267,12 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
         self.native_hint = false;
         self.overlay_hint = false;
         self.cold_app = None;
-        let restarting = req.stop_app || req.clear_state || app_changed || !self.drv.is_connected();
+        // Clear any flow-scoped black-box mark so the next `launchApp` tries
+        // the fast Flutter path again unless the app missed twice in a row.
+        self.clear_flow_blackbox(&req.app_id);
+
+        let was_connected = self.drv.is_connected();
+        let restarting = req.stop_app || req.clear_state || app_changed || !was_connected;
         let previous_pid = self.drv.last_pid();
         if restarting {
             self.drv.disconnect();
@@ -283,108 +293,109 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
             &req.launch_arguments,
             host_port,
         )?;
-        // `--input native` or a known uninstrumented app: nothing to handshake with.
-        if self.lane_mode() == InputMode::Native || self.is_blackbox_app(&req.app_id) {
-            self.drv.disconnect();
-            let why = if self.lane_mode() == InputMode::Native {
-                "--input native: Flutter driver not used"
-            } else {
-                "no tapwing_driver handshake earlier in this run"
-            };
-            return self.finish_native_launch(&launch, why);
-        }
-        // Resolve (and cache) the iOS display name for `configure` while
-        // the app is still booting, off the accept -> configure path.
-        if platform == Platform::Ios {
-            let _ = self.dev.app_display_name(&req.app_id);
-        }
+
+        let plan = decide_launch_plan(&LaunchPlanInput {
+            lane_mode: self.lane_mode(),
+            blackbox: self.is_blackbox_app(&req.app_id),
+            native_usable: self.native_usable(),
+            stop_app: req.stop_app,
+            clear_state: req.clear_state,
+            app_changed,
+            was_connected,
+            previous_pid,
+            launch_pid: launch.pid,
+            old_pids: &launch.old_pids,
+        });
+
         let start_key = match platform {
             Platform::Android => "amStartMs",
             Platform::Ios => "simctlLaunchMs",
         };
-        // iOS: `simctl privacy` terminates a running app whose permissions
-        // change, so `simctl launch` may report a new process even with
-        // `stopApp: false`; its old connection is dead then.
-        let relaunched = !restarting
-            && platform == Platform::Ios
-            && launch.pid.is_some()
-            && previous_pid.is_some()
-            && launch.pid != previous_pid;
-        if relaunched {
-            self.drv.disconnect();
-        }
 
-        if restarting || relaunched {
-            let mut reject_pids = launch.old_pids.clone();
-            if (req.stop_app || req.clear_state)
-                && let Some(p) = previous_pid
-            {
-                reject_pids.push(p);
+        match plan {
+            LaunchPlan::Native { reason } => {
+                self.drv.disconnect();
+                self.finish_native_launch(&launch, reason)
             }
-            let expected_pid = launch.pid.filter(|p| !reject_pids.contains(p));
-
-            let t_accept = Instant::now();
-            let can_fall_back = self.lane_mode() == InputMode::Auto && self.native_usable();
-            let accept_timeout = if can_fall_back { HANDSHAKE_FALLBACK_TIMEOUT } else { Duration::from_secs(20) };
-            let outcome = match self.drv.accept_with_pid(accept_timeout, expected_pid, &reject_pids) {
-                Ok(o) => o,
-                Err(e) if can_fall_back && !crate::interrupt::is_interrupted_error(&e) => {
-                    // No `tapwing_driver` handshake: an uninstrumented app. Drive it black-box
-                    // through the native lane (and remember, so later launches skip the wait).
-                    self.mark_blackbox_app(&req.app_id);
+            LaunchPlan::AcceptHandshake { relaunched, expected_pid, reject_pids, can_fall_back, accept_timeout } => {
+                // Resolve (and cache) the iOS display name for `configure` while
+                // the app is still booting, off the accept -> configure path.
+                if platform == Platform::Ios {
+                    let _ = self.dev.app_display_name(&req.app_id);
+                }
+                if relaunched {
                     self.drv.disconnect();
-                    let why =
-                        format!("no tapwing_driver handshake ({e:#}); driving the app black-box via the native lane");
-                    eprintln!("note: {why}");
-                    return self.finish_native_launch(&launch, &why);
                 }
-                Err(e) => return Err(e),
-            };
-            let accept_ms = t_accept.elapsed().as_secs_f64() * 1000.0;
 
-            let hs = self.launch_handshake(&req.app_id, outcome.hello["pid"].as_i64())?;
+                let t_accept = Instant::now();
+                let outcome = match self.drv.accept_with_pid(accept_timeout, expected_pid, &reject_pids) {
+                    Ok(o) => o,
+                    Err(e) if can_fall_back && !crate::interrupt::is_interrupted_error(&e) => {
+                        let demotion = self.record_handshake_miss(&req.app_id);
+                        self.drv.disconnect();
+                        let reason = format!("{e:#}");
+                        let warning =
+                            format_blackbox_demotion_warning(&self.opts.log_prefix, &req.app_id, &reason, demotion);
+                        eprintln!("{warning}");
+                        let why = format!(
+                            "no tapwing_driver handshake ({reason}); driving the app black-box via the native lane"
+                        );
+                        return self.finish_native_launch(&launch, &why);
+                    }
+                    Err(e) => return Err(e),
+                };
+                let accept_ms = t_accept.elapsed().as_secs_f64() * 1000.0;
 
-            let mut res = json!({
-                "hello": outcome.hello,
-                "idle": hs.idle,
-                "pid": outcome.hello["pid"],
-                "oldPids": launch.old_pids,
-                "grantedPermissions": launch.granted_permissions,
-                "phases": {
-                    "stopClearMs": launch.stop_clear_ms,
-                    "permissionsMs": launch.permissions_ms,
-                    start_key: launch.start_ms,
-                    "acceptMs": accept_ms,
-                    "rejectedConnections": outcome.rejected_connections,
-                    "configureMs": hs.configure_ms,
-                    "waitIdleMs": hs.wait_idle_ms,
+                let hs = self.launch_handshake(&req.app_id, outcome.hello["pid"].as_i64())?;
+                self.record_handshake_success(&req.app_id);
+
+                let mut res = json!({
+                    "hello": outcome.hello,
+                    "idle": hs.idle,
+                    "pid": outcome.hello["pid"],
+                    "oldPids": launch.old_pids,
+                    "grantedPermissions": launch.granted_permissions,
+                    "phases": {
+                        "stopClearMs": launch.stop_clear_ms,
+                        "permissionsMs": launch.permissions_ms,
+                        start_key: launch.start_ms,
+                        "acceptMs": accept_ms,
+                        "rejectedConnections": outcome.rejected_connections,
+                        "configureMs": hs.configure_ms,
+                        "waitIdleMs": hs.wait_idle_ms,
+                    }
+                });
+                if hs.retries > 0 {
+                    res["phases"]["handshakeRetries"] = json!(hs.retries);
                 }
-            });
-            if hs.retries > 0 {
-                res["phases"]["handshakeRetries"] = json!(hs.retries);
+                add_unsupported_permissions_warning(&mut res, &launch.unsupported_permissions);
+                Ok(res)
             }
-            add_unsupported_permissions_warning(&mut res, &launch.unsupported_permissions);
-            Ok(res)
-        } else {
-            let t_idle = Instant::now();
-            let idle = self.drv.call("waitIdle", json!({ "timeoutMs": 5000 }))?;
-            let wait_idle_ms = t_idle.elapsed().as_secs_f64() * 1000.0;
-            let mut res = json!({
-                "idle": idle,
-                "pid": launch.pid,
-                "grantedPermissions": launch.granted_permissions,
-                "phases": {
-                    "stopClearMs": launch.stop_clear_ms,
-                    "permissionsMs": launch.permissions_ms,
-                    start_key: launch.start_ms,
-                    "acceptMs": 0.0,
-                    "rejectedConnections": 0,
-                    "configureMs": 0.0,
-                    "waitIdleMs": wait_idle_ms,
+            LaunchPlan::ReuseConnection => {
+                if platform == Platform::Ios {
+                    let _ = self.dev.app_display_name(&req.app_id);
                 }
-            });
-            add_unsupported_permissions_warning(&mut res, &launch.unsupported_permissions);
-            Ok(res)
+                let t_idle = Instant::now();
+                let idle = self.drv.call("waitIdle", json!({ "timeoutMs": 5000 }))?;
+                let wait_idle_ms = t_idle.elapsed().as_secs_f64() * 1000.0;
+                self.record_handshake_success(&req.app_id);
+                let mut res = json!({
+                    "idle": idle,
+                    "pid": launch.pid,
+                    "grantedPermissions": launch.granted_permissions,
+                    "phases": {
+                        "stopClearMs": launch.stop_clear_ms,
+                        "permissionsMs": launch.permissions_ms,
+                        start_key: launch.start_ms,
+                        "acceptMs": 0.0,
+                        "rejectedConnections": 0,
+                        "configureMs": 0.0,
+                        "waitIdleMs": wait_idle_ms,
+                    }
+                });
+                add_unsupported_permissions_warning(&mut res, &launch.unsupported_permissions);
+                Ok(res)
+            }
         }
     }
 
