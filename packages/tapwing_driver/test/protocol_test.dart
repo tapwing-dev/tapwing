@@ -174,6 +174,46 @@ void main() {
           'Element not found: Text matching regex: Missing',
         );
         expect(notFound['visibleTexts'], <String>['Welcome', 'Login']);
+        expect(notFound.containsKey('platformViewCoverage'), isFalse);
+
+        expect(
+          DriverError.elementNotFound(
+            Selector(text: 'Missing'),
+            const <String>[],
+            platformViewCoverage: 0.0,
+          ).toJson().containsKey('platformViewCoverage'),
+          isFalse,
+        );
+        expect(
+          DriverError.elementNotFound(
+            Selector(text: 'Missing'),
+            const <String>[],
+            platformViewCoverage: -0.2,
+          ).toJson().containsKey('platformViewCoverage'),
+          isFalse,
+        );
+        expect(
+          DriverError.elementNotFound(
+            Selector(text: 'Missing'),
+            const <String>[],
+            platformViewCoverage: double.nan,
+          ).toJson().containsKey('platformViewCoverage'),
+          isFalse,
+        );
+        final Map<String, Object?> notFoundWithPv = DriverError.elementNotFound(
+          Selector(text: 'Sign In'),
+          <String>['Header'],
+          platformViewCoverage: 0.85,
+        ).toJson();
+        expect(notFoundWithPv['platformViewCoverage'], 0.85);
+        expect(
+          DriverError.elementNotFound(
+            Selector(text: 'Sign In'),
+            const <String>[],
+            platformViewCoverage: 1.5,
+          ).toJson()['platformViewCoverage'],
+          1.0,
+        );
 
         expect(
           DriverError.stillVisible(Selector(text: 'Dialog')).code,

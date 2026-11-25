@@ -164,8 +164,17 @@ class KNode {
 /// Only reads public framework semantics data (black-box contract); never
 /// inspects widget state or render internals beyond geometry.
 class Snapshot {
-  /// Creates a snapshot from pre-built nodes, screen size, and structural hash.
-  Snapshot(this.root, this.nodes, this.screen, this.hash);
+  /// Creates a snapshot from pre-built nodes, screen size, structural hash,
+  /// and optional visible platform-view coverage (`0.0`–`1.0`).
+  Snapshot(
+    this.root,
+    this.nodes,
+    this.screen,
+    this.hash, {
+    double platformViewCoverage = 0.0,
+  }) : platformViewCoverage = platformViewCoverage.isFinite
+           ? platformViewCoverage.clamp(0.0, 1.0)
+           : 0.0;
 
   /// Root semantics node, or `null` if no semantics tree is attached yet.
   final KNode? root;
@@ -183,6 +192,13 @@ class Snapshot {
   /// Used by the settle detector to distinguish paint-only infinite animations
   /// (spinners, cursors) from layout or content updates.
   final int hash;
+
+  /// Fraction of the screen area (`0.0`–`1.0`) covered by visible on-screen
+  /// platform views (`AndroidView`, `UiKitView`, `WebView`).
+  final double platformViewCoverage;
+
+  /// Whether at least one visible platform view intersects the screen.
+  bool get hasPlatformView => platformViewCoverage > 0;
 
   /// Returns the deepest, last-painted node in this snapshot containing ([x], [y]),
   /// matching Maestro `ViewHierarchy.getElementAt` (`ViewHierarchy.kt:65-95`).
@@ -247,6 +263,9 @@ class Snapshot {
 
     final List<KNode> out = <KNode>[];
     int hash = 17;
+    final Rect screenRect = Offset.zero & screen;
+    final double screenArea = screen.width * screen.height;
+    double platformViewArea = 0.0;
 
     // IOSDriver (`ViewHierarchyHandler.swift`): the hierarchy starts at the
     // XCUIApplication element, labelled with the app's display name.
@@ -338,6 +357,18 @@ class Snapshot {
       hash = accumulateSemanticsHash(hash, data, flags.bits, rect);
       parent?.children.add(k);
 
+      final int? platformViewId = data.platformViewId;
+      if (platformViewId != null &&
+          platformViewId >= 0 &&
+          !data.flagsCollection.isHidden &&
+          k.bounds.isFinite &&
+          !k.bounds.isEmpty) {
+        final Rect clipped = k.bounds.intersect(screenRect);
+        if (!clipped.isEmpty) {
+          platformViewArea += clipped.width * clipped.height;
+        }
+      }
+
       // Merged descendants are already folded into getSemanticsData() and are
       // not emitted to the platform as separate accessibility nodes.
       if (!node.mergeAllDescendantsIntoThisNode) {
@@ -368,7 +399,17 @@ class Snapshot {
       rootNode.getSemanticsData(),
     );
     (hashCache ?? SemanticsHashCache.instance).seed(owner, hash);
-    return Snapshot(app ?? flutterRoot, out, screen, hash);
+    final double platformViewCoverage =
+        screenArea > 0 && screenArea.isFinite && platformViewArea > 0
+        ? (platformViewArea / screenArea).clamp(0.0, 1.0)
+        : 0.0;
+    return Snapshot(
+      app ?? flutterRoot,
+      out,
+      screen,
+      hash,
+      platformViewCoverage: platformViewCoverage,
+    );
   }
 
   /// Returns the structural hash of the semantics tree without allocating
