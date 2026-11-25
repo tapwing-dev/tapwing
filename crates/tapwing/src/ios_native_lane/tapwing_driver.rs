@@ -13,18 +13,22 @@
 //! it is not part of the runner layout, the cache key or the checksum
 //! verification, and is read only by `xcode_compat`.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
+use std::sync::{Mutex, OnceLock};
 
 use anyhow::{Context, Result, bail};
+use sha2::{Digest, Sha256};
 
 use super::{
-    PRODUCTS_DIR, RunnerLayout, cache_root, extract_driver_with, is_complete_layout, sha256_hex,
-    validate_driver_dir_layout,
+    PRODUCTS_DIR, RunnerLayout, cache_root, extract_driver_with, is_complete_layout, validate_driver_dir_layout,
 };
-use crate::driver_bundle::{self, DriverPlatform};
+use crate::driver_bundle::{
+    self, DriverPlatform, FileStamp, hex_digest, sidecar_path, sidecar_sha256, stream_file_sha256,
+};
 
 /// Bundle id of Tapwing's iOS Simulator UITest runner app.
 pub const RUNNER_BUNDLE_ID: &str = "dev.tapwing.ios-runnerUITests.xctrunner";
@@ -119,38 +123,83 @@ fn current_source() -> Option<TapwingIosSource> {
     )
 }
 
-/// `<file>.sha256` in `shasum -a 256` format, written next to each archive by
-/// `scripts/build-ios-driver.sh` and shipped in release bundles.
-fn sidecar_sha256(path: &Path) -> Option<String> {
-    let mut name = path.as_os_str().to_owned();
-    name.push(".sha256");
-    let text = fs::read_to_string(PathBuf::from(name)).ok()?;
-    let sum = text.split_whitespace().next()?.to_ascii_lowercase();
-    (sum.len() == 64 && sum.bytes().all(|b| b.is_ascii_hexdigit())).then_some(sum)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum IosSourceKind {
+    Env,
+    Bundled,
+    Checkout,
 }
 
-/// Reads and verifies the three bundled Tapwing iOS driver files against their
-/// `.sha256` sidecars (if present).
-fn read_bundled_files(dir: &Path) -> Result<Vec<(&'static str, Vec<u8>)>> {
-    BUNDLED_FILES
-        .iter()
-        .map(|&name| {
-            let path = dir.join(name);
-            let bytes =
-                fs::read(&path).with_context(|| format!("reading bundled Tapwing iOS driver {}", path.display()))?;
-            let actual = sha256_hex(&[&bytes]);
-            if let Some(expected) = sidecar_sha256(&path)
-                && expected != actual
-            {
-                bail!(
-                    "the bundled Tapwing iOS driver {} is corrupt (SHA-256 {actual}, expected {expected}); \
-                     reinstall Tapwing or set ${DRIVER_DIR_ENV}",
-                    path.display()
-                );
+impl TapwingIosSource {
+    fn kind(&self) -> IosSourceKind {
+        match self {
+            Self::Env(_) => IosSourceKind::Env,
+            Self::Bundled(_) => IosSourceKind::Bundled,
+            Self::Checkout(_) => IosSourceKind::Checkout,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum IosSourceStamps {
+    Unpacked { xctestrun: FileStamp, runner_app: FileStamp },
+    Bundled { cache_dir: PathBuf, files: Box<[(FileStamp, Option<FileStamp>); 3]> },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct IosDriverCacheKey {
+    kind: IosSourceKind,
+    canonical_dir: PathBuf,
+    stamps: IosSourceStamps,
+}
+
+static IOS_DRIVER_CACHE: OnceLock<Mutex<HashMap<IosDriverCacheKey, PathBuf>>> = OnceLock::new();
+
+fn ios_driver_cache() -> &'static Mutex<HashMap<IosDriverCacheKey, PathBuf>> {
+    IOS_DRIVER_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cache_key(source: &TapwingIosSource, cache_dir: Option<&Path>) -> Option<IosDriverCacheKey> {
+    let canonical_dir = fs::canonicalize(source.path()).ok()?;
+    let stamps = match source {
+        TapwingIosSource::Env(_) | TapwingIosSource::Checkout(_) => IosSourceStamps::Unpacked {
+            xctestrun: FileStamp::from_path(&canonical_dir.join(XCTESTRUN))?,
+            runner_app: FileStamp::from_path(&canonical_dir.join(PRODUCTS_DIR).join(RUNNER_APP))?,
+        },
+        TapwingIosSource::Bundled(_) => {
+            let cache_dir = cache_dir?.to_path_buf();
+            let mut file_stamps = Vec::with_capacity(BUNDLED_FILES.len());
+            for name in BUNDLED_FILES {
+                let p = canonical_dir.join(name);
+                file_stamps.push((FileStamp::from_path(&p)?, FileStamp::from_path(&sidecar_path(&p))));
             }
-            Ok((name, bytes))
-        })
-        .collect()
+            let files: Box<[(FileStamp, Option<FileStamp>); 3]> = Box::new(file_stamps.try_into().ok()?);
+            IosSourceStamps::Bundled { cache_dir, files }
+        }
+    };
+    Some(IosDriverCacheKey { kind: source.kind(), canonical_dir, stamps })
+}
+
+/// Streams and verifies the three bundled Tapwing iOS driver files against
+/// their `.sha256` sidecars in a single 64 KiB chunked pass, returning the
+/// combined SHA-256 hex digest without buffering any archive in memory.
+fn verify_bundled_files_streaming(dir: &Path) -> Result<String> {
+    let mut combined = Sha256::new();
+    for &name in &BUNDLED_FILES {
+        let path = dir.join(name);
+        let actual = stream_file_sha256(&path, Some(&mut combined))
+            .with_context(|| format!("reading bundled Tapwing iOS driver {}", path.display()))?;
+        if let Some(expected) = sidecar_sha256(&path)
+            && expected != actual
+        {
+            bail!(
+                "the bundled Tapwing iOS driver {} is corrupt (SHA-256 {actual}, expected {expected}); \
+                 reinstall Tapwing or set ${DRIVER_DIR_ENV}",
+                path.display()
+            );
+        }
+    }
+    Ok(hex_digest(combined))
 }
 
 /// Resolves `source` into a runnable unpacked `.xctestrun` path.
@@ -176,16 +225,12 @@ pub fn resolve(
             Ok(TapwingIosFiles { xctestrun, source })
         }
         TapwingIosSource::Bundled(dir) => {
-            let files = read_bundled_files(dir)?;
-            let slices: Vec<&[u8]> = files.iter().map(|(_, b)| b.as_slice()).collect();
-            let dest = cache()?.join(format!("tapwing-{}", &sha256_hex(&slices)[..16]));
+            let combined_hex = verify_bundled_files_streaming(dir)?;
+            let dest = cache()?.join(format!("tapwing-{}", &combined_hex[..16]));
             if !is_complete_layout(&dest, LAYOUT) {
                 extract_driver_with(&dest, LAYOUT, cancel, |name| {
-                    files
-                        .iter()
-                        .find(|(n, _)| *n == name)
-                        .map(|(_, b)| b.clone())
-                        .with_context(|| format!("{name} is missing from bundled Tapwing iOS driver"))
+                    let path = dir.join(name);
+                    fs::read(&path).with_context(|| format!("reading bundled Tapwing iOS driver {}", path.display()))
                 })?;
             }
             let xctestrun = validate_driver_dir_layout(&dest, LAYOUT)?;
@@ -194,9 +239,55 @@ pub fn resolve(
     }
 }
 
-/// Finds (and, if bundled, unpacks once) Tapwing's iOS Simulator driver.
+fn is_cached_layout_valid(source: &TapwingIosSource, xctestrun: &Path) -> bool {
+    let Some(dir) = xctestrun.parent() else {
+        return false;
+    };
+    match source {
+        TapwingIosSource::Bundled(_) => is_complete_layout(dir, LAYOUT),
+        TapwingIosSource::Env(_) | TapwingIosSource::Checkout(_) => validate_driver_dir_layout(dir, LAYOUT).is_ok(),
+    }
+}
+
+fn locate_with_cache(
+    source: Option<TapwingIosSource>,
+    cache_dir_fn: impl Fn() -> Result<PathBuf>,
+    cancel: &AtomicBool,
+    memo: &Mutex<HashMap<IosDriverCacheKey, PathBuf>>,
+    resolve_fn: impl FnOnce(Option<TapwingIosSource>, PathBuf, &AtomicBool) -> Result<TapwingIosFiles>,
+) -> Result<TapwingIosFiles> {
+    let cache_dir = match &source {
+        Some(TapwingIosSource::Bundled(_)) => Some(cache_dir_fn()?),
+        _ => cache_dir_fn().ok(),
+    };
+    let key = source.as_ref().and_then(|s| cache_key(s, cache_dir.as_deref()));
+    if let (Some(src), Some(k)) = (&source, &key) {
+        let cached = {
+            let guard = memo.lock().unwrap_or_else(|e| e.into_inner());
+            guard.get(k).cloned()
+        };
+        if let Some(xctestrun) = cached {
+            if is_cached_layout_valid(src, &xctestrun) {
+                return Ok(TapwingIosFiles { xctestrun, source: src.clone() });
+            }
+            let mut guard = memo.lock().unwrap_or_else(|e| e.into_inner());
+            guard.remove(k);
+        }
+    }
+    let files = resolve_fn(source, cache_dir.unwrap_or_default(), cancel)?;
+    if let Some(k) = key {
+        let mut guard = memo.lock().unwrap_or_else(|e| e.into_inner());
+        guard.insert(k, files.xctestrun.clone());
+    }
+    Ok(files)
+}
+
+/// Finds (and, if bundled, unpacks once) Tapwing's iOS Simulator driver,
+/// memoizing the verified path across shards and restarts.
 pub fn locate(cancel: &AtomicBool) -> Result<TapwingIosFiles> {
-    let files = resolve(current_source(), cache_root, cancel)?;
+    let files = locate_with_cache(current_source(), cache_root, cancel, ios_driver_cache(), |src, dir, c| {
+        resolve(src, || Ok(dir), c)
+    })?;
     if std::env::var_os(driver_bundle::DEBUG_ENV).is_some_and(|v| !v.is_empty() && v != "0") {
         eprintln!("debug: Tapwing iOS driver: {}", files.source);
     }
@@ -219,8 +310,9 @@ pub fn version_line() -> String {
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Write};
-    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use super::super::sha256_hex;
     use super::*;
 
     static SEQ: AtomicUsize = AtomicUsize::new(0);
@@ -468,5 +560,61 @@ mod tests {
             err.contains("build-ios-driver.sh") && err.contains(DRIVER_DIR_ENV) && !err.contains("maestro"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn locate_memoizes_bundled_driver_and_invalidates_on_file_sidecar_or_cache_removal() {
+        let s = Scratch::new("memoize");
+        let bundle = s.0.join("share/tapwing/drivers/ios");
+        let cache_dir = s.0.join("cache");
+        write_bundle(&bundle, true);
+
+        let memo = Mutex::new(HashMap::new());
+        let resolves = AtomicUsize::new(0);
+        let run = |cancel: &AtomicBool| {
+            locate_with_cache(
+                Some(TapwingIosSource::Bundled(bundle.clone())),
+                || Ok(cache_dir.clone()),
+                cancel,
+                &memo,
+                |src, dir, c| {
+                    resolves.fetch_add(1, Ordering::Relaxed);
+                    resolve(src, || Ok(dir), c)
+                },
+            )
+        };
+
+        // First call verifies and unpacks; second call hits memoized cache without re-hashing.
+        let first = run(&AtomicBool::new(false)).unwrap();
+        let second = run(&AtomicBool::new(false)).unwrap();
+        assert_eq!(first.xctestrun, second.xctestrun);
+        assert_eq!(resolves.load(Ordering::Relaxed), 1, "second locate must hit memoized cache");
+
+        // Removing the unpacked directory invalidates the cache hit and observes cancel before re-extracting.
+        let unpacked_dir = first.xctestrun.parent().unwrap().to_path_buf();
+        fs::remove_dir_all(&unpacked_dir).unwrap();
+        let err = run(&AtomicBool::new(true)).unwrap_err();
+        assert!(format!("{err:#}").contains("cancelled"), "{err:#}");
+        assert_eq!(resolves.load(Ordering::Relaxed), 2);
+        // Re-extract cleanly with cancel=false.
+        let restored = run(&AtomicBool::new(false)).unwrap();
+        assert!(is_complete_layout(restored.xctestrun.parent().unwrap(), LAYOUT));
+        assert_eq!(resolves.load(Ordering::Relaxed), 3);
+
+        // Changing a `.sha256` sidecar immediately invalidates the cache and reports corruption.
+        fs::write(bundle.join(format!("{RUNNER_ZIP}.sha256")), format!("{}  {RUNNER_ZIP}\n", "0".repeat(64))).unwrap();
+        let err = format!("{:#}", run(&AtomicBool::new(false)).unwrap_err());
+        assert!(err.contains("corrupt") && err.contains(RUNNER_ZIP), "{err}");
+        assert_eq!(resolves.load(Ordering::Relaxed), 4);
+
+        // Restoring the valid sidecar and tampering with the archive file itself also invalidates.
+        write_bundle(&bundle, true);
+        let ok = run(&AtomicBool::new(false)).unwrap();
+        assert!(ok.xctestrun.is_file());
+        assert_eq!(resolves.load(Ordering::Relaxed), 5);
+        fs::write(bundle.join(APP_ZIP), b"tampered-zip").unwrap();
+        let err = format!("{:#}", run(&AtomicBool::new(false)).unwrap_err());
+        assert!(err.contains("corrupt") && err.contains(APP_ZIP), "{err}");
+        assert_eq!(resolves.load(Ordering::Relaxed), 6);
     }
 }

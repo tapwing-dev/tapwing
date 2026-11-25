@@ -2,6 +2,7 @@
 //! and `--format html-detailed`) with zero external URLs or CDN dependencies.
 
 use std::fmt::Write;
+use std::path::{Component, Path, PathBuf};
 
 use super::{FlowRunRecord, FlowStatus, TestExecutionSummary, format_iso_local_seconds};
 
@@ -94,6 +95,7 @@ pre.failure-box{margin:0;padding:12px 14px;background:var(--bg-subtle);border:1p
 .did-you-mean li{margin:2px 0;color:var(--fg-2);overflow-wrap:anywhere}
 .did-you-mean code{color:var(--fg)}
 .failure-shot{margin:0}
+.failure-shot a{display:inline-block}
 .failure-shot img{display:block;max-width:100%;max-height:420px;border:1px solid var(--line);border-radius:4px;background:var(--bg-subtle)}
 .failure-shot figcaption{margin-top:4px;font-size:12px;color:var(--fg-3);overflow-wrap:anywhere}
 details.failure-tree{border:1px solid var(--line);border-radius:4px;background:var(--bg-subtle)}
@@ -209,8 +211,8 @@ pub fn escape_html(s: &str) -> String {
     out
 }
 
-/// Zero-dependency RFC 4648 base64 encoder for embedding failure screenshots
-/// as self-contained `data:image/png;base64,…` URIs with no external URLs.
+/// Zero-dependency RFC 4648 base64 encoder for embedding failure thumbnails
+/// as self-contained `data:image/jpeg;base64,…` URIs with no external URLs.
 pub(crate) fn encode_base64(bytes: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
@@ -227,9 +229,120 @@ pub(crate) fn encode_base64(bytes: &[u8]) -> String {
     out
 }
 
-/// Renders F8 rich failure diagnostics (suggestions, inline base64 screenshot,
-/// and collapsible UI hierarchy dump).
-fn render_failure_diagnostics(out: &mut String, diag: &crate::failure::FailureDiagnostics) {
+fn normalize_lexical(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let can_pop = matches!(out.components().next_back(), Some(Component::Normal(_)));
+                if can_pop {
+                    out.pop();
+                } else if !out.has_root() {
+                    out.push(comp);
+                }
+            }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+fn diff_paths(target: &Path, base: &Path) -> Option<PathBuf> {
+    let t_comps: Vec<Component<'_>> = target.components().collect();
+    let b_comps: Vec<Component<'_>> = base.components().collect();
+    if t_comps.first() != b_comps.first()
+        && (matches!(t_comps.first(), Some(Component::RootDir | Component::Prefix(_)))
+            || matches!(b_comps.first(), Some(Component::RootDir | Component::Prefix(_))))
+    {
+        return None;
+    }
+    let common = t_comps.iter().zip(b_comps.iter()).take_while(|(a, b)| a == b).count();
+    let mut rel = PathBuf::new();
+    for comp in &b_comps[common..] {
+        if matches!(comp, Component::Normal(_)) {
+            rel.push("..");
+        }
+    }
+    for comp in &t_comps[common..] {
+        rel.push(comp);
+    }
+    if rel.as_os_str().is_empty() {
+        rel.push(".");
+    }
+    Some(rel)
+}
+
+fn format_slash_path(path: &Path) -> String {
+    let mut parts = Vec::new();
+    let mut leading_slash = false;
+    for comp in path.components() {
+        match comp {
+            Component::RootDir => leading_slash = true,
+            Component::Normal(s) => parts.push(s.to_string_lossy().into_owned()),
+            Component::ParentDir => parts.push("..".to_string()),
+            Component::CurDir => parts.push(".".to_string()),
+            Component::Prefix(p) => parts.push(p.as_os_str().to_string_lossy().into_owned()),
+        }
+    }
+    if parts.is_empty() {
+        if leading_slash { "/".into() } else { path.to_string_lossy().replace('\\', "/") }
+    } else if leading_slash {
+        format!("/{}", parts.join("/"))
+    } else {
+        parts.join("/")
+    }
+}
+
+/// Percent-encodes everything except unreserved URI characters and `/` so local
+/// relative paths containing `#`, `?`, `%`, spaces, or `:` never break `href`.
+fn percent_encode_href(path: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut out = String::with_capacity(path.len());
+    for byte in path.as_bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'.' | b'_' | b'~') {
+            out.push(*byte as char);
+        } else {
+            out.push('%');
+            out.push(HEX[(byte >> 4) as usize] as char);
+            out.push(HEX[(byte & 0x0f) as usize] as char);
+        }
+    }
+    out
+}
+
+fn relative_screenshot_href(shot_path: &Path, report_base: Option<&Path>) -> String {
+    let rel_str = if let Some(base) = report_base {
+        let base = if base.as_os_str().is_empty() { Path::new(".") } else { base };
+        let resolved = if !base.is_absolute() && !shot_path.is_absolute() {
+            diff_paths(&normalize_lexical(shot_path), &normalize_lexical(base))
+        } else {
+            let cwd = std::env::current_dir().ok();
+            let norm_base = if base.is_absolute() {
+                Some(normalize_lexical(base))
+            } else {
+                cwd.as_ref().map(|c| normalize_lexical(&c.join(base)))
+            };
+            let norm_shot = if shot_path.is_absolute() {
+                Some(normalize_lexical(shot_path))
+            } else {
+                cwd.as_ref().map(|c| normalize_lexical(&c.join(shot_path)))
+            };
+            match (norm_shot, norm_base) {
+                (Some(s), Some(b)) => diff_paths(&s, &b).or(Some(s)),
+                _ => None,
+            }
+        };
+        resolved.map(|p| format_slash_path(&p)).unwrap_or_else(|| shot_path.to_string_lossy().replace('\\', "/"))
+    } else {
+        super::cwd_relative_path(shot_path).unwrap_or_else(|| shot_path.to_string_lossy().replace('\\', "/"))
+    };
+    percent_encode_href(&rel_str)
+}
+
+/// Renders F8 rich failure diagnostics (suggestions, inline JPEG thumbnail
+/// linked to the full-res PNG on disk, and collapsible UI hierarchy dump).
+fn render_failure_diagnostics(out: &mut String, diag: &crate::failure::FailureDiagnostics, report_base: Option<&Path>) {
     if diag.is_empty() {
         return;
     }
@@ -248,11 +361,21 @@ fn render_failure_diagnostics(out: &mut String, diag: &crate::failure::FailureDi
         out.push_str("</ul></div>\n");
     }
     if let Some(path) = &diag.screenshot {
-        if let Ok(bytes) = std::fs::read(path) {
-            let b64 = encode_base64(&bytes);
+        let shot_path = Path::new(path);
+        if let Some(uri) = crate::trace::thumbnail_data_uri(shot_path) {
+            let href = relative_screenshot_href(shot_path, report_base);
             let _ = writeln!(
                 out,
-                "<figure class=\"failure-shot\"><img src=\"data:image/png;base64,{b64}\" alt=\"Failure screenshot\"><figcaption class=\"mono\">{}</figcaption></figure>",
+                "<figure class=\"failure-shot\"><a href=\"{}\" target=\"_blank\" rel=\"noopener\"><img src=\"{uri}\" alt=\"Failure screenshot\"></a><figcaption class=\"mono\">{}</figcaption></figure>",
+                escape_html(&href),
+                escape_html(path)
+            );
+        } else if shot_path.is_file() {
+            let href = relative_screenshot_href(shot_path, report_base);
+            let _ = writeln!(
+                out,
+                "<div class=\"did-you-mean\">Screenshot: <a href=\"{}\" target=\"_blank\" rel=\"noopener\"><code>{}</code></a></div>",
+                escape_html(&href),
                 escape_html(path)
             );
         } else {
@@ -309,6 +432,13 @@ fn flow_anchor(shard_num: usize, flow_idx: usize) -> String {
 /// Renders a self-contained HTML report (`detailed == true` includes per-flow
 /// command step tables).
 pub fn render_html(summary: &TestExecutionSummary, detailed: bool) -> String {
+    render_html_for_path(summary, detailed, None)
+}
+
+/// Renders a self-contained HTML report whose failure screenshot links are
+/// resolved relative to `report_path`'s parent directory when provided.
+pub fn render_html_for_path(summary: &TestExecutionSummary, detailed: bool, report_path: Option<&Path>) -> String {
+    let report_base = report_path.and_then(Path::parent);
     let mut out = String::with_capacity(16384);
     let suite_title = escape_html(summary.suite_name.as_deref().unwrap_or(DEFAULT_SUITE_NAME));
     let shard_count = summary.suites.len();
@@ -461,7 +591,7 @@ pub fn render_html(summary: &TestExecutionSummary, detailed: bool) -> String {
                 let _ = writeln!(out, "<pre class=\"failure-box\">{}</pre>", escape_html(err));
             }
             if let Some(diag) = &flow.failure_diagnostics {
-                render_failure_diagnostics(&mut out, diag);
+                render_failure_diagnostics(&mut out, diag, report_base);
             }
 
             let _ = write!(
@@ -635,5 +765,22 @@ mod tests {
         assert!(detailed.contains("minor &lt;warn&gt;"));
         assert!(detailed.contains("⚠ layoutOverflow: A &lt;RenderFlex&gt; overflowed"));
         assert!(basic.contains("⚠ 1 app issue</span>"));
+    }
+
+    #[test]
+    fn relative_screenshot_href_resolves_across_dirs_and_escapes_special_chars() {
+        let shot = Path::new("/tmp/run-1/failures/my shot #1?v=2%20:test.png");
+        let report_dir = Path::new("/tmp/run-1/reports");
+        assert_eq!(
+            relative_screenshot_href(shot, Some(report_dir)),
+            "../failures/my%20shot%20%231%3Fv%3D2%2520%3Atest.png"
+        );
+        // Report in CWD (`Path::new("report.html").parent() == Some(Path::new(""))`).
+        assert_eq!(
+            relative_screenshot_href(Path::new("failures/fail #1.png"), Some(Path::new(""))),
+            "failures/fail%20%231.png"
+        );
+        // None base dir preserves relative paths and percent-encodes special characters.
+        assert_eq!(relative_screenshot_href(Path::new("failures/a b%c.png"), None), "failures/a%20b%25c.png");
     }
 }

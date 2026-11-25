@@ -192,13 +192,22 @@ appId: dev.tapwing.sample_app
         suites: vec![suite],
     };
 
-    // HTML report: self-contained (zero external URLs), inline base64 PNG, Did you mean, UI tree.
+    // HTML report: self-contained (zero external URLs), inline JPEG thumbnail linked to full PNG, Did you mean, UI tree.
     let html = report::html::render_html(&summary, true);
     assert!(!html.contains("http://") && !html.contains("https://"));
     assert!(html.contains("Did you mean"), "{html}");
     assert!(html.contains("enabled=false, expected true"), "{html}");
-    assert!(html.contains("data:image/png;base64,"), "{html}");
+    assert!(html.contains("data:image/jpeg;base64,"), "{html}");
+    assert!(!html.contains("data:image/png;base64,"), "{html}");
+    assert!(
+        html.contains("<a href=\"")
+            && html.contains("target=\"_blank\" rel=\"noopener\"><img src=\"data:image/jpeg;base64,"),
+        "{html}"
+    );
     assert!(html.contains("UI tree at failure (fake, 2 elements)"), "{html}");
+
+    let report_html = report::html::render_html_for_path(&summary, true, Some(&out.join("reports/report.html")));
+    assert!(report_html.contains("<a href=\"../failures/"), "{report_html}");
 
     // JUnit XML: clean `<failure>` + rich diagnostics in `<system-err>`.
     let xml = report::junit::render_junit(&summary).unwrap();
