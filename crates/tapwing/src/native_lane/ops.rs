@@ -99,15 +99,27 @@ impl<'a> NativeOps<'a> {
         self.cold_start_retries += 1;
     }
 
-    pub fn hierarchy(&mut self) -> Result<Hierarchy> {
+    fn hierarchy_with_idle(&mut self, skip_wait_for_idle: bool) -> Result<Hierarchy> {
         let screen = self.client.screen_size()?;
-        let xml = self.client.view_hierarchy()?;
+        let xml = self.client.view_hierarchy_with_idle(skip_wait_for_idle)?;
         Hierarchy::parse(&xml, screen.width as i32, screen.height as i32)
     }
 
+    pub fn hierarchy(&mut self) -> Result<Hierarchy> {
+        self.hierarchy_with_idle(false)
+    }
+
+    /// Hierarchy snapshot that skips `uiDevice.waitForIdle(500)` on the device
+    /// while still flushing `uiAutomation.serviceInfo = null`. Safe only for
+    /// positive lookup polling and failure diagnostics (not `settle` or
+    /// negative assertions).
+    pub fn hierarchy_fast(&mut self) -> Result<Hierarchy> {
+        self.hierarchy_with_idle(true)
+    }
+
     /// Single lookup; nodes without bounds cannot be tapped and count as missing.
-    fn find_once(&mut self, sel: &ElementSelector) -> Result<(Option<TreeNode>, Hierarchy)> {
-        let h = self.hierarchy()?;
+    fn find_once(&mut self, sel: &ElementSelector, skip_wait_for_idle: bool) -> Result<(Option<TreeNode>, Hierarchy)> {
+        let h = self.hierarchy_with_idle(skip_wait_for_idle)?;
         let found = h.find(sel)?.filter(|n| n.bounds.is_some());
         Ok((found, h))
     }
@@ -125,7 +137,7 @@ impl<'a> NativeOps<'a> {
         let mut deadline = started + Duration::from_millis(timeout_ms);
         let mut cold = self.cold_start.take();
         loop {
-            let (found, h) = self.find_once(sel)?;
+            let (found, h) = self.find_once(sel, true)?;
             if let Some(node) = found {
                 return Ok((node, h));
             }
@@ -278,7 +290,7 @@ impl<'a> NativeOps<'a> {
                 return Ok(latest);
             }
             crate::interrupt::sleep(SETTLE_INTERVAL.min(deadline.saturating_duration_since(Instant::now())))?;
-            latest = self.hierarchy()?;
+            latest = self.hierarchy_fast()?;
         }
     }
 
@@ -354,7 +366,7 @@ impl<'a> NativeOps<'a> {
     pub fn assert_not_visible(&mut self, sel: &ElementSelector, timeout_ms: u64) -> Result<Value> {
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
         loop {
-            let (found, _) = self.find_once(sel)?;
+            let (found, _) = self.find_once(sel, false)?;
             if found.is_none() {
                 return Ok(json!({ "lane": "native" }));
             }
@@ -631,6 +643,10 @@ pub(super) mod tests {
         /// Tapping inside this rectangle switches the screen to `APP`.
         dismiss_on: Option<(u32, u32, u32, u32)>,
         hierarchy_calls: usize,
+        /// `skip_wait_for_idle` flags received by `view_hierarchy`, in call order.
+        hierarchy_requests: Vec<bool>,
+        /// Simulated `uiDevice.waitForIdle(500)` block when `skip_wait_for_idle == false`.
+        wait_for_idle_delay: Duration,
         /// Once `hierarchy_calls` reaches `.0`, the screen switches to the XML in `.1`.
         swap_xml_at_call: Option<(usize, String)>,
         screenshots: Vec<std::result::Result<Vec<u8>, String>>,
@@ -654,16 +670,24 @@ pub(super) mod tests {
         }
         async fn view_hierarchy(
             &self,
-            _: Request<pb::ViewHierarchyRequest>,
+            req: Request<pb::ViewHierarchyRequest>,
         ) -> Result<Response<pb::ViewHierarchyResponse>, Status> {
-            let mut s = self.0.lock().unwrap();
-            s.hierarchy_calls += 1;
-            if let Some((at, xml)) = s.swap_xml_at_call.clone()
-                && s.hierarchy_calls >= at
-            {
-                s.xml = xml;
+            let skip_wait_for_idle = req.into_inner().skip_wait_for_idle;
+            let (xml, delay) = {
+                let mut s = self.0.lock().unwrap();
+                s.hierarchy_calls += 1;
+                s.hierarchy_requests.push(skip_wait_for_idle);
+                if let Some((at, xml)) = s.swap_xml_at_call.clone()
+                    && s.hierarchy_calls >= at
+                {
+                    s.xml = xml;
+                }
+                (s.xml.clone(), s.wait_for_idle_delay)
+            };
+            if !skip_wait_for_idle && !delay.is_zero() {
+                tokio::time::sleep(delay).await;
             }
-            Ok(Response::new(pb::ViewHierarchyResponse { hierarchy: s.xml.clone() }))
+            Ok(Response::new(pb::ViewHierarchyResponse { hierarchy: xml }))
         }
         async fn screenshot(
             &self,
@@ -1859,5 +1883,113 @@ pub(super) mod tests {
             1,
             "the providers re-enabled for the replayed setLocation are removed at the end"
         );
+    }
+
+    #[test]
+    fn positive_polls_skip_wait_for_idle_while_settle_and_negative_keep_it() {
+        // 1. Direct helpers: hierarchy() sends false, hierarchy_fast() sends true.
+        {
+            let mut f = fixture(APP);
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            ops.hierarchy().unwrap();
+            ops.hierarchy_fast().unwrap();
+            assert_eq!(f.state.lock().unwrap().hierarchy_requests, vec![false, true]);
+        }
+
+        // 2. poll_find (via assert_visible): every poll sends skip_wait_for_idle == true.
+        {
+            let mut f = fixture(LAUNCHER);
+            f.state.lock().unwrap().swap_xml_at_call = Some((3, APP_READY.to_string()));
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            ops.assert_visible(&id("playground_button"), 2_000).unwrap();
+            assert_eq!(f.state.lock().unwrap().hierarchy_requests, vec![true, true, true]);
+        }
+
+        // 3. assert_not_visible: every poll sends skip_wait_for_idle == false.
+        {
+            let mut f = fixture(DIALOG);
+            f.state.lock().unwrap().swap_xml_at_call = Some((3, APP.to_string()));
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            ops.assert_not_visible(&text("While using the app"), 2_000).unwrap();
+            assert_eq!(f.state.lock().unwrap().hierarchy_requests, vec![false, false, false]);
+        }
+
+        // 4. settle: every poll sends skip_wait_for_idle == false.
+        {
+            let mut f = fixture(APP);
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            ops.settle(None, Some(200)).unwrap();
+            assert_eq!(f.state.lock().unwrap().hierarchy_requests, vec![false, false]);
+        }
+
+        // 5. wait_until_visible: every poll sends skip_wait_for_idle == true.
+        {
+            let mut f = fixture(COVERED_TARGET);
+            f.state.lock().unwrap().swap_xml_at_call = Some((3, UNCOVERED_TARGET.to_string()));
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            let initial = ops.hierarchy().unwrap();
+            f.state.lock().unwrap().hierarchy_requests.clear();
+            let uncovered = ops.wait_until_visible(&text("Covered target"), &initial).unwrap();
+            assert!(uncovered.find(&text("Temporary cover")).unwrap().is_none());
+            let reqs = f.state.lock().unwrap().hierarchy_requests.clone();
+            assert!(
+                !reqs.is_empty() && reqs.iter().all(|&skip| skip),
+                "wait_until_visible must skip waitForIdle: {reqs:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn poll_find_avoids_wait_for_idle_block_on_animated_screen() {
+        // Simulate an animated screen where `uiDevice.waitForIdle(500)` blocks 500 ms
+        // whenever `skip_wait_for_idle == false`, and 0 ms when `skip_wait_for_idle == true`.
+        let before_elapsed = {
+            let mut f = fixture(LAUNCHER);
+            {
+                let mut s = f.state.lock().unwrap();
+                s.wait_for_idle_delay = Duration::from_millis(500);
+                s.swap_xml_at_call = Some((3, APP_READY.to_string()));
+            }
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            let t = Instant::now();
+            for i in 0..3 {
+                let h = ops.hierarchy().unwrap();
+                if h.find(&id("playground_button")).unwrap().is_some() {
+                    break;
+                }
+                if i < 2 {
+                    std::thread::sleep(POLL_INTERVAL);
+                }
+            }
+            let elapsed = t.elapsed();
+            assert_eq!(f.state.lock().unwrap().hierarchy_requests, vec![false, false, false]);
+            elapsed
+        };
+
+        let after_elapsed = {
+            let mut f = fixture(LAUNCHER);
+            {
+                let mut s = f.state.lock().unwrap();
+                s.wait_for_idle_delay = Duration::from_millis(500);
+                s.swap_xml_at_call = Some((3, APP_READY.to_string()));
+            }
+            let mut ops = NativeOps::new(&mut f.client, &f.adb);
+            let t = Instant::now();
+            ops.poll_find(&id("playground_button"), 2_000).unwrap();
+            let elapsed = t.elapsed();
+            assert_eq!(f.state.lock().unwrap().hierarchy_requests, vec![true, true, true]);
+            elapsed
+        };
+
+        eprintln!(
+            "3-poll animated-screen lookup latency: before={} ms (skip_wait_for_idle=false), after={} ms (skip_wait_for_idle=true)",
+            before_elapsed.as_millis(),
+            after_elapsed.as_millis(),
+        );
+        assert!(
+            before_elapsed >= Duration::from_millis(1500),
+            "expected 3 blocking waitForIdle(500) polls >= 1500 ms, got {before_elapsed:?}"
+        );
+        assert!(after_elapsed < Duration::from_millis(400), "expected 3 fast polls < 400 ms, got {after_elapsed:?}");
     }
 }

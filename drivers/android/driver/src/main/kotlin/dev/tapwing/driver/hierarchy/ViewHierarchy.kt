@@ -170,14 +170,12 @@ object ViewHierarchy {
                                 insideWebView || child.className == "android.webkit.WebView",
                                 depth + 1,
                             )
-                        } else {
-                            Log.i(LOGTAG, "Skipping invisible child: $child")
                         }
                     } finally {
                         child.recycle()
                     }
                 } else {
-                    Log.i(LOGTAG, "Null child $i/$count, parent: $node")
+                    Log.d(LOGTAG, "Null child $i/$count, parent class: ${node.className}")
                 }
             }
         }

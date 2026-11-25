@@ -13,7 +13,8 @@
 // limitations under the License.
 //
 // Source: https://github.com/mobile-dev-inc/maestro, tag v2.12.1,
-// maestro-proto/src/main/proto/maestro_android.proto (unmodified).
+// maestro-proto/src/main/proto/maestro_android.proto (extended with
+// `ViewHierarchyRequest.skip_wait_for_idle`).
 // The messages and RPC numbering were cross-checked against the
 // `maestro_android` classes in Maestro 2.12.1's maestro-client.jar.
 
@@ -80,7 +81,12 @@ message ScreenshotResponse {
 }
 
 // View hierarchy
-message ViewHierarchyRequest {}
+message ViewHierarchyRequest {
+  // Tapwing extension: skip `uiDevice.waitForIdle(500)` before flushing
+  // `uiAutomation.serviceInfo = null` and dumping the tree.
+  // Proto3 default (`false`) keeps wire compatibility with empty requests.
+  bool skip_wait_for_idle = 1;
+}
 
 message ViewHierarchyResponse {
   string hierarchy = 1;

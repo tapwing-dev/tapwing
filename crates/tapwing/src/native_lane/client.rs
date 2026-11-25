@@ -423,8 +423,15 @@ impl NativeDriverClient {
 
     /// UiAutomator XML of the active window(s).
     pub fn view_hierarchy(&mut self) -> Result<String> {
-        let r = self.call("viewHierarchy", Replay::Always, (), |mut c, ()| async move {
-            c.view_hierarchy(pb::ViewHierarchyRequest {}).await
+        self.view_hierarchy_with_idle(false)
+    }
+
+    /// UiAutomator XML of the active window(s), optionally skipping
+    /// `uiDevice.waitForIdle(500)` on the device before flushing the
+    /// accessibility cache (`uiAutomation.serviceInfo = null`) and dumping.
+    pub fn view_hierarchy_with_idle(&mut self, skip_wait_for_idle: bool) -> Result<String> {
+        let r = self.call("viewHierarchy", Replay::Always, skip_wait_for_idle, |mut c, skip| async move {
+            c.view_hierarchy(pb::ViewHierarchyRequest { skip_wait_for_idle: skip }).await
         })?;
         Ok(r.hierarchy)
     }
@@ -537,6 +544,10 @@ mod tests {
         assert_eq!(round_trip(&tap), tap);
         let info = DeviceInfo { width_pixels: 1080, height_pixels: 2400 };
         assert_eq!(round_trip(&info), info);
+        let hier_req_default = ViewHierarchyRequest { skip_wait_for_idle: false };
+        assert_eq!(round_trip(&hier_req_default), hier_req_default);
+        let hier_req_fast = ViewHierarchyRequest { skip_wait_for_idle: true };
+        assert_eq!(round_trip(&hier_req_fast), hier_req_fast);
         let hier = ViewHierarchyResponse { hierarchy: "<hierarchy rotation=\"0\"/>".into() };
         assert_eq!(round_trip(&hier), hier);
         let loc = SetLocationRequest { latitude: 50.0755, longitude: 14.4378 };
@@ -587,6 +598,9 @@ mod tests {
         assert_eq!(TapRequest { x: 1, y: 2 }.encode_to_vec(), vec![0x08, 0x01, 0x10, 0x02]);
         // `CheckWindowUpdatingResponse { isWindowUpdating = true }`: field 1 varint.
         assert_eq!(CheckWindowUpdatingResponse { is_window_updating: true }.encode_to_vec(), vec![0x08, 0x01]);
+        // `ViewHierarchyRequest { skip_wait_for_idle = false }` encodes identically to empty `{}`.
+        assert!(ViewHierarchyRequest { skip_wait_for_idle: false }.encode_to_vec().is_empty());
+        assert_eq!(ViewHierarchyRequest { skip_wait_for_idle: true }.encode_to_vec(), vec![0x08, 0x01]);
         // `ViewHierarchyResponse { hierarchy = "x" }`: field 1 length-delimited.
         assert_eq!(ViewHierarchyResponse { hierarchy: "x".into() }.encode_to_vec(), vec![0x0a, 0x01, b'x']);
     }
@@ -780,7 +794,7 @@ mod tests {
         // 1. Direct check on `classify()` for both `Endpoint::timeout` and `Request::set_timeout`.
         let endpoint_timeout_status = {
             let mut c = client.inner.clone();
-            client.rt.block_on(async move { c.view_hierarchy(pb::ViewHierarchyRequest {}).await }).unwrap_err()
+            client.rt.block_on(async move { c.view_hierarchy(pb::ViewHierarchyRequest::default()).await }).unwrap_err()
         };
         assert_eq!(
             classify(&endpoint_timeout_status),
@@ -793,7 +807,7 @@ mod tests {
             client
                 .rt
                 .block_on(async move {
-                    let mut req = tonic::Request::new(pb::ViewHierarchyRequest {});
+                    let mut req = tonic::Request::new(pb::ViewHierarchyRequest::default());
                     req.set_timeout(Duration::from_millis(40));
                     c.view_hierarchy(req).await
                 })

@@ -678,7 +678,7 @@ impl DeviceFlutterBackend<'_> {
                     let adb = handle.adb().cloned()?;
                     let client =
                         if prefer_native { handle.get_or_wait(NATIVE_WAIT).ok()? } else { handle.try_get()? };
-                    NativeOps::new(client, &adb).hierarchy().ok().map(|h| h.root)
+                    NativeOps::new(client, &adb).hierarchy_fast().ok().map(|h| h.root)
                 };
                 self.report_native_restarts();
                 root
@@ -1047,6 +1047,7 @@ fn wait_on_flutter_while_warming<C, T>(
 mod tests {
     use std::collections::HashMap;
     use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
 
     use super::*;
     use crate::backend::OPTIONAL_LOOKUP_TIMEOUT_MS;
@@ -1484,7 +1485,10 @@ mod tests {
     }
 
     /// Minimal loopback gRPC native driver for `finish_native_launch` / `FlowDriver` tests.
-    struct StaticXmlDriver(String);
+    struct StaticXmlDriver {
+        xml: String,
+        skip_flags: Arc<Mutex<Vec<bool>>>,
+    }
 
     #[tonic::async_trait]
     impl crate::native_lane::client::pb::maestro_driver_server::MaestroDriver for StaticXmlDriver {
@@ -1499,11 +1503,12 @@ mod tests {
         }
         async fn view_hierarchy(
             &self,
-            _: tonic::Request<crate::native_lane::client::pb::ViewHierarchyRequest>,
+            req: tonic::Request<crate::native_lane::client::pb::ViewHierarchyRequest>,
         ) -> std::result::Result<tonic::Response<crate::native_lane::client::pb::ViewHierarchyResponse>, tonic::Status>
         {
+            self.skip_flags.lock().unwrap().push(req.into_inner().skip_wait_for_idle);
             Ok(tonic::Response::new(crate::native_lane::client::pb::ViewHierarchyResponse {
-                hierarchy: self.0.clone(),
+                hierarchy: self.xml.clone(),
             }))
         }
         async fn tap(
@@ -1581,13 +1586,27 @@ mod tests {
         }
     }
 
+    struct RecordedNativeServer {
+        native: NativeLaneHandle,
+        skip_flags: Arc<Mutex<Vec<bool>>>,
+        stop: tokio::sync::oneshot::Sender<()>,
+        thread: std::thread::JoinHandle<()>,
+    }
+
     fn serve_static_native(
         xml: &str,
     ) -> (NativeLaneHandle, tokio::sync::oneshot::Sender<()>, std::thread::JoinHandle<()>) {
+        let srv = serve_static_native_recording(xml);
+        (srv.native, srv.stop, srv.thread)
+    }
+
+    fn serve_static_native_recording(xml: &str) -> RecordedNativeServer {
         use crate::native_lane::client::pb::maestro_driver_server::MaestroDriverServer;
         let (port_tx, port_rx) = std::sync::mpsc::channel::<u16>();
         let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
         let xml = xml.to_string();
+        let skip_flags = Arc::new(Mutex::new(Vec::new()));
+        let skip_flags_srv = skip_flags.clone();
         let handle = std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
             rt.block_on(async move {
@@ -1596,7 +1615,7 @@ mod tests {
                 let incoming = tonic::transport::server::TcpIncoming::from(listener);
                 let _ = port_tx.send(port);
                 let _ = tonic::transport::Server::builder()
-                    .add_service(MaestroDriverServer::new(StaticXmlDriver(xml)))
+                    .add_service(MaestroDriverServer::new(StaticXmlDriver { xml, skip_flags: skip_flags_srv }))
                     .serve_with_incoming_shutdown(incoming, async {
                         let _ = stop_rx.await;
                     })
@@ -1612,7 +1631,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         let native = NativeLaneHandle::ready_for_test(client, crate::native_lane::Adb::new("unreachable"));
-        (native, stop_tx, handle)
+        RecordedNativeServer { native, skip_flags, stop: stop_tx, thread: handle }
     }
 
     #[test]
@@ -1688,6 +1707,34 @@ mod tests {
             still_armed,
             "optional assertVisible must not consume the cold-start arming reserved for required lookups"
         );
+    }
+
+    #[test]
+    fn capture_failure_hierarchy_skips_wait_for_idle() {
+        let xml = r#"<hierarchy rotation="0">
+  <node text="Diagnostic" package="com.example.app" enabled="true" bounds="[0,0][200,100]"/>
+</hierarchy>"#;
+        let mut srv = serve_static_native_recording(xml);
+        let mut dev = Device::Android(crate::device::Android::new("unreachable".into()));
+        let mut drv = Driver::listen(0).unwrap();
+        let opts = test_opts(InputMode::Native);
+        let mut session = Session {
+            dev: &mut dev,
+            drv: &mut drv,
+            opts: &opts,
+            units_scale: 1.0,
+            native: Some(&mut srv.native),
+            ios_native: None,
+        };
+        let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.app".into());
+        let captured = backend.capture_failure_hierarchy_impl();
+        assert!(captured.is_some());
+        drop(backend);
+        drop(srv.native);
+        let _ = srv.stop.send(());
+        srv.thread.join().unwrap();
+
+        assert_eq!(*srv.skip_flags.lock().unwrap(), vec![true]);
     }
 
     fn ios_backend_session_parts() -> (Device, Driver) {
