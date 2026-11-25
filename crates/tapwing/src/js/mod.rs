@@ -155,7 +155,7 @@ struct QuickJsState {
     /// used to prune script-added globals without disturbing JS built-ins.
     initial_globals: HashSet<String>,
     context: Context,
-    _runtime: Runtime,
+    runtime: Runtime,
 }
 
 enum CompiledEntry {
@@ -514,15 +514,23 @@ impl JsEngine {
     /// QuickJS reports an abort by the interrupt handler as an uncatchable
     /// `interrupted` exception and a hit memory limit as `out of memory`. At
     /// the limit it usually cannot allocate that exception either and throws a
-    /// bare `null` (`JS_ThrowError2`), which nothing tells apart from a
-    /// script's own `throw null`, so that message names both.
-    fn classify_eval_error(&self, err: anyhow::Error) -> anyhow::Error {
+    /// bare `null` (`JS_ThrowError2`). If the heap is still near the limit
+    /// (retained globals) we know it was OOM and drop the runtime so its
+    /// memory is freed; if unwinding already released local allocations, a
+    /// bare `null` cannot be told apart from a script's own `throw null`, so
+    /// the message names both.
+    fn classify_eval_error(&mut self, err: anyhow::Error) -> anyhow::Error {
         if let Err(interrupted) = self.interrupt.check() {
             return interrupted;
         }
         let limit_mib = self.limits.memory_bytes / (1024 * 1024);
         let message = match err.downcast_ref::<JsError>().map(|js| js.message.as_str()) {
             Some("out of memory" | "Allocation failed while creating object") => {
+                self.qjs = None;
+                format!("JavaScript ran out of memory (limit: {limit_mib} MiB)")
+            }
+            Some(THROWN_NULL) if self.is_near_memory_limit() => {
+                self.qjs = None;
                 format!("JavaScript ran out of memory (limit: {limit_mib} MiB)")
             }
             Some(THROWN_NULL) => {
@@ -531,6 +539,14 @@ impl JsEngine {
             _ => return err,
         };
         JsError::new(message, vec![]).into()
+    }
+
+    fn is_near_memory_limit(&self) -> bool {
+        let Some(qjs) = &self.qjs else {
+            return false;
+        };
+        let used = usize::try_from(qjs.runtime.memory_usage().malloc_size).unwrap_or(0);
+        used >= self.limits.memory_bytes / 2
     }
 
     fn ensure_qjs(&mut self) -> Result<&mut QuickJsState> {
@@ -579,7 +595,7 @@ impl JsEngine {
             })?;
 
             self.qjs = Some(QuickJsState {
-                _runtime: runtime,
+                runtime,
                 context,
                 initial_globals,
                 expr_cache: HashMap::new(),
@@ -1238,13 +1254,17 @@ mod tests {
     fn runaway_allocation_fails_with_a_memory_limit_error() {
         let mut engine = JsEngine::new("android");
         engine.limits.memory_bytes = 16 * 1024 * 1024;
-        let bomb = "var chunks = []; while (true) { chunks.push(new Array(4096).fill(chunks.length)); }";
+        // Retain allocations on `output` so the heap stays full after unwinding.
+        let bomb =
+            "output.chunks = []; while (true) { output.chunks.push(new Array(4096).fill(output.chunks.length)); }";
         let err = engine.run_script_file(bomb, &HashMap::new(), "bomb.js", None).unwrap_err();
         assert!(err.is::<JsError>(), "unexpected error: {err:#}");
-        assert!(err.to_string().starts_with("JavaScript ran out of memory (limit: 16 MiB)"), "unexpected: {err}");
+        assert_eq!(err.to_string(), "JavaScript ran out of memory (limit: 16 MiB)");
 
-        // The limit ends the script, not the engine: the next evaluation still works.
+        // OOM resets the runtime so retained heap is freed and subsequent allocations succeed.
         assert_eq!(engine.evaluate_script("1 + 1", &HashMap::new(), "inline-script", false, None).unwrap(), "2");
+        let alloc = "var a = []; for (var i = 0; i < 64; i++) { a.push(new Array(4096).fill(i)); } a.length";
+        assert_eq!(engine.evaluate_script(alloc, &HashMap::new(), "inline-script", false, None).unwrap(), "64");
     }
 
     #[test]

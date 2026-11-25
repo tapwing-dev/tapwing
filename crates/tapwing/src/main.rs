@@ -497,7 +497,8 @@ fn check(paths: &[PathBuf], dump_ir: bool) -> Result<bool> {
         match ir.as_slice() {
             _ if !single_file => println!("{}", serde_json::to_string_pretty(&ir)?),
             [flow] => println!("{}", serde_json::to_string_pretty(flow)?),
-            _ => {}
+            [] => println!("null"),
+            _ => println!("{}", serde_json::to_string_pretty(&ir)?),
         }
     }
     eprintln!("{ok} valid, {failed} invalid ({} files in {:.1} ms)", files.len(), t0.elapsed().as_secs_f64() * 1000.0);

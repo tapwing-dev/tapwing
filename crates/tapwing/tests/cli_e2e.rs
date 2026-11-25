@@ -277,6 +277,12 @@ fn check_fails_on_a_directory_without_flows() {
     let out = tapwing(&["check", "--dump-ir", empty.to_str().unwrap()]);
     assert_eq!(code(&out), 1, "{}", stderr(&out));
     assert_eq!(stdout(&out).trim(), "[]");
+
+    // A single invalid flow file with --dump-ir still prints one JSON document (`null`).
+    let bad = tmp.write("bad.yaml", "not: [valid");
+    let out = tapwing(&["check", "--dump-ir", bad.to_str().unwrap()]);
+    assert_eq!(code(&out), 1, "{}", stderr(&out));
+    assert_eq!(stdout(&out).trim(), "null");
 }
 
 #[cfg(unix)]
