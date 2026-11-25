@@ -40,6 +40,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result, anyhow, bail};
 use sha2::{Digest, Sha256};
 
+use crate::native_lane::{BlackboxDemotion, BlackboxTracker};
 pub use client::{IosDeviceInfo, IosNativeClient, MAX_RESTARTS, RestartFn, RunnerProcess, is_runner_answer};
 pub use hierarchy::IosHierarchy;
 pub use ops::IosNativeOps;
@@ -495,8 +496,8 @@ pub struct IosNativeLaneHandle {
     udid: Option<String>,
     cancel: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
-    /// Apps that never completed the `tapwing_driver` handshake in this run.
-    blackbox_apps: HashSet<String>,
+    /// Consecutive `launchApp` handshake misses per app in this shard.
+    blackbox: BlackboxTracker,
     failure_reported: bool,
 }
 
@@ -538,7 +539,7 @@ impl IosNativeLaneHandle {
                 udid: Some(udid.to_string()),
                 cancel,
                 thread: Some(thread),
-                blackbox_apps: HashSet::new(),
+                blackbox: BlackboxTracker::default(),
                 failure_reported: false,
             },
             Err(e) => Self::unavailable(format!("cannot start the warm-up thread: {e}")),
@@ -553,7 +554,7 @@ impl IosNativeLaneHandle {
             udid: Some("SIM-UDID".into()),
             cancel: Arc::new(AtomicBool::new(false)),
             thread: None,
-            blackbox_apps: HashSet::new(),
+            blackbox: BlackboxTracker::default(),
             failure_reported: false,
         }
     }
@@ -565,18 +566,28 @@ impl IosNativeLaneHandle {
             udid: None,
             cancel: Arc::new(AtomicBool::new(false)),
             thread: None,
-            blackbox_apps: HashSet::new(),
+            blackbox: BlackboxTracker::default(),
             failure_reported: false,
         }
     }
 
-    /// Remembers that `app_id` has no `tapwing_driver` (drive it black-box).
-    pub fn mark_blackbox(&mut self, app_id: &str) {
-        self.blackbox_apps.insert(app_id.to_string());
+    pub(crate) fn set_blackbox_tracker(&mut self, tracker: BlackboxTracker) {
+        self.blackbox = tracker;
     }
 
-    pub fn is_blackbox(&self, app_id: &str) -> bool {
-        self.blackbox_apps.contains(app_id)
+    /// Records a missed `launchApp` handshake for `app_id`.
+    pub fn record_handshake_miss(&mut self, app_id: &str) -> BlackboxDemotion {
+        self.blackbox.record_handshake_miss(app_id)
+    }
+
+    /// Records a successful Flutter handshake for `app_id`, resetting misses.
+    pub fn record_handshake_success(&mut self, app_id: &str) {
+        self.blackbox.record_handshake_success(app_id);
+    }
+
+    /// Whether `app_id` is permanently demoted to black-box for this shard.
+    pub fn is_sticky_blackbox(&self, app_id: &str) -> bool {
+        self.blackbox.is_sticky(app_id)
     }
 
     /// The warm-up failure reason, once (for a single user-visible warning).
@@ -1104,10 +1115,23 @@ mod tests {
         assert_eq!(h.take_failure_notice().as_deref(), Some("no driver"));
         assert!(h.take_failure_notice().is_none());
 
-        assert!(!h.is_blackbox("dev.tapwing.sampleApp"));
-        h.mark_blackbox("dev.tapwing.sampleApp");
-        assert!(h.is_blackbox("dev.tapwing.sampleApp"));
-        assert!(!h.is_blackbox("other"));
+        assert!(!h.is_sticky_blackbox("dev.tapwing.sampleApp"));
+        assert_eq!(
+            h.record_handshake_miss("dev.tapwing.sampleApp"),
+            BlackboxDemotion::FlowOnly { consecutive_misses: 1 }
+        );
+        assert!(!h.is_sticky_blackbox("dev.tapwing.sampleApp"));
+        h.record_handshake_success("dev.tapwing.sampleApp");
+        assert_eq!(
+            h.record_handshake_miss("dev.tapwing.sampleApp"),
+            BlackboxDemotion::FlowOnly { consecutive_misses: 1 }
+        );
+        assert_eq!(
+            h.record_handshake_miss("dev.tapwing.sampleApp"),
+            BlackboxDemotion::StickyShard { consecutive_misses: 2 }
+        );
+        assert!(h.is_sticky_blackbox("dev.tapwing.sampleApp"));
+        assert!(!h.is_sticky_blackbox("other"));
     }
 
     #[test]
