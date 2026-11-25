@@ -23,7 +23,8 @@
 // and location permissions itself, `disableLocationUpdates` hands the app-op
 // back, and mock location left behind by a killed driver is removed at start;
 // `inputText` and `eraseAllText` stop between keys when the call is cancelled
-// and answer CANCELLED.
+// and answer CANCELLED; `viewHierarchy` honors `ViewHierarchyRequest.skip_wait_for_idle`
+// while always flushing `uiAutomation.serviceInfo = null`.
 // Hierarchy, tap, key, screenshot, window update and location semantics are
 // Maestro's.
 package dev.tapwing.driver
@@ -105,7 +106,7 @@ class DriverService(
         request: MaestroAndroid.ViewHierarchyRequest,
         responseObserver: StreamObserver<MaestroAndroid.ViewHierarchyResponse>,
     ) = respond(responseObserver) {
-        refreshAccessibilityCache()
+        refreshAccessibilityCache(waitForIdle = !request.skipWaitForIdle)
         val stream = ByteArrayOutputStream()
         val ms = measureTimeMillis {
             val toast = toastListener.getActiveToastAccessibilityNode()
@@ -118,17 +119,16 @@ class DriverService(
     /**
      * Drops stale nodes from the in-process accessibility cache: setting the
      * service info clears it before the (deliberately) null info throws.
-     * `waitForIdle(500)` waits for up to 500 ms of accessibility quiet first,
-     * exactly as Maestro does before every dump.
+     * When [waitForIdle] is true, waits for up to 500 ms of accessibility quiet
+     * first (Maestro's default). Positive polling paths set `skip_wait_for_idle = true`
+     * so animated screens do not block for 500 ms per poll while still flushing
+     * `uiAutomation.serviceInfo = null`.
      */
-    private fun refreshAccessibilityCache() {
-        try {
-            uiDevice.waitForIdle(500)
-            uiAutomation.serviceInfo = null
-        } catch (_: NullPointerException) {
-            // Expected, see above.
-        }
-    }
+    private fun refreshAccessibilityCache(waitForIdle: Boolean) = refreshAccessibilityCacheWith(
+        waitForIdle = waitForIdle,
+        waitIdle = { uiDevice.waitForIdle(500) },
+        clearServiceInfo = { uiAutomation.serviceInfo = null },
+    )
 
     override fun tap(request: MaestroAndroid.TapRequest, responseObserver: StreamObserver<MaestroAndroid.TapResponse>) =
         respond(responseObserver) {
@@ -348,5 +348,24 @@ class DriverService(
         val ERROR_TYPE_KEY: Metadata.Key<String> = Metadata.Key.of("error-type", Metadata.ASCII_STRING_MARSHALLER)
         val ERROR_MSG_KEY: Metadata.Key<String> = Metadata.Key.of("error-message", Metadata.ASCII_STRING_MARSHALLER)
         val ERROR_CAUSE_KEY: Metadata.Key<String> = Metadata.Key.of("error-cause", Metadata.ASCII_STRING_MARSHALLER)
+    }
+}
+
+/**
+ * Flushes the accessibility cache, optionally waiting for idle first.
+ * `clearServiceInfo` always runs even when `waitForIdle` is false.
+ */
+internal inline fun refreshAccessibilityCacheWith(
+    waitForIdle: Boolean,
+    waitIdle: () -> Unit,
+    clearServiceInfo: () -> Unit,
+) {
+    try {
+        if (waitForIdle) {
+            waitIdle()
+        }
+        clearServiceInfo()
+    } catch (_: NullPointerException) {
+        // Expected, see above.
     }
 }
