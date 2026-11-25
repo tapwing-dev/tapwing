@@ -11,6 +11,10 @@ tapwing check .maestro
 tapwing check .maestro/login.yaml --dump-ir   # print Maestro-format JSON IR
 ```
 
+A directory is walked recursively (each directory once, so symlinks that lead back into the tree are safe). `check` exits non-zero when a flow is invalid and also when a directory you passed contains no flow files, so a wrong path cannot pass in CI.
+
+With `--dump-ir`, stdout carries exactly one JSON document and all status lines go to stderr, so the output can be piped into `jq`. A single flow file prints one `{ "path", "commands" }` object; a directory or several paths print an array of those objects, with invalid flows left out (their errors are on stderr).
+
 Every Maestro command, shorthand syntax, `runFlow`, `retry`, `repeat`, `when`/`while`, `runScript`, `onFlowStart`/`onFlowComplete`, `env`, `label`, and `optional` is supported. Parsing 544 flows takes ~33 ms (compared to ~2.6 s for a single file in Maestro due to JVM startup).
 
 ## Flow execution and JavaScript
@@ -19,7 +23,7 @@ Tapwing runs the same orchestration rules as Maestro:
 
 - **Control flow:** file-based and inline `runFlow`, `repeat` (`times` and `while`), `retry` (only on command errors, not script or transport errors), `onFlowStart`, and `onFlowComplete` (always runs, even if the flow fails).
 - **Variables:** `-e KEY=VALUE` overrides top-level flow `env` and shell variables. Shell environment variables prefixed with `MAESTRO_` are injected automatically (preserving the `MAESTRO_` prefix; empty values and internal shard variables `MAESTRO_SHARD_ID`/`MAESTRO_SHARD_INDEX` are excluded), alongside built-in variables `MAESTRO_FILENAME`, `MAESTRO_DEVICE_UDID`, `MAESTRO_SHARD_INDEX`, and `MAESTRO_SHARD_ID`.
-- **JavaScript:** powered by an embedded QuickJS engine supporting `output`, `maestro` (`platform`, `copiedText`), `json()`, `relativePoint()`, `console.log`, synchronous `http.{get,post,put,delete,request}` (with `headers`, `body`, and `multipartForm`), and `faker` (including `faker.expression(...)`).
+- **JavaScript:** powered by an embedded QuickJS engine supporting `output`, `maestro` (`platform`, `copiedText`), `json()`, `relativePoint()`, `console.log`, synchronous `http.{get,post,put,delete,request}` (with `headers`, `body`, and `multipartForm`), and `faker` (including `faker.expression(...)`). Like Maestro, scripts have no time limit (`http.*` keeps Maestro's 5-minute timeout), but the first Ctrl-C or `SIGTERM` stops a running script or an in-flight `http.*` request right away and device cleanup still runs. A script that allocates more than 1 GiB fails with `JavaScript ran out of memory` instead of taking the whole run down.
 
 ## CLI flags parity
 

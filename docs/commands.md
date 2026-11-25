@@ -47,7 +47,7 @@ Tapwing supports the standard Maestro command set and selectors. If a flow works
 
 ## Flow control and scripting
 
-- **`runFlow`:** run another flow file or inline `commands`, with optional `when` condition and scoped `env`.
+- **`runFlow`:** run another flow file or inline `commands`, with optional `when` condition and scoped `env`. Sub-flow files are expanded when the flow is parsed, so flows that run each other in a circle are rejected up front with `Sub-flow Cycle` and the chain (`a.yaml → b.yaml → a.yaml`), whatever their `when` says; nesting is limited to 64 levels.
 - **`repeat`:** repeat commands a fixed number of `times` or `while` a condition holds.
 - **`retry`:** retry a block on command failures (`maxRetries` defaults to 1, capped at 3).
 - **`runScript`, `evalScript`:** execute JavaScript with persistent `output`, `maestro`, `http`, `json()`, `relativePoint()`, `console.log`, and `faker`.

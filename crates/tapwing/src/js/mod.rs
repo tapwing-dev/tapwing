@@ -39,6 +39,7 @@ use rquickjs::object::Filter;
 use rquickjs::{CatchResultExt, CaughtError, Context, Ctx, Function, Object, Persistent, Runtime, Type, Value};
 
 use crate::backend::JsError;
+use crate::interrupt::Watch;
 
 /// Permanent global binding keys that env variables must never overwrite
 /// (`GraalJsEngine.kt:47-50`).
@@ -77,6 +78,33 @@ globalThis.output = {};
 globalThis.maestro = { platform: 'unknown' };
 "#;
 
+/// Heap cap of the QuickJS runtime. Maestro's GraalJS has no script limit of
+/// its own and is bounded only by the JVM heap, so this is far above what any
+/// flow script holds (HTTP bodies, JSON fixtures) and only turns a runaway
+/// allocation into an error instead of an OOM kill of the whole run.
+const MEMORY_LIMIT_BYTES: usize = 1024 * 1024 * 1024;
+
+/// Native stack QuickJS may use before it throws `Maximum call stack size
+/// exceeded`. This is the QuickJS-ng default, pinned here so a dependency bump
+/// cannot move it; it must stay below the 2 MiB stack of a spawned Rust thread.
+const MAX_STACK_BYTES: usize = 1024 * 1024;
+
+/// Message of the [`JsError`] for a thrown bare `null`.
+const THROWN_NULL: &str = "null";
+
+/// Resource limits applied to the QuickJS runtime when it is first created.
+#[derive(Clone, Copy, Debug)]
+struct JsLimits {
+    memory_bytes: usize,
+    max_stack_bytes: usize,
+}
+
+impl Default for JsLimits {
+    fn default() -> Self {
+        Self { memory_bytes: MEMORY_LIMIT_BYTES, max_stack_bytes: MAX_STACK_BYTES }
+    }
+}
+
 /// Counters and timing accumulated across JS and `http.*` calls.
 #[derive(Clone, Debug, Default)]
 pub struct JsMetrics {
@@ -106,6 +134,7 @@ impl JsMetrics {
 /// Shared mutable state bridged between Rust and QuickJS host callbacks.
 struct BridgeState {
     http_agent: Arc<ureq::Agent>,
+    interrupt: Watch,
     current_script_dir: Option<PathBuf>,
     log_callback: Option<Box<dyn FnMut(String)>>,
     http_requests: u64,
@@ -126,7 +155,7 @@ struct QuickJsState {
     /// used to prune script-added globals without disturbing JS built-ins.
     initial_globals: HashSet<String>,
     context: Context,
-    _runtime: Runtime,
+    runtime: Runtime,
 }
 
 enum CompiledEntry {
@@ -147,6 +176,8 @@ pub struct JsEngine {
     bridge: Rc<RefCell<BridgeState>>,
     qjs: Option<QuickJsState>,
     metrics: JsMetrics,
+    interrupt: Watch,
+    limits: JsLimits,
     closed: bool,
 }
 
@@ -156,6 +187,10 @@ impl JsEngine {
     }
 
     pub fn with_http_agent(platform: impl Into<String>, http_agent: Arc<ureq::Agent>) -> Self {
+        Self::with_interrupt(platform, http_agent, Watch::process())
+    }
+
+    fn with_interrupt(platform: impl Into<String>, http_agent: Arc<ureq::Agent>, interrupt: Watch) -> Self {
         Self {
             platform: platform.into().to_lowercase(),
             copied_text: None,
@@ -163,6 +198,7 @@ impl JsEngine {
             env_scope_stack: Vec::new(),
             bridge: Rc::new(RefCell::new(BridgeState {
                 http_agent,
+                interrupt,
                 current_script_dir: None,
                 log_callback: None,
                 http_requests: 0,
@@ -170,6 +206,8 @@ impl JsEngine {
             })),
             qjs: None,
             metrics: JsMetrics::default(),
+            interrupt,
+            limits: JsLimits::default(),
             closed: false,
         }
     }
@@ -468,13 +506,60 @@ impl JsEngine {
         if cache_hit {
             self.metrics.cache_hits += 1;
         }
-        out
+        out.map_err(|err| self.classify_eval_error(err))
+    }
+
+    /// Replaces the engine's raw failure with what actually ended the script.
+    ///
+    /// QuickJS reports an abort by the interrupt handler as an uncatchable
+    /// `interrupted` exception and a hit memory limit as `out of memory`. At
+    /// the limit it usually cannot allocate that exception either and throws a
+    /// bare `null` (`JS_ThrowError2`). If the heap is still near the limit
+    /// (retained globals) we know it was OOM and drop the runtime so its
+    /// memory is freed; if unwinding already released local allocations, a
+    /// bare `null` cannot be told apart from a script's own `throw null`, so
+    /// the message names both.
+    fn classify_eval_error(&mut self, err: anyhow::Error) -> anyhow::Error {
+        if let Err(interrupted) = self.interrupt.check() {
+            return interrupted;
+        }
+        let limit_mib = self.limits.memory_bytes / (1024 * 1024);
+        let message = match err.downcast_ref::<JsError>().map(|js| js.message.as_str()) {
+            Some("out of memory" | "Allocation failed while creating object") => {
+                self.qjs = None;
+                format!("JavaScript ran out of memory (limit: {limit_mib} MiB)")
+            }
+            Some(THROWN_NULL) if self.is_near_memory_limit() => {
+                self.qjs = None;
+                format!("JavaScript ran out of memory (limit: {limit_mib} MiB)")
+            }
+            Some(THROWN_NULL) => {
+                format!("JavaScript ran out of memory (limit: {limit_mib} MiB) or the script threw null")
+            }
+            _ => return err,
+        };
+        JsError::new(message, vec![]).into()
+    }
+
+    fn is_near_memory_limit(&self) -> bool {
+        let Some(qjs) = &self.qjs else {
+            return false;
+        };
+        let used = usize::try_from(qjs.runtime.memory_usage().malloc_size).unwrap_or(0);
+        used >= self.limits.memory_bytes / 2
     }
 
     fn ensure_qjs(&mut self) -> Result<&mut QuickJsState> {
         if self.qjs.is_none() {
             let runtime =
                 Runtime::new().map_err(|e| JsError::new(format!("QuickJS runtime init failed: {e}"), vec![]))?;
+            runtime.set_memory_limit(self.limits.memory_bytes);
+            runtime.set_max_stack_size(self.limits.max_stack_bytes);
+            // Polled by QuickJS every few thousand bytecode jumps and calls, so a
+            // `while (true) {}` ends on the first SIGINT/SIGTERM and the device
+            // cleanup guards still run.
+            let interrupt = self.interrupt;
+            runtime.set_interrupt_handler(Some(Box::new(move || interrupt.is_interrupted())));
             let context = Context::full(&runtime)
                 .map_err(|e| JsError::new(format!("QuickJS context init failed: {e}"), vec![]))?;
 
@@ -510,7 +595,7 @@ impl JsEngine {
             })?;
 
             self.qjs = Some(QuickJsState {
-                _runtime: runtime,
+                runtime,
                 context,
                 initial_globals,
                 expr_cache: HashMap::new(),
@@ -636,6 +721,7 @@ fn caught_to_anyhow<'js>(caught: CaughtError<'js>) -> anyhow::Error {
                 .unwrap_or_default();
             JsError::new(msg, stack).into()
         }
+        CaughtError::Value(v) if v.is_null() => JsError::new(THROWN_NULL, vec![]).into(),
         CaughtError::Value(v) => JsError::new(format!("{v:?}"), vec![]).into(),
         CaughtError::Error(e) => JsError::new(e.to_string(), vec![]).into(),
     }
@@ -1149,5 +1235,73 @@ mod tests {
             scope_ms,
             js.metrics().cache_hits
         );
+    }
+
+    #[test]
+    fn interrupt_ends_an_infinite_loop_even_inside_try_catch() {
+        let (watch, trigger) = Watch::manual();
+        let mut engine = JsEngine::with_interrupt("android", default_http_agent(), watch);
+        // The "signal" arrives from inside the script, right before it starts spinning.
+        engine.set_log_callback(move |_| trigger(2));
+        let script = "console.log('spinning'); try { while (true) {} } catch (e) {} while (true) {}";
+        let err = engine.run_script_file(script, &HashMap::new(), "loop.js", None).unwrap_err();
+        assert!(crate::interrupt::is_interrupted_error(&err), "unexpected error: {err:#}");
+        assert_eq!(err.to_string(), "interrupted by SIGINT");
+        assert!(!crate::backend::is_optional_downgradable(&err));
+    }
+
+    #[test]
+    fn runaway_allocation_fails_with_a_memory_limit_error() {
+        let mut engine = JsEngine::new("android");
+        engine.limits.memory_bytes = 16 * 1024 * 1024;
+        // Retain allocations on `output` so the heap stays full after unwinding.
+        let bomb =
+            "output.chunks = []; while (true) { output.chunks.push(new Array(4096).fill(output.chunks.length)); }";
+        let err = engine.run_script_file(bomb, &HashMap::new(), "bomb.js", None).unwrap_err();
+        assert!(err.is::<JsError>(), "unexpected error: {err:#}");
+        assert_eq!(err.to_string(), "JavaScript ran out of memory (limit: 16 MiB)");
+
+        // OOM resets the runtime so retained heap is freed and subsequent allocations succeed.
+        assert_eq!(engine.evaluate_script("1 + 1", &HashMap::new(), "inline-script", false, None).unwrap(), "2");
+        let alloc = "var a = []; for (var i = 0; i < 64; i++) { a.push(new Array(4096).fill(i)); } a.length";
+        assert_eq!(engine.evaluate_script(alloc, &HashMap::new(), "inline-script", false, None).unwrap(), "64");
+    }
+
+    #[test]
+    fn unbounded_recursion_fails_with_a_stack_error() {
+        let mut engine = JsEngine::new("android");
+        let err = engine
+            .evaluate_script("(function f() { return f() + 1; })()", &HashMap::new(), "inline-script", false, None)
+            .unwrap_err();
+        assert!(err.is::<JsError>(), "unexpected error: {err:#}");
+        assert!(err.to_string().contains("stack"), "unexpected message: {err}");
+    }
+
+    #[test]
+    fn interrupt_ends_an_http_request_the_server_never_answers() {
+        let (watch, trigger) = Watch::manual();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (release, held) = std::sync::mpsc::channel::<()>();
+        let server = thread::spawn(move || {
+            // Accept, read nothing, answer nothing; signal only once the request is in flight.
+            let (stream, _) = listener.accept().unwrap();
+            trigger(15);
+            let _ = held.recv();
+            drop(stream);
+        });
+
+        let mut engine = JsEngine::with_interrupt("android", default_http_agent(), watch);
+        let script = format!("output.status = http.get('http://127.0.0.1:{port}/hang').status");
+        let t0 = Instant::now();
+        let err = engine.run_script_file(&script, &HashMap::new(), "hang.js", None).unwrap_err();
+        let waited = t0.elapsed();
+        release.send(()).unwrap();
+        server.join().unwrap();
+
+        assert!(crate::interrupt::is_interrupted_error(&err), "unexpected error: {err:#}");
+        assert_eq!(err.to_string(), "terminated by SIGTERM");
+        assert!(waited < Duration::from_secs(5), "request held the run for {waited:?} (agent timeout is 300 s)");
+        assert_eq!(engine.metrics().http_requests, 0, "an abandoned request must not be counted as completed");
     }
 }
