@@ -227,6 +227,11 @@ impl Driver {
         self.last_pid
     }
 
+    /// Monotonic connection epoch (incremented on every accepted `hello`).
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
     /// Forget the current connection (e.g. the app is being restarted).
     ///
     /// Stale pending connections are drained *before* the current one is
@@ -502,7 +507,7 @@ impl Driver {
             ..
         } = self;
         let silence_timeout = *silence_timeout;
-        let conn = conn_slot.as_mut().ok_or_else(|| anyhow!("app is not connected"))?;
+        let conn = conn_slot.as_mut().ok_or_else(|| TransportError("app is not connected".into()))?;
         // Short reads so a dead app is noticed without waiting for the full
         // silence timeout: adb reverse keeps the host socket open after the
         // app process dies.
@@ -578,7 +583,7 @@ impl Driver {
                 Ok(v) => v,
                 Err(e) => {
                     *conn_slot = None;
-                    return Err(anyhow!("invalid JSON from driver during `{method}`: {e}"));
+                    return Err(TransportError(format!("invalid JSON from driver during `{method}`: {e}")).into());
                 }
             };
             buf.clear();
@@ -923,7 +928,10 @@ mod tests {
         let mut drv = Driver::listen(0).unwrap();
         assert!(!drv.is_connected());
         assert!(drv.last_pid().is_none());
-        assert_eq!(drv.call("ping", json!({})).unwrap_err().to_string(), "app is not connected");
+        let err = drv.call("ping", json!({})).unwrap_err();
+        assert_eq!(err.to_string(), "app is not connected");
+        assert!(err.downcast_ref::<TransportError>().is_some());
+        assert!(crate::backend::is_transport_error(&err));
         // Idle polling helpers never touch the network.
         drv.poll_issues();
         assert!(drv.poll_http().is_empty());
@@ -1026,6 +1034,8 @@ mod tests {
         });
         let err = drv.call("tapOn", json!({})).unwrap_err();
         assert!(err.to_string().starts_with("invalid JSON from driver during `tapOn`"), "{err}");
+        assert!(err.downcast_ref::<TransportError>().is_some());
+        assert!(crate::backend::is_transport_error(&err));
         assert!(!drv.is_connected());
         drop(drv);
         handle.join().unwrap();

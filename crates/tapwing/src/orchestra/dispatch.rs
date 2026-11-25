@@ -37,6 +37,8 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                 Ok((false, Value::Null))
             }
             MaestroCommand::LaunchApp(c) => {
+                self.flow_app_id = Some(c.app_id.clone());
+                self.app_intentionally_stopped = false;
                 let permissions: BTreeMap<String, String> = match &c.permissions {
                     Some(map) => map
                         .iter()
@@ -55,9 +57,27 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                 let extra = self.driver.launch_app(&req)?;
                 Ok((true, extra))
             }
-            MaestroCommand::StopApp(c) => Ok((true, self.driver.stop_app(&c.app_id)?)),
-            MaestroCommand::KillApp(c) => Ok((true, self.driver.kill_app(&c.app_id)?)),
-            MaestroCommand::ClearState(c) => Ok((true, self.driver.clear_state(&c.app_id)?)),
+            MaestroCommand::StopApp(c) => {
+                let res = self.driver.stop_app(&c.app_id)?;
+                if self.flow_app_id.as_deref().is_none_or(|id| id == c.app_id) {
+                    self.app_intentionally_stopped = true;
+                }
+                Ok((true, res))
+            }
+            MaestroCommand::KillApp(c) => {
+                let res = self.driver.kill_app(&c.app_id)?;
+                if self.flow_app_id.as_deref().is_none_or(|id| id == c.app_id) {
+                    self.app_intentionally_stopped = true;
+                }
+                Ok((true, res))
+            }
+            MaestroCommand::ClearState(c) => {
+                let res = self.driver.clear_state(&c.app_id)?;
+                if self.flow_app_id.as_deref().is_none_or(|id| id == c.app_id) {
+                    self.app_intentionally_stopped = true;
+                }
+                Ok((true, res))
+            }
             MaestroCommand::ClearKeychain(_) => Ok((false, self.driver.clear_keychain()?)),
             MaestroCommand::SetPermissions(c) => {
                 let perms: BTreeMap<String, String> = c
@@ -325,44 +345,59 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                 if !self.evaluate_condition(c.condition.as_ref(), c.optional, None)? {
                     return Err(CommandSkipped.into());
                 }
-                let mutated = self.run_sub_flow(&c.commands, config, c.config.as_ref())?;
-                Ok((mutated, Value::Null))
+                if c.optional {
+                    self.optional_depth += 1;
+                }
+                let res = self.run_sub_flow(&c.commands, config, c.config.as_ref());
+                if c.optional {
+                    self.optional_depth -= 1;
+                }
+                Ok((res?, Value::Null))
             }
             MaestroCommand::Repeat(c) => {
                 let max_runs: usize = match &c.times {
                     Some(raw) => raw.trim().parse::<f64>().ok().map(|f| f.max(0.0) as usize).unwrap_or(usize::MAX),
                     None => usize::MAX,
                 };
-                let mut counter = 0usize;
-                let mut mutated = false;
-                loop {
-                    crate::interrupt::check()?;
-                    if counter >= max_runs {
-                        break;
-                    }
-                    // `Orchestra.kt:966-970`: evaluate `while` condition fresh on every iteration.
-                    if let Some(raw_cond) = &c.condition {
-                        let eval_cond = evaluate_condition_scripts(raw_cond, &mut self.js)?;
-                        if !self.evaluate_condition(Some(&eval_cond), c.optional, None)? {
+                if c.optional {
+                    self.optional_depth += 1;
+                }
+                let res = (|| -> Result<(bool, Value)> {
+                    let mut counter = 0usize;
+                    let mut mutated = false;
+                    loop {
+                        crate::interrupt::check()?;
+                        if counter >= max_runs {
                             break;
                         }
+                        // `Orchestra.kt:966-970`: evaluate `while` condition fresh on every iteration.
+                        if let Some(raw_cond) = &c.condition {
+                            let eval_cond = evaluate_condition_scripts(raw_cond, &mut self.js)?;
+                            if !self.evaluate_condition(Some(&eval_cond), c.optional, None)? {
+                                break;
+                            }
+                        }
+                        let m = self.run_sub_flow(&c.commands, config, None)?;
+                        mutated |= m;
+                        counter += 1;
+                        let meta = CommandMetadata {
+                            number_of_runs: Some(counter),
+                            evaluated_command: None,
+                            log_messages: Vec::new(),
+                        };
+                        if let Some(cb) = self.callbacks.on_command_metadata_update.as_mut() {
+                            cb(raw_cmd, &meta);
+                        }
                     }
-                    let m = self.run_sub_flow(&c.commands, config, None)?;
-                    mutated |= m;
-                    counter += 1;
-                    let meta = CommandMetadata {
-                        number_of_runs: Some(counter),
-                        evaluated_command: None,
-                        log_messages: Vec::new(),
-                    };
-                    if let Some(cb) = self.callbacks.on_command_metadata_update.as_mut() {
-                        cb(raw_cmd, &meta);
+                    if counter == 0 {
+                        return Err(CommandSkipped.into());
                     }
+                    Ok((mutated, json!({ "runs": counter })))
+                })();
+                if c.optional {
+                    self.optional_depth -= 1;
                 }
-                if counter == 0 {
-                    return Err(CommandSkipped.into());
-                }
-                Ok((mutated, json!({ "runs": counter })))
+                res
             }
             MaestroCommand::Retry(c) => {
                 let max_retries = c

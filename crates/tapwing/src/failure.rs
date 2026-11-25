@@ -11,6 +11,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::fake_driver::{Bounds, TreeNode};
 use crate::flow::ir::{ElementSelector, MaestroCommand};
@@ -595,13 +596,35 @@ fn compact_str(raw: &str, max_chars: usize) -> String {
     }
 }
 
-/// Formats a filesystem-safe artifact stem (`<flow_slug>_step<NNN>`).
+/// Maximum length of the human-readable slug prefix in [`artifact_stem`].
+const ARTIFACT_SLUG_MAX_CHARS: usize = 64;
+
+/// Formats a filesystem-safe, collision-resistant artifact stem
+/// (`<flow_slug>_<path_hash>_step<NNN>`).
 pub fn artifact_stem(flow_path: &Path, step_index: usize) -> String {
     let raw = flow_path.file_stem().and_then(|s| s.to_str()).unwrap_or("flow");
-    let slug: String =
-        raw.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
-    let slug = if slug.is_empty() { "flow".to_string() } else { slug };
-    format!("{slug}_step{:03}", step_index + 1)
+    let sanitized: String = raw
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .take(ARTIFACT_SLUG_MAX_CHARS)
+        .collect();
+    let trimmed = sanitized.trim_matches('_');
+    let slug = if trimmed.chars().any(|c| c.is_ascii_alphanumeric()) { trimmed } else { "flow" };
+    let hash = short_path_hash(flow_path);
+    format!("{slug}_{hash}_step{:03}", step_index + 1)
+}
+
+fn short_path_hash(path: &Path) -> String {
+    let mut hasher = Sha256::new();
+    for comp in path.components() {
+        if matches!(comp, std::path::Component::CurDir) {
+            continue;
+        }
+        hasher.update(comp.as_os_str().as_encoded_bytes());
+        hasher.update([0u8]);
+    }
+    let digest = hasher.finalize();
+    format!("{:02x}{:02x}{:02x}{:02x}", digest[0], digest[1], digest[2], digest[3])
 }
 
 /// Formats failure diagnostics for terminal output (6-space indented under the
@@ -818,6 +841,39 @@ mod tests {
 
     #[test]
     fn artifact_stem_sanitizes_flow_name() {
-        assert_eq!(artifact_stem(Path::new("/tmp/my flow (v2).yaml"), 3), "my_flow__v2__step004");
+        let stem = artifact_stem(Path::new("/tmp/my flow (v2).yaml"), 3);
+        assert!(stem.starts_with("my_flow__v2_"), "{stem}");
+        assert!(stem.ends_with("_step004"), "{stem}");
+        assert!(stem.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'), "{stem}");
+        assert_eq!(stem, artifact_stem(Path::new("/tmp/my flow (v2).yaml"), 3));
+    }
+
+    #[test]
+    fn artifact_stem_distinguishes_same_basename_in_different_dirs() {
+        let a = artifact_stem(Path::new("login/smoke.yaml"), 0);
+        let b = artifact_stem(Path::new("checkout/smoke.yaml"), 0);
+        let c = artifact_stem(Path::new("a/b/smoke.yaml"), 0);
+        let d = artifact_stem(Path::new("a_b/smoke.yaml"), 0);
+        assert!(a.starts_with("smoke_") && a.ends_with("_step001"), "{a}");
+        assert!(b.starts_with("smoke_") && b.ends_with("_step001"), "{b}");
+        assert_ne!(a, b);
+        assert_ne!(c, d);
+        assert_eq!(a, artifact_stem(Path::new("./login/smoke.yaml"), 0));
+    }
+
+    #[test]
+    fn artifact_stem_distinguishes_non_ascii_flow_names() {
+        let jp = artifact_stem(Path::new("flows/日本語.yaml"), 0);
+        let kr = artifact_stem(Path::new("flows/한국어.yaml"), 0);
+        let cafe1 = artifact_stem(Path::new("flows/café.yaml"), 0);
+        let cafe2 = artifact_stem(Path::new("flows/cafè.yaml"), 0);
+        for stem in [&jp, &kr, &cafe1, &cafe2] {
+            assert!(stem.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'), "{stem}");
+            assert!(stem.ends_with("_step001"), "{stem}");
+        }
+        assert!(jp.starts_with("flow_"), "{jp}");
+        assert!(kr.starts_with("flow_"), "{kr}");
+        assert_ne!(jp, kr);
+        assert_ne!(cafe1, cafe2);
     }
 }
