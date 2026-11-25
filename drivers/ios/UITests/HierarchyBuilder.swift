@@ -6,9 +6,19 @@ import Foundation
 import XCTest
 
 @MainActor
-struct HierarchyBuilder {
+final class HierarchyBuilder {
     private let springboardApplication = XCUIApplication(bundleIdentifier: RunningApp.springboardBundleId)
     private let snapshotMaxDepth = 60
+    private var cache = HierarchyMetadataCache()
+
+    private static let isRemoteSelector = NSSelectorFromString("isRemote")
+    private static let visibleFrameSelector = NSSelectorFromString("visibleFrame")
+    private static let windowContextIDSelector = NSSelectorFromString("windowContextID")
+    private static let displayIDSelector = NSSelectorFromString("displayID")
+
+    func invalidateCache() {
+        cache.invalidateAll()
+    }
 
     func handle(_ request: HttpRequest) async -> HttpResponse {
         guard let body = try? JSONDecoder().decode(ViewHierarchyRequest.self, from: request.body) else {
@@ -50,24 +60,43 @@ struct HierarchyBuilder {
         foregroundBundleId: String,
         excludeKeyboardElements _: Bool
     ) throws -> AXElement {
+        let isSpringboardTarget = HierarchyQueryPolicy.isSpringboardTarget(foregroundBundleId: foregroundBundleId)
+
         // On iOS 26+ iPad, `DockFolderViewService` can report as foreground on
         // the home screen while its AX tree is empty; actual content lives in SpringBoard.
-        var foregroundApp = originalForegroundApp
-        if foregroundBundleId == "com.apple.DocumentManager.DockFolderViewService" {
-            foregroundApp = springboardApplication
+        let foregroundApp = isSpringboardTarget ? springboardApplication : originalForegroundApp
+
+        var hasRemoteElement = false
+        let appHierarchy = try getHierarchyWithFallback(foregroundApp, hasRemoteElement: &hasRemoteElement)
+
+        let safariWebViewHierarchy: AXElement?
+        if HierarchyQueryPolicy.shouldQuerySafariViewService(
+            osMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+            foregroundBundleId: foregroundBundleId,
+            hasRemoteElement: hasRemoteElement
+        ) {
+            safariWebViewHierarchy = getSafariWebViewHierarchy()
+        } else {
+            safariWebViewHierarchy = nil
         }
 
-        let appHierarchy = try getHierarchyWithFallback(foregroundApp)
-        let statusBars = fullStatusBars(springboardApplication) ?? []
-        let safariWebViewHierarchy = getSafariWebViewHierarchy()
+        // When SpringBoard itself is the foreground snapshot target, `appHierarchy`
+        // already includes status bars and SpringBoard's frame — skip both extra IPCs.
+        if isSpringboardTarget {
+            return wrapRoot(appHierarchy, statusBars: [], safari: safariWebViewHierarchy)
+        }
 
-        let deviceFrame = springboardApplication.frame
-        let deviceAxFrame: AXFrame = [
-            "X": Double(deviceFrame.minX),
-            "Y": Double(deviceFrame.minY),
-            "Width": Double(deviceFrame.width),
-            "Height": Double(deviceFrame.height),
-        ]
+        let orientation = ScreenSizeHelper.logicalOrientation()
+        let statusBars = cache.statusBars(
+            orientation: orientation,
+            foregroundBundleId: foregroundBundleId
+        ) { [self] in
+            fullStatusBars(springboardApplication)
+        }
+
+        let deviceAxFrame = cache.deviceFrame(for: orientation) { [self] in
+            axFrame(from: springboardApplication.frame)
+        }
         let appFrame = appHierarchy.frame
 
         if deviceAxFrame != appFrame {
@@ -137,10 +166,11 @@ struct HierarchyBuilder {
     private func getHierarchyWithFallback(
         _ element: XCUIElement,
         recursionDepth: Int = 0,
-        allowRecovery: Bool = true
+        allowRecovery: Bool = true,
+        hasRemoteElement: inout Bool
     ) throws -> AXElement {
         do {
-            var hierarchy = try elementHierarchy(xcuiElement: element)
+            var hierarchy = try elementHierarchy(xcuiElement: element, hasRemoteElement: &hasRemoteElement)
             if hierarchy.depth() < snapshotMaxDepth || recursionDepth >= 8 {
                 return hierarchy
             }
@@ -153,7 +183,8 @@ struct HierarchyBuilder {
                     try getHierarchyWithFallback(
                         child,
                         recursionDepth: recursionDepth + 1,
-                        allowRecovery: allowRecovery
+                        allowRecovery: allowRecovery,
+                        hasRemoteElement: &hasRemoteElement
                     )
                 )
             }
@@ -173,13 +204,14 @@ struct HierarchyBuilder {
             let hierarchy = try getHierarchyWithFallback(
                 recoveryElement,
                 recursionDepth: recursionDepth + 1,
-                allowRecovery: false
+                allowRecovery: false,
+                hasRemoteElement: &hasRemoteElement
             )
 
             if let app = element as? XCUIApplication {
                 let keyboard = keyboardHierarchy(app)
                 let alerts = fullScreenAlertHierarchy(app)
-                let other = try customWindowElements(app)
+                let other = try customWindowElements(app, hasRemoteElement: &hasRemoteElement)
                 return AXElement(children: [other, keyboard, alerts, hierarchy].compactMap { $0 })
             }
             return hierarchy
@@ -198,12 +230,12 @@ struct HierarchyBuilder {
         return try? elementHierarchy(xcuiElement: keyboard)
     }
 
-    private func customWindowElements(_ app: XCUIApplication) throws -> AXElement? {
+    private func customWindowElements(_ app: XCUIApplication, hasRemoteElement: inout Bool) throws -> AXElement? {
         let windowElement = app.children(matching: .any).firstMatch
         if try windowElement.snapshot().children.count > 1 {
             return nil
         }
-        return try? elementHierarchy(xcuiElement: windowElement)
+        return try? elementHierarchy(xcuiElement: windowElement, hasRemoteElement: &hasRemoteElement)
     }
 
     private func fullScreenAlertHierarchy(_ app: XCUIApplication) -> AXElement? {
@@ -213,9 +245,18 @@ struct HierarchyBuilder {
     }
 
     private func fullStatusBars(_ app: XCUIApplication) -> [AXElement]? {
-        guard app.statusBars.firstMatch.exists else { return nil }
-        return try? app.statusBars.allElementsBoundByIndex.compactMap { statusBar in
-            try elementHierarchy(xcuiElement: statusBar)
+        // Call `allElementsBoundByIndex` directly (returns `[]` when empty) to
+        // avoid an extra `statusBars.firstMatch.exists` SpringBoard AX IPC.
+        let statusBarElements = app.statusBars.allElementsBoundByIndex
+        if statusBarElements.isEmpty {
+            return []
+        }
+        do {
+            return try statusBarElements.map { statusBar in
+                try elementHierarchy(xcuiElement: statusBar)
+            }
+        } catch {
+            return nil
         }
     }
 
@@ -225,7 +266,7 @@ struct HierarchyBuilder {
         guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26 else {
             return nil
         }
-        let safariService = XCUIApplication(bundleIdentifier: "com.apple.SafariViewService")
+        let safariService = XCUIApplication(bundleIdentifier: HierarchyQueryPolicy.safariViewServiceBundleId)
         let isRunning = safariService.state == .runningForeground || safariService.state == .runningBackground
         guard isRunning, safariService.webViews.count > 0 else {
             return nil
@@ -255,8 +296,18 @@ struct HierarchyBuilder {
     }
 
     private func elementHierarchy(xcuiElement: XCUIElement) throws -> AXElement {
+        var ignoredRemote = false
+        return try elementHierarchy(xcuiElement: xcuiElement, hasRemoteElement: &ignoredRemote)
+    }
+
+    private func elementHierarchy(xcuiElement: XCUIElement, hasRemoteElement: inout Bool) throws -> AXElement {
         let snapshot = try xcuiElement.snapshot()
-        return elementHierarchy(snapshot: snapshot, inheritedOffset: .zero, parentWindowContextID: nil)
+        return elementHierarchy(
+            snapshot: snapshot,
+            inheritedOffset: .zero,
+            parentWindowContextID: nil,
+            hasRemoteElement: &hasRemoteElement
+        )
     }
 
     /// Walks `XCUIElementSnapshot` directly (avoiding O(subtree) `dictionaryRepresentation`)
@@ -264,16 +315,22 @@ struct HierarchyBuilder {
     private func elementHierarchy(
         snapshot: XCUIElementSnapshot,
         inheritedOffset: CGVector,
-        parentWindowContextID: Double?
+        parentWindowContextID: Double?,
+        hasRemoteElement: inout Bool
     ) -> AXElement {
         let rawFrame = axFrame(from: snapshot.frame)
-        let windowContextID = kvcDouble(snapshot, "windowContextID") ?? 0
+        let windowContextID = kvcDouble(snapshot, selector: Self.windowContextIDSelector, key: "windowContextID") ?? 0
+        let nodeIsRemote = isRemote(snapshot)
+        if nodeIsRemote {
+            hasRemoteElement = true
+        }
 
         let boundaryOffset = crossProcessWindowOffset(
             snapshot: snapshot,
             rawFrame: rawFrame,
             parentWindowContextID: parentWindowContextID,
-            windowContextID: windowContextID
+            windowContextID: windowContextID,
+            nodeIsRemote: nodeIsRemote
         )
         let currentOffset = CGVector(
             dx: inheritedOffset.dx + boundaryOffset.dx,
@@ -284,7 +341,8 @@ struct HierarchyBuilder {
             elementHierarchy(
                 snapshot: child,
                 inheritedOffset: currentOffset,
-                parentWindowContextID: windowContextID
+                parentWindowContextID: windowContextID,
+                hasRemoteElement: &hasRemoteElement
             )
         }
 
@@ -301,7 +359,7 @@ struct HierarchyBuilder {
             placeholderValue: snapshot.placeholderValue,
             selected: snapshot.isSelected,
             hasFocus: snapshot.hasFocus,
-            displayID: kvcInt(snapshot, "displayID") ?? 0,
+            displayID: kvcInt(snapshot, selector: Self.displayIDSelector, key: "displayID") ?? 0,
             windowContextID: windowContextID,
             children: children
         )
@@ -311,14 +369,15 @@ struct HierarchyBuilder {
         snapshot: XCUIElementSnapshot,
         rawFrame: AXFrame,
         parentWindowContextID: Double?,
-        windowContextID: Double
+        windowContextID: Double,
+        nodeIsRemote: Bool
     ) -> CGVector {
         guard
             let parentWindowContextID,
             parentWindowContextID != 0,
             windowContextID != 0,
             parentWindowContextID != windowContextID,
-            containsRemoteSubtree(snapshot),
+            containsRemoteSubtree(snapshot, nodeIsRemote: nodeIsRemote),
             let visibleFrame = visibleFrame(snapshot)
         else {
             return .zero
@@ -326,14 +385,14 @@ struct HierarchyBuilder {
         return CGVector(dx: visibleFrame.x - rawFrame.x, dy: visibleFrame.y - rawFrame.y)
     }
 
-    private func containsRemoteSubtree(_ snapshot: XCUIElementSnapshot) -> Bool {
-        if isRemote(snapshot) { return true }
+    private func containsRemoteSubtree(_ snapshot: XCUIElementSnapshot, nodeIsRemote: Bool) -> Bool {
+        if nodeIsRemote { return true }
         return snapshot.children.contains(where: isRemote)
     }
 
     private func isRemote(_ snapshot: XCUIElementSnapshot) -> Bool {
         guard let obj = snapshot as? NSObject,
-              obj.responds(to: NSSelectorFromString("isRemote")) else {
+              obj.responds(to: Self.isRemoteSelector) else {
             return false
         }
         return (obj.value(forKey: "isRemote") as? NSNumber)?.boolValue ?? false
@@ -341,7 +400,7 @@ struct HierarchyBuilder {
 
     private func visibleFrame(_ snapshot: XCUIElementSnapshot) -> AXFrame? {
         guard let obj = snapshot as? NSObject,
-              obj.responds(to: NSSelectorFromString("visibleFrame")),
+              obj.responds(to: Self.visibleFrameSelector),
               let value = obj.value(forKey: "visibleFrame") as? NSValue else {
             return nil
         }
@@ -364,17 +423,17 @@ struct HierarchyBuilder {
         ]
     }
 
-    private func kvcDouble(_ snapshot: XCUIElementSnapshot, _ key: String) -> Double? {
+    private func kvcDouble(_ snapshot: XCUIElementSnapshot, selector: Selector, key: String) -> Double? {
         guard let obj = snapshot as? NSObject,
-              obj.responds(to: NSSelectorFromString(key)) else {
+              obj.responds(to: selector) else {
             return nil
         }
         return (obj.value(forKey: key) as? NSNumber)?.doubleValue
     }
 
-    private func kvcInt(_ snapshot: XCUIElementSnapshot, _ key: String) -> Int? {
+    private func kvcInt(_ snapshot: XCUIElementSnapshot, selector: Selector, key: String) -> Int? {
         guard let obj = snapshot as? NSObject,
-              obj.responds(to: NSSelectorFromString(key)) else {
+              obj.responds(to: selector) else {
             return nil
         }
         return (obj.value(forKey: key) as? NSNumber)?.intValue

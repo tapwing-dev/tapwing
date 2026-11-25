@@ -207,6 +207,15 @@ static NSError *TapwingExceptionError(NSException *exception) {
                            userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@: %@", exception.name ?: @"NSException", reason]}];
 }
 
+static NSMutableDictionary<NSNumber *, NSString *> *TapwingPidBundleIdCache(void) {
+    static NSMutableDictionary<NSNumber *, NSString *> *sPidToBundleId = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        sPidToBundleId = [NSMutableDictionary new];
+    });
+    return sPidToBundleId;
+}
+
 NSArray<NSDictionary<NSString *, id> *> *TapwingActiveAppsInfo(void) {
     @try {
         id axClient = TapwingSharedAXClient();
@@ -214,32 +223,72 @@ NSArray<NSDictionary<NSString *, id> *> *TapwingActiveAppsInfo(void) {
         if (axClient == nil || daemonProxy == nil) {
             return @[];
         }
+        // Always query activeApplications live so newly launched or terminated
+        // processes are observed immediately.
         NSArray *axElements = [axClient activeApplications];
-        NSMutableArray<NSDictionary<NSString *, id> *> *result = [NSMutableArray arrayWithCapacity:axElements.count];
+
+        NSMutableArray<NSNumber *> *orderedPids = [NSMutableArray arrayWithCapacity:axElements.count];
+        NSMutableSet<NSNumber *> *activePids = [NSMutableSet setWithCapacity:axElements.count];
         for (id axElement in axElements) {
             if (![axElement respondsToSelector:@selector(processIdentifier)]) {
                 continue;
             }
-            pid_t pid = [axElement processIdentifier];
-            // Share mutable state via a locked box so a late XPC reply after
-            // semaphore timeout can never race with stack/ARC teardown.
-            NSMutableDictionary<NSString *, NSString *> *box = [NSMutableDictionary new];
-            dispatch_semaphore_t sem = dispatch_semaphore_create(0);
-            [daemonProxy _XCT_requestBundleIDForPID:pid reply:^(NSString * _Nullable resolved, NSError * _Nullable error) {
-                if (error == nil && resolved != nil) {
-                    @synchronized(box) {
-                        box[@"bundleId"] = resolved;
+            NSNumber *pidKey = @([axElement processIdentifier]);
+            [orderedPids addObject:pidKey];
+            [activePids addObject:pidKey];
+        }
+
+        // Prune terminated PIDs immediately (preventing stale bundle IDs on PID
+        // reuse and bounding cache size to the active processes) and snapshot
+        // cache hits without holding the lock across XPC waits.
+        NSMutableDictionary<NSNumber *, NSString *> *sPidToBundleId = TapwingPidBundleIdCache();
+        NSMutableDictionary<NSNumber *, NSString *> *resolvedByPid = [NSMutableDictionary dictionaryWithCapacity:activePids.count];
+        @synchronized(sPidToBundleId) {
+            for (NSNumber *cachedPid in [sPidToBundleId allKeys]) {
+                if (![activePids containsObject:cachedPid]) {
+                    [sPidToBundleId removeObjectForKey:cachedPid];
+                }
+            }
+            for (NSNumber *pidKey in activePids) {
+                NSString *cachedBundleId = sPidToBundleId[pidKey];
+                if (cachedBundleId != nil) {
+                    resolvedByPid[pidKey] = cachedBundleId;
+                }
+            }
+        }
+
+        NSMutableArray<NSDictionary<NSString *, id> *> *result = [NSMutableArray arrayWithCapacity:orderedPids.count];
+        for (NSNumber *pidKey in orderedPids) {
+            NSString *bundleId = resolvedByPid[pidKey];
+            if (bundleId == nil) {
+                pid_t pid = (pid_t)[pidKey intValue];
+                // Share mutable state via a locked box so a late XPC reply after
+                // semaphore timeout can never race with stack/ARC teardown.
+                NSMutableDictionary<NSString *, NSString *> *box = [NSMutableDictionary new];
+                dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+                [daemonProxy _XCT_requestBundleIDForPID:pid reply:^(NSString * _Nullable resolved, NSError * _Nullable error) {
+                    if (error == nil && resolved != nil && resolved.length > 0 && ![resolved isEqualToString:@"unknownBundleId"]) {
+                        @synchronized(box) {
+                            box[@"bundleId"] = [resolved copy];
+                        }
+                    }
+                    dispatch_semaphore_signal(sem);
+                }];
+                dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)));
+                @synchronized(box) {
+                    bundleId = box[@"bundleId"];
+                }
+                if (bundleId != nil && bundleId.length > 0) {
+                    resolvedByPid[pidKey] = bundleId;
+                    if (pid > 0) {
+                        @synchronized(sPidToBundleId) {
+                            sPidToBundleId[pidKey] = bundleId;
+                        }
                     }
                 }
-                dispatch_semaphore_signal(sem);
-            }];
-            dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)));
-            NSString *bundleId = nil;
-            @synchronized(box) {
-                bundleId = box[@"bundleId"];
             }
             [result addObject:@{
-                @"pid": @(pid),
+                @"pid": pidKey,
                 @"bundleId": bundleId ?: @"unknownBundleId",
             }];
         }

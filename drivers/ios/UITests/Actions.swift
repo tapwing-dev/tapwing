@@ -59,7 +59,8 @@ enum Actions {
             return AppError(type: .precondition, message: "Swipe duration must be finite and non-negative").httpResponse
         }
 
-        let (width, height) = ScreenSizeHelper.physicalScreenSize()
+        let foregroundInfo = RunningApp.getForegroundAppInfo()
+        let (width, height) = ScreenSizeHelper.physicalScreenSize(foregroundInfo: foregroundInfo)
         let start = ScreenSizeHelper.orientationAwarePoint(
             width: width,
             height: height,
@@ -73,7 +74,7 @@ enum Actions {
         let orientation = ScreenSizeHelper.currentInterfaceOrientation()
         let description = "Swipe (v2) from (\(body.startX), \(body.startY)) to (\(body.endX), \(body.endY)) with \(body.duration) duration"
 
-        let application = RunningApp.getForegroundApp()
+        let application = foregroundInfo?.app
             ?? XCUIApplication(bundleIdentifier: RunningApp.springboardBundleId)
         let targetElement = application.children(matching: .any).firstMatch
 
@@ -165,7 +166,7 @@ enum Actions {
         return HttpResponse.ok()
     }
 
-    static func setOrientation(_ request: HttpRequest) -> HttpResponse {
+    static func setOrientation(_ request: HttpRequest, onOrientationChanged: (() -> Void)? = nil) -> HttpResponse {
         guard let body = try? JSONDecoder().decode(SetOrientationRequest.self, from: request.body) else {
             return AppError(type: .precondition, message: "Incorrect request body provided for setOrientation").httpResponse
         }
@@ -180,6 +181,7 @@ enum Actions {
             XCUIDevice.shared.orientation = .portraitUpsideDown
         }
         ScreenSizeHelper.invalidateCache()
+        onOrientationChanged?()
         return HttpResponse.ok()
     }
 }
