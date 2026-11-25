@@ -106,19 +106,44 @@ pub fn merge_issues(list: &mut Vec<Value>, incoming: Vec<Value>) {
     }
 }
 
-/// First issue that is not ignored.
+/// Returns `true` when `issue` is a non-blocking setup warning (such as
+/// Flutter's `Zone mismatch.` warning) that should be surfaced visibly in
+/// console/reports without failing `--app-errors fail`.
+pub fn is_setup_warning(issue: &Value) -> bool {
+    issue["kind"] == "setupWarning" || is_zone_mismatch_issue(issue)
+}
+
+fn is_zone_mismatch_issue(issue: &Value) -> bool {
+    let message = issue["message"].as_str().unwrap_or("");
+    let summary = issue["summary"].as_str().unwrap_or("");
+    message.starts_with("Zone mismatch.")
+        && (issue["kind"] == "setupWarning"
+            || summary.contains("The Flutter bindings were initialized in a different zone than is now being used.")
+            || message.contains("The Flutter bindings were initialized in a different zone than is now being used."))
+}
+
+fn setup_warning_hint(issue: &Value) -> Option<&'static str> {
+    if is_zone_mismatch_issue(issue) {
+        Some("call TapwingBinding.ensureInitialized() inside your zone/appRunner; see docs/setup.md")
+    } else {
+        None
+    }
+}
+
+/// First issue that is not ignored and not a non-blocking setup warning.
 pub fn first_blocking(issues: &[Value]) -> Option<&Value> {
-    issues.iter().find(|i| i["ignored"] != true)
+    issues.iter().find(|i| i["ignored"] != true && !is_setup_warning(i))
 }
 
 /// Console line printed under a step.
 pub fn console_line(issue: &Value) -> String {
     let kind = issue["kind"].as_str().unwrap_or("issue");
     let message = issue["message"].as_str().unwrap_or("");
+    let hint = setup_warning_hint(issue).map(|h| format!(" ({h})")).unwrap_or_default();
     let count = issue["count"].as_u64().unwrap_or(1);
     let times = if count > 1 { format!(" (×{count})") } else { String::new() };
     let ignored = if issue["ignored"] == true { " [ignored]" } else { "" };
-    format!("⚠ {kind}: {message}{times}{ignored}")
+    format!("⚠ {kind}: {message}{hint}{times}{ignored}")
 }
 
 /// Error failing a step under `--app-errors fail`. Never downgraded by
@@ -405,5 +430,38 @@ mod tests {
             ios_crash_excerpt(ips).unwrap(),
             "Runner 2026-11-21 15:40:01.00 +0100 (309)\nException: EXC_CRASH SIGABRT\nTermination: Abort trap: 6\n  Flutter abort"
         );
+    }
+
+    #[test]
+    fn setup_warning_is_non_blocking_and_includes_setup_hint() {
+        let zone_warning = json!({
+            "id": 1,
+            "kind": "setupWarning",
+            "message": "Zone mismatch.",
+            "summary": "Zone mismatch.\nThe Flutter bindings were initialized in a different zone than is now being used.",
+            "count": 1
+        });
+        assert!(is_setup_warning(&zone_warning));
+        assert!(first_blocking(std::slice::from_ref(&zone_warning)).is_none());
+        let line = console_line(&zone_warning);
+        assert!(line.starts_with("⚠ setupWarning: Zone mismatch."));
+        assert!(line.contains("docs/setup.md"), "{line}");
+
+        // Legacy driver reporting Zone mismatch as frameworkAssertion is also non-blocking.
+        let legacy_zone = json!({
+            "id": 2,
+            "kind": "frameworkAssertion",
+            "message": "Zone mismatch.",
+            "summary": "Zone mismatch.\nThe Flutter bindings were initialized in a different zone than is now being used.",
+            "count": 1
+        });
+        assert!(is_setup_warning(&legacy_zone));
+        assert!(first_blocking(std::slice::from_ref(&legacy_zone)).is_none());
+        assert!(console_line(&legacy_zone).contains("docs/setup.md"));
+
+        // Unrelated frameworkAssertion with a similar title is still blocking.
+        let other = issue(3, "frameworkAssertion", "Zone mismatch.", 1);
+        assert!(!is_setup_warning(&other));
+        assert!(first_blocking(&[zone_warning, other]).is_some());
     }
 }

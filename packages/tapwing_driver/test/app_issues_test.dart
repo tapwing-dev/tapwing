@@ -206,6 +206,70 @@ void main() {
       },
     );
 
+    test('classifies Flutter Zone mismatch error as a setupWarning', () {
+      final AppIssueLog log = AppIssueLog()..deliveryEnabled = true;
+      final AppErrorHooks hooks = AppErrorHooks(
+        log: log,
+        detectOverflows: false,
+      );
+      final FlutterExceptionHandler? framework = FlutterError.onError;
+      FlutterError.onError = (_) {};
+      hooks.install();
+      try {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: FlutterError(
+              'Zone mismatch.\n'
+              'The Flutter bindings were initialized in a different zone than is now being used.\n'
+              'It is important to use the same zone when calling `ensureInitialized` on the binding '
+              'as when calling `runApp` later.',
+            ),
+            stack: StackTrace.current,
+            context: ErrorDescription('during runApp'),
+          ),
+        );
+      } finally {
+        hooks.uninstall();
+        FlutterError.onError = framework;
+      }
+      final AppIssue issue = log.takeUndelivered().single;
+      expect(issue.kind, AppIssueKind.setupWarning);
+      expect(issue.message, 'Zone mismatch.');
+      expect(issue.summary, contains('docs/setup.md'));
+    });
+
+    test(
+      'classifies fatal Zone mismatch in PlatformDispatcher as setupWarning',
+      () {
+        final ui.PlatformDispatcher dispatcher = ui.PlatformDispatcher.instance;
+        final ui.ErrorCallback? original = dispatcher.onError;
+        final FlutterExceptionHandler? flutterOriginal = FlutterError.onError;
+        final AppIssueLog log = AppIssueLog()..deliveryEnabled = true;
+        final AppErrorHooks hooks = AppErrorHooks(
+          log: log,
+          detectOverflows: false,
+        );
+        try {
+          dispatcher.onError = null;
+          hooks.install();
+          dispatcher.onError!(
+            FlutterError(
+              'Zone mismatch.\n'
+              'The Flutter bindings were initialized in a different zone than is now being used.',
+            ),
+            StackTrace.current,
+          );
+        } finally {
+          hooks.uninstall();
+          dispatcher.onError = original;
+          FlutterError.onError = flutterOriginal;
+        }
+        final AppIssue issue = log.takeUndelivered().single;
+        expect(issue.kind, AppIssueKind.setupWarning);
+        expect(issue.summary, contains('docs/setup.md'));
+      },
+    );
+
     testWidgets('classifies image load failures', (WidgetTester tester) async {
       final AppIssueLog log = AppIssueLog()..deliveryEnabled = true;
       final AppErrorHooks hooks = AppErrorHooks(

@@ -2,6 +2,8 @@
 
 use std::path::Path;
 
+use super::entrypoint::ZoneWrapper;
+
 /// Inspects `android/app/build.gradle.kts` and `android/app/build.gradle` for `productFlavors`.
 ///
 /// Returns `None` when no Gradle file defines `productFlavors`, or `Some(names)` when a
@@ -123,6 +125,78 @@ pub(crate) fn format_next_steps(
     out.push_str("  tapwing test .maestro\n");
 
     out
+}
+
+/// Formats an actionable warning when the target Dart entrypoint creates a zone.
+pub(crate) fn format_zone_warning(
+    app_display: Option<&str>,
+    target_rel: &Path,
+    output_rel: &Path,
+    wrappers: &[ZoneWrapper],
+) -> Option<String> {
+    if wrappers.is_empty() {
+        return None;
+    }
+    let target_str = prefixed_rel(app_display, target_rel);
+    let output_str = prefixed_rel(app_display, output_rel);
+    let labels = wrappers.iter().map(|w| w.label()).collect::<Vec<_>>().join(", ");
+
+    let mut out = format!(
+        "⚠ Zone wrapper detected in {target_str} ({labels}):\n\
+         \x20 Calling `TapwingBinding.ensureInitialized()` before `app.main()` initializes the\n\
+         \x20 Flutter binding in the root zone while `runApp()` runs inside a child zone.\n\
+         \x20 In debug mode Flutter reports a \"Zone mismatch.\" warning (surfaced by Tapwing\n\
+         \x20 as a non-blocking `setupWarning`; if `BindingBase.debugZoneErrorsAreFatal = true`,\n\
+         \x20 startup will throw).\n\n\
+         \x20 To initialize Tapwing inside the same zone without changing production behavior,\n\
+         \x20 extract a shared `bootstrap()` helper in {target_str} and pass\n\
+         \x20 `TapwingBinding.ensureInitialized` from {output_str}:\n\n"
+    );
+
+    if wrappers.contains(&ZoneWrapper::SentryAppRunner) {
+        out.push_str(
+            "    // In your target entrypoint:\n\
+             \x20\x20\x20\x20Future<void> bootstrap({void Function()? ensureBinding}) async {\n\
+             \x20\x20\x20\x20\x20\x20await SentryFlutter.init(\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20(options) => options.dsn = '...',\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20appRunner: () {\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20(ensureBinding ?? WidgetsFlutterBinding.ensureInitialized)();\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20runApp(const MyApp());\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20},\n\
+             \x20\x20\x20\x20\x20\x20);\n\
+             \x20\x20\x20\x20}\n\
+             \x20\x20\x20\x20Future<void> main() => bootstrap();\n\n",
+        );
+    } else {
+        out.push_str(
+            "    // In your target entrypoint:\n\
+             \x20\x20\x20\x20Future<void> bootstrap({void Function()? ensureBinding}) async {\n\
+             \x20\x20\x20\x20\x20\x20await runZonedGuarded(() async {\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20(ensureBinding ?? WidgetsFlutterBinding.ensureInitialized)();\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20runApp(const MyApp());\n\
+             \x20\x20\x20\x20\x20\x20}, (error, stack) { /* handle error */ });\n\
+             \x20\x20\x20\x20}\n\
+             \x20\x20\x20\x20Future<void> main() => bootstrap();\n\n",
+        );
+    }
+
+    out.push_str(&format!(
+        "    // In {output_str}:\n\
+         \x20\x20\x20\x20Future<void> main() => app.bootstrap(\n\
+         \x20\x20\x20\x20\x20\x20ensureBinding: TapwingBinding.ensureInitialized,\n\
+         \x20\x20\x20\x20);\n\n\
+         \x20 See docs/setup.md#zones-and-error-wrappers for details.\n"
+    ));
+
+    Some(out)
+}
+
+fn prefixed_rel(app_display: Option<&str>, rel: &Path) -> String {
+    let rel_str = rel.to_string_lossy().replace('\\', "/");
+    match app_display {
+        Some(dir) => format!("{dir}/{rel_str}"),
+        None => rel_str,
+    }
 }
 
 fn push_unique(list: &mut Vec<String>, item: String) {

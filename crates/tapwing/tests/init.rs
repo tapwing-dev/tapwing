@@ -3,7 +3,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tapwing::init::{
-    DEFAULT_DRIVER_SUBDIR, DEFAULT_DRIVER_URL, DriverSource, FilePlan, InitArgs, apply_plan, plan_init,
+    DEFAULT_DRIVER_SUBDIR, DEFAULT_DRIVER_URL, DriverSource, FilePlan, InitArgs, ZoneWrapper, apply_plan, plan_init,
 };
 use yaml_rust2::{Yaml, YamlLoader};
 
@@ -382,4 +382,82 @@ fn driver_path_writes_relative_path_dependency() {
     let pubspec = tmp.read("app/pubspec.yaml");
     assert!(pubspec.contains("  tapwing_driver:\n    path: ../vendor/tapwing_driver\n"));
     assert!(!pubspec.contains("git:"));
+}
+
+#[test]
+fn detects_zone_wrapper_adds_comment_and_prints_actionable_warning() {
+    let tmp = TempDir::new("zone_warning");
+    let main_src = "\
+import 'dart:async';
+import 'package:flutter/widgets.dart';
+
+Future<void> main() async {
+  runZonedGuarded(
+    () => runApp(const MyApp()),
+    (error, stack) {},
+  );
+}
+";
+    tmp.write("pubspec.yaml", &minimal_flutter_pubspec("zoned_app"));
+    tmp.write("lib/main.dart", main_src);
+
+    let plan = plan_init(&default_args(tmp.path())).expect("plan zoned app");
+    assert_eq!(plan.zone_wrappers, vec![ZoneWrapper::RunZonedGuarded]);
+    let warning = plan.zone_warning().expect("expected zone warning");
+    assert!(warning.contains("runZonedGuarded"), "{warning}");
+    assert!(warning.contains("TapwingBinding.ensureInitialized"), "{warning}");
+    assert!(warning.contains("docs/setup.md"), "{warning}");
+
+    // End-to-end binary prints warning on both --dry-run and apply without touching lib/main.dart.
+    let dry = Command::new(env!("CARGO_BIN_EXE_tapwing"))
+        .arg("init")
+        .arg(tmp.path())
+        .arg("--dry-run")
+        .output()
+        .expect("run tapwing init --dry-run");
+    assert!(dry.status.success(), "stderr: {}", String::from_utf8_lossy(&dry.stderr));
+    let dry_stdout = String::from_utf8_lossy(&dry.stdout);
+    assert!(dry_stdout.contains("Zone wrapper detected"), "{dry_stdout}");
+    assert!(dry_stdout.contains("docs/setup.md"), "{dry_stdout}");
+
+    let apply =
+        Command::new(env!("CARGO_BIN_EXE_tapwing")).arg("init").arg(tmp.path()).output().expect("run tapwing init");
+    assert!(apply.status.success(), "stderr: {}", String::from_utf8_lossy(&apply.stderr));
+    let apply_stdout = String::from_utf8_lossy(&apply.stdout);
+    assert!(apply_stdout.contains("Zone wrapper detected"), "{apply_stdout}");
+    assert!(apply_stdout.contains("bootstrap"), "{apply_stdout}");
+
+    // Production entrypoint remains untouched; generated entrypoint has note + valid Dart body.
+    assert_eq!(tmp.read("lib/main.dart"), main_src);
+    let entry = tmp.read("lib/main_tapwing.dart");
+    assert!(entry.contains("// NOTE: `lib/main.dart` uses `runZonedGuarded`."), "{entry}");
+    assert!(
+        entry.contains("Future<void> main() async {\n  TapwingBinding.ensureInitialized();\n  await app.main();\n}")
+    );
+}
+
+#[test]
+fn detects_sentry_app_runner_and_prints_sentry_snippet() {
+    let tmp = TempDir::new("sentry_zone");
+    tmp.write("pubspec.yaml", &minimal_flutter_pubspec("sentry_app"));
+    tmp.write(
+        "lib/main.dart",
+        "\
+Future<void> main() async {
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = 'https://example@sentry.io/1';
+    },
+    appRunner: () => runApp(const MyApp()),
+  );
+}
+",
+    );
+
+    let plan = plan_init(&default_args(tmp.path())).expect("plan sentry app");
+    assert_eq!(plan.zone_wrappers, vec![ZoneWrapper::SentryAppRunner]);
+    let warning = plan.zone_warning().expect("expected sentry warning");
+    assert!(warning.contains("SentryFlutter.init"), "{warning}");
+    assert!(warning.contains("appRunner:"), "{warning}");
+    assert!(warning.contains("docs/setup.md"), "{warning}");
 }
