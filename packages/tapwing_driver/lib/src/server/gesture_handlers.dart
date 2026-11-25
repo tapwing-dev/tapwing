@@ -404,7 +404,10 @@ class GestureHandlers {
       settle = await _context.settle(settleTimeout);
       totalSettleUs += settleSw.elapsedMicroseconds;
 
-      changed = _context.computeHash() != beforeHash;
+      // Leaving the foreground (e.g. OS permission dialog or external sheet)
+      // proves the tap took effect even when Flutter's semantics tree hasn't
+      // changed yet; never burn kDoubleTapTimeout or re-tap over the dialog.
+      changed = settle == 'background' || _context.computeHash() != beforeHash;
       if (changed) break;
 
       // Before retrying a single tap under `retryIfNoChange`, ensure at least

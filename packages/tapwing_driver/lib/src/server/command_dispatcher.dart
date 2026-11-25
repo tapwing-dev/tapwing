@@ -78,6 +78,7 @@ class CommandDispatcher {
 
   Future<Object?> _handleConfigure(Map<String, Object?> raw) async {
     final ConfigureParams params = ConfigureParams.fromJson(raw);
+    _context.invalidateSemanticsCache();
     if (params.settlePolicy != null) {
       _context.settlePolicy = params.settlePolicy!;
     }

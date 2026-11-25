@@ -70,9 +70,13 @@ class ChannelTracker {
     );
   }
 
-  /// Waits until [pending] drops to zero, [maxWait] elapses, or [isCancelled]
-  /// returns `true`.
-  Future<void> waitForIdle(Duration maxWait, {bool Function()? isCancelled}) {
+  /// Waits until [pending] drops to zero, [maxWait] elapses, [isCancelled]
+  /// returns `true`, or [cancelSignal] completes.
+  Future<void> waitForIdle(
+    Duration maxWait, {
+    bool Function()? isCancelled,
+    Future<void>? cancelSignal,
+  }) {
     if (_pending == 0 ||
         maxWait <= Duration.zero ||
         (isCancelled != null && isCancelled())) {
@@ -88,17 +92,24 @@ class ChannelTracker {
       cancelPoll?.cancel();
     }
 
-    timer = Timer(maxWait, () {
+    void finish() {
       cleanup();
       if (!waiter.isCompleted) waiter.complete();
-    });
+    }
+
+    timer = Timer(maxWait, finish);
     if (isCancelled != null) {
       cancelPoll = Timer.periodic(_cancelPollInterval, (_) {
-        if (isCancelled()) {
-          cleanup();
-          if (!waiter.isCompleted) waiter.complete();
-        }
+        if (isCancelled()) finish();
       });
+    }
+    if (cancelSignal != null) {
+      unawaited(
+        cancelSignal.then(
+          (_) => finish(),
+          onError: (Object _, StackTrace _) => finish(),
+        ),
+      );
     }
     return waiter.future.whenComplete(cleanup);
   }
