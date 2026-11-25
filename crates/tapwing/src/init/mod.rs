@@ -12,7 +12,10 @@ use std::path::PathBuf;
 use std::process::Command;
 
 pub use detect::{DetectedApp, detect_flutter_app};
-pub use entrypoint::{MainSignature, parse_main_signature, render_entrypoint};
+pub use entrypoint::{
+    MainSignature, ZoneWrapper, detect_zone_wrappers, parse_main_signature, render_entrypoint,
+    render_entrypoint_with_zones,
+};
 pub use pubspec::{DriverSource, PubspecEdit, edit_pubspec};
 
 /// Default git repository URL used for the `tapwing_driver` dev dependency.
@@ -97,6 +100,7 @@ pub struct InitPlan {
     pub app: DetectedApp,
     pub driver_source: DriverSource,
     pub main_signature: MainSignature,
+    pub zone_wrappers: Vec<ZoneWrapper>,
     pub pubspec: FilePlan,
     pub entrypoint: FilePlan,
     pub android_flavors: Option<Vec<String>>,
@@ -131,6 +135,16 @@ impl InitPlan {
             self.android_flavors.as_deref(),
         )
     }
+
+    /// Formats the zone-mismatch setup warning when zone-creating wrappers were detected.
+    pub fn zone_warning(&self) -> Option<String> {
+        hints::format_zone_warning(
+            self.app.app_rel_display.as_deref(),
+            &self.app.target_rel,
+            &self.app.output_rel,
+            &self.zone_wrappers,
+        )
+    }
 }
 
 /// Computes all changes `tapwing init` would make without writing anything to disk.
@@ -162,7 +176,9 @@ pub fn plan_init(args: &InitArgs) -> Result<InitPlan> {
     let target_src =
         std::fs::read_to_string(&target_path).with_context(|| format!("failed to read {}", target_path.display()))?;
     let main_signature = entrypoint::parse_main_signature(&target_src);
-    let generated = entrypoint::render_entrypoint(&app.target_rel, &app.output_rel, main_signature);
+    let zone_wrappers = entrypoint::detect_zone_wrappers(&target_src);
+    let generated =
+        entrypoint::render_entrypoint_with_zones(&app.target_rel, &app.output_rel, main_signature, &zone_wrappers);
 
     let output_path = app.app_dir.join(&app.output_rel);
     let output_rel_str = app.output_rel.to_string_lossy().replace('\\', "/");
@@ -188,7 +204,7 @@ pub fn plan_init(args: &InitArgs) -> Result<InitPlan> {
 
     let android_flavors = hints::detect_android_flavors(&app.app_dir);
 
-    Ok(InitPlan { app, driver_source, main_signature, pubspec, entrypoint, android_flavors })
+    Ok(InitPlan { app, driver_source, main_signature, zone_wrappers, pubspec, entrypoint, android_flavors })
 }
 
 /// Applies a computed [`InitPlan`] to disk (and optionally runs `flutter pub get`).
@@ -243,6 +259,9 @@ pub fn run(args: InitArgs) -> Result<()> {
         if args.pub_get {
             println!("\nWould run: flutter pub get");
         }
+        if let Some(warning) = plan.zone_warning() {
+            println!("\n{warning}");
+        }
         return Ok(());
     }
 
@@ -256,6 +275,9 @@ pub fn run(args: InitArgs) -> Result<()> {
     }
     println!();
     print!("{}", plan.next_steps(args.pub_get));
+    if let Some(warning) = plan.zone_warning() {
+        println!("\n{warning}");
+    }
     Ok(())
 }
 

@@ -173,11 +173,19 @@ class AppErrorHooks {
     if (!_installed || _alreadyRecorded(details.exception)) {
       return;
     }
+    final AppIssueKind kind = classifyFlutterError(details);
+    final String rawSummary = _describe(details);
+    final String summary =
+        kind == AppIssueKind.setupWarning &&
+            isZoneMismatchError(details.exceptionAsString())
+        ? '$rawSummary\n\nTapwing setup hint: initialize TapwingBinding inside '
+              'your zone / appRunner callback (see docs/setup.md).'
+        : rawSummary;
     log.record(
-      kind: classifyFlutterError(details),
+      kind: kind,
       message: details.exceptionAsString(),
       library: details.library,
-      summary: _describe(details),
+      summary: summary,
       stack: details.stack,
     );
   }
@@ -186,16 +194,26 @@ class AppErrorHooks {
     if (!_installed || _alreadyRecorded(error)) {
       return;
     }
+    final bool isZoneMismatch =
+        error is FlutterError && isZoneMismatchError(error.toString());
+    final AppIssueKind kind = isZoneMismatch
+        ? AppIssueKind.setupWarning
+        : error is FlutterError
+        ? AppIssueKind.frameworkAssertion
+        : AppIssueKind.uncaughtError;
+    final String rawSummary = '$error';
+    final String summary = isZoneMismatch
+        ? '$rawSummary\n\nTapwing setup hint: initialize TapwingBinding inside '
+              'your zone / appRunner callback (see docs/setup.md).'
+        : rawSummary;
     log.record(
       // A framework assertion thrown from async code (`setState() called
       // after dispose()` in a timer) is still a framework assertion.
-      kind: error is FlutterError
-          ? AppIssueKind.frameworkAssertion
-          : AppIssueKind.uncaughtError,
+      kind: kind,
       message: error is FlutterError
           ? error.toString()
           : '${error.runtimeType}: $error',
-      summary: '$error',
+      summary: summary,
       stack: stack,
     );
   }

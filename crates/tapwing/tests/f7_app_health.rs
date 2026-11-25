@@ -212,3 +212,26 @@ fn dropped_issues_are_surfaced_in_summary() {
         json!({ "total": 1, "ignored": 0, "dropped": 1500, "byKind": { "uncaughtError": 1 } })
     );
 }
+
+#[test]
+fn setup_warning_does_not_fail_under_fail_policy_and_stays_visible() {
+    let mut driver = FakeDriver::new();
+    let zone_mismatch = json!({
+        "id": 1,
+        "seq": 1,
+        "kind": "setupWarning",
+        "message": "Zone mismatch.",
+        "summary": "Zone mismatch.\nThe Flutter bindings were initialized in a different zone than is now being used.",
+        "count": 1,
+        "request": 1
+    });
+    // Delivered as a late startup issue (before step 1) and never fails `--app-errors fail`.
+    driver.app_issue_batches =
+        [batch(vec![], vec![zone_mismatch]), batch(vec![], vec![]), batch(vec![], vec![])].into();
+    let res = run(&mut driver, FLOW, AppErrorsPolicy::Fail, &[]);
+    assert!(res.success, "setupWarning must not fail --app-errors fail: {:?}", res.error);
+    assert_eq!(kinds(&res.steps[0]), ["setupWarning"]);
+
+    let report = res.to_report_json("f7", Path::new("f7.yaml"), "v2");
+    assert_eq!(report["appIssueSummary"], json!({ "total": 1, "ignored": 0, "byKind": { "setupWarning": 1 } }));
+}

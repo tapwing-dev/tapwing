@@ -34,6 +34,7 @@ In the terminal, issues show up right under the step that caused them:
 | `layoutOverflow` | `FlutterError.onError` in debug; layout check after each settle in profile/release | All |
 | `buildError`, `layoutError`, `paintError`, `imageLoadError` | `FlutterError.onError` | All |
 | `frameworkAssertion` | Other Flutter errors (such as `setState() called after dispose()`) | Debug |
+| `setupWarning` | Non-blocking setup warnings such as Flutter's `Zone mismatch.` (surfaced in reports/console with a setup hint; never fails `--app-errors fail`; see [setup.md](setup.md#zones-and-error-wrappers)) | Debug |
 | `uncaughtError` | `PlatformDispatcher.onError` | All |
 | `appCrash` | App process exited mid-run (`logcat -b crash` on Android, `.ips` crash report on iOS Simulator) | All |
 

@@ -26,6 +26,10 @@ enum AppIssueKind {
 
   /// Uncaught asynchronous Dart error (`PlatformDispatcher.onError`).
   uncaughtError,
+
+  /// Non-blocking test setup warning (for example, Flutter's `Zone mismatch.`
+  /// when `TapwingBinding.ensureInitialized()` runs outside the app's zone).
+  setupWarning,
 }
 
 /// One deduplicated app issue as sent to the host CLI.
@@ -255,9 +259,20 @@ class AppIssueLog {
       : '${text.substring(0, maxSummaryChars)}…';
 }
 
+/// Returns true when [message] is Flutter's `BindingBase.debugCheckZone`
+/// `"Zone mismatch."` diagnostic report.
+bool isZoneMismatchError(String message) =>
+    message.contains('Zone mismatch.') &&
+    message.contains(
+      'The Flutter bindings were initialized in a different zone than is now being used.',
+    );
+
 /// Classifies a [FlutterErrorDetails] report into an [AppIssueKind].
 AppIssueKind classifyFlutterError(FlutterErrorDetails details) {
   final String message = details.exceptionAsString();
+  if (isZoneMismatchError(message)) {
+    return AppIssueKind.setupWarning;
+  }
   final String library = details.library ?? '';
   final String context = details.context?.toDescription() ?? '';
   if (library == 'rendering library' && message.contains(' overflowed by ')) {
