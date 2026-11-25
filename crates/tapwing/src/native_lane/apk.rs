@@ -13,7 +13,7 @@ use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 
 use crate::device::adb_client::AdbClient;
-use crate::process::{Output, run_with_timeout, run_with_timeout_or_cancel};
+use crate::process::{Output, run_cleanup_with_timeout, run_with_timeout, run_with_timeout_or_cancel};
 
 /// Deadline of a short `adb` CLI call (`forward`, `uninstall`, a `shell`
 /// fallback while the smartsocket is down). It includes the few seconds the
@@ -57,6 +57,12 @@ impl Adb {
     /// returns stdout, errors carry stderr.
     pub fn run(&self, args: &[&str]) -> Result<String> {
         checked_stdout(args, run_with_timeout(&mut self.command(args), ADB_COMMAND_TIMEOUT)?)
+    }
+
+    /// Runs a bounded `adb` teardown command from `Drop`, even when a signal is
+    /// already pending.
+    pub fn run_cleanup(&self, args: &[&str]) -> Result<String> {
+        checked_stdout(args, run_cleanup_with_timeout(&mut self.command(args), ADB_COMMAND_TIMEOUT)?)
     }
 
     /// `adb install` of `apk` (`-r`: replace, `-t`: allow test-only packages,

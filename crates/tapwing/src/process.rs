@@ -46,32 +46,43 @@ impl Output {
 ///
 /// The child is killed and reaped, and an error naming the command is
 /// returned, when it is still running after `timeout` or when `SIGINT` /
-/// `SIGTERM` arrives while it runs (the error then carries
+/// `SIGTERM` arrives before or while it runs (the error then carries
 /// [`crate::interrupt::InterruptedError`]).
 ///
-/// A signal that was already pending when the call started does not abort it:
-/// such calls are the cleanup the interrupt itself triggered (RAII guards
-/// restoring the device while the stack unwinds), so they keep their full
-/// deadline. A second signal still exits the process immediately.
-///
-/// Never panics and starts no threads, so it is safe to call from `Drop`.
+/// For teardown calls inside `Drop` that must still run after an interrupt,
+/// use [`run_cleanup_with_timeout`].
 pub fn run_with_timeout(cmd: &mut Command, timeout: Duration) -> Result<Output> {
-    run_cancellable(cmd, timeout, None)
+    run_cancellable(cmd, timeout, None, false)
+}
+
+/// [`run_with_timeout`] for `Drop` / teardown guards: keeps its bounded
+/// deadline even when `SIGINT` / `SIGTERM` is already pending so cleanup still
+/// restores the device (a second signal exits the process immediately).
+pub fn run_cleanup_with_timeout(cmd: &mut Command, timeout: Duration) -> Result<Output> {
+    run_cancellable(cmd, timeout, None, true)
 }
 
 /// [`run_with_timeout`] that also kills the child once `cancel` is set (the
 /// flag background warm-up threads are stopped with).
 pub fn run_with_timeout_or_cancel(cmd: &mut Command, timeout: Duration, cancel: &AtomicBool) -> Result<Output> {
-    run_cancellable(cmd, timeout, Some(cancel))
+    run_cancellable(cmd, timeout, Some(cancel), false)
 }
 
-fn run_cancellable(cmd: &mut Command, timeout: Duration, cancel: Option<&AtomicBool>) -> Result<Output> {
-    let cleanup_after_interrupt = crate::interrupt::is_interrupted();
+fn run_cancellable(
+    cmd: &mut Command,
+    timeout: Duration,
+    cancel: Option<&AtomicBool>,
+    allow_after_interrupt: bool,
+) -> Result<Output> {
+    if !allow_after_interrupt {
+        crate::interrupt::check()?;
+    }
+    let ignore_interrupt = allow_after_interrupt && crate::interrupt::is_interrupted();
     run_polled(cmd, timeout, &mut |pause| {
         if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
             return Err(anyhow!("cancelled"));
         }
-        if cleanup_after_interrupt {
+        if ignore_interrupt {
             std::thread::sleep(pause);
             return Ok(());
         }

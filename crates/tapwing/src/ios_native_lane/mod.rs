@@ -397,7 +397,7 @@ impl Drop for RunnerGuard {
         // Bounded, so a wedged simulator cannot hold the exit.
         let mut terminate = Command::new("xcrun");
         terminate.args(["simctl", "terminate", &self.udid, self.runner_bundle_id]);
-        let _ = crate::process::run_with_timeout(&mut terminate, crate::device::ios::SIMCTL_TERMINATE_TIMEOUT);
+        let _ = crate::process::run_cleanup_with_timeout(&mut terminate, crate::device::ios::SIMCTL_TERMINATE_TIMEOUT);
         let _ = fs::remove_dir_all(&self.dir);
     }
 }
