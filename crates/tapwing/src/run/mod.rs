@@ -119,6 +119,9 @@ pub struct DeviceFlutterBackend<'a> {
     native_at_issue_take: u32,
     /// Flow start, to pick crash reports written during this flow.
     started: SystemTime,
+    /// `Driver::epoch()` at the most recent intentional `stopApp`/`killApp`/`clearState`
+    /// for `flow_app`, so intentional stops are never misdiagnosed as crashes.
+    intentionally_stopped_epoch: Option<u64>,
     /// F8b: lane counters at the last [`FlowDriver::trace_step`].
     trace_lanes: LaneStats,
     /// F8b: whether the driver confirmed its HTTP log during this flow.
@@ -144,19 +147,34 @@ impl<'a> DeviceFlutterBackend<'a> {
             cold_app: None,
             native_at_issue_take: 0,
             started: SystemTime::now(),
+            intentionally_stopped_epoch: None,
             trace_lanes: LaneStats::default(),
             trace_http_seen: false,
         }
     }
 
+    fn mark_intentionally_stopped(&mut self, app_id: &str) {
+        if app_id == self.flow_app || self.flow_app.is_empty() {
+            self.intentionally_stopped_epoch = Some(self.drv.epoch());
+        }
+    }
+
+    fn is_intentionally_stopped(&self) -> bool {
+        self.intentionally_stopped_epoch == Some(self.drv.epoch())
+    }
+
     /// Android: `appCrash` when the app process is gone, with the crash
     /// buffer excerpt for its last PID (Java exception or native tombstone).
     fn diagnose_android_crash(&mut self) -> Option<Value> {
+        if self.is_intentionally_stopped() {
+            return None;
+        }
         let package = self.flow_app.clone();
         if package.is_empty() {
             return None;
         }
         let pid = self.drv.last_pid();
+        let started = self.started;
         let android = self.dev.as_android()?;
         let running = |a: &crate::device::android::Android| a.pid_of(&package).ok().flatten().is_some();
         // A tombstone takes a moment to be written; poll briefly.
@@ -168,10 +186,11 @@ impl<'a> DeviceFlutterBackend<'a> {
             // A different (relaunched) process, or the same one, is no crash
             // of the process we talked to unless its crash is in the log.
             let alive = running(android);
+            let elapsed = SystemTime::now().duration_since(started).unwrap_or_default();
             let excerpt = android
-                .shell("logcat -b crash -d -v threadtime")
+                .shell("echo \"TAPWING_NOW:$(date '+%Y %m %d %H %M %S')\" && logcat -b crash -d -v threadtime")
                 .ok()
-                .and_then(|log| crate::app_health::android_crash_excerpt(&log, &package, pid));
+                .and_then(|out| parse_android_crash_probe(&out, &package, pid, elapsed));
             if let Some(e) = excerpt {
                 return Some(crate::app_health::crash_issue("App crashed", Some(&e)));
             }
@@ -391,6 +410,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     fn stop_app(&mut self, app_id: &str) -> Result<Value> {
         self.cold_app = None;
         self.dev.stop_app(app_id)?;
+        self.mark_intentionally_stopped(app_id);
         self.drv.disconnect();
         Ok(Value::Null)
     }
@@ -398,6 +418,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     fn kill_app(&mut self, app_id: &str) -> Result<Value> {
         self.cold_app = None;
         self.dev.kill_app(app_id)?;
+        self.mark_intentionally_stopped(app_id);
         self.drv.disconnect();
         Ok(Value::Null)
     }
@@ -405,6 +426,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     fn clear_state(&mut self, app_id: &str) -> Result<Value> {
         self.cold_app = None;
         self.dev.clear_state(app_id)?;
+        self.mark_intentionally_stopped(app_id);
         self.drv.disconnect();
         Ok(Value::Null)
     }
@@ -760,9 +782,14 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
     }
 
     fn diagnose_crash(&mut self) -> Option<Value> {
-        // Only after the connection to the app dropped: a failed assertion on
+        // Only after the connection to the app dropped (and never after an
+        // intentional stopApp / killApp / clearState): a failed assertion on
         // a live app is not a crash.
-        if !self.opts.app_errors.enabled() || self.is_blackbox() || self.drv.is_connected() {
+        if !self.opts.app_errors.enabled()
+            || self.is_blackbox()
+            || self.drv.is_connected()
+            || self.is_intentionally_stopped()
+        {
             return None;
         }
         match self.platform() {
@@ -868,5 +895,66 @@ pub(super) fn add_unsupported_permissions_warning(res: &mut Value, unsupported: 
             "permissions not settable on the iOS simulator via simctl (ignored): {}",
             unsupported.join(", ")
         ));
+    }
+}
+
+/// Parses the `TAPWING_NOW:` device clock header + `logcat -b crash -d -v threadtime`
+/// output and filters crashes to those occurring at or after `elapsed` before now.
+fn parse_android_crash_probe(output: &str, package: &str, pid: Option<i64>, elapsed: Duration) -> Option<String> {
+    let mut clock = None;
+    let mut log = output;
+    if let Some((first, rest)) = output.split_once('\n')
+        && let Some(raw_dt) = first.trim().strip_prefix("TAPWING_NOW:")
+    {
+        clock = crate::app_health::parse_device_datetime(raw_dt);
+        log = rest;
+    } else if let Some(raw_dt) = output.trim().strip_prefix("TAPWING_NOW:") {
+        clock = crate::app_health::parse_device_datetime(raw_dt);
+        log = "";
+    }
+    let elapsed_ms = i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX);
+    let since = clock.map(|c| (c.epoch_ms.saturating_sub(elapsed_ms), c));
+    crate::app_health::android_crash_excerpt(log, package, pid, since)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn android_crash_probe_rejects_old_crashes_and_allows_recent_ones() {
+        let log = "\
+TAPWING_NOW:2026 11 25 13 15 00
+--------- beginning of crash
+11-25 13:10:00.000  1111  1111 E AndroidRuntime: FATAL EXCEPTION: main
+11-25 13:10:00.000  1111  1111 E AndroidRuntime: Process: dev.tapwing.app, PID: 1111
+11-25 13:10:00.000  1111  1111 E AndroidRuntime: java.lang.RuntimeException: old crash
+";
+        // Flow started 5 s ago (13:14:55): 13:10:00 crash is rejected whether PID is None or Some(1111).
+        assert!(parse_android_crash_probe(log, "dev.tapwing.app", None, Duration::from_secs(5)).is_none());
+        assert!(parse_android_crash_probe(log, "dev.tapwing.app", Some(1111), Duration::from_secs(5)).is_none());
+
+        let with_new = format!(
+            "{log}11-25 13:14:58.250  2222  2222 E AndroidRuntime: FATAL EXCEPTION: main\n\
+             11-25 13:14:58.250  2222  2222 E AndroidRuntime: Process: dev.tapwing.app, PID: 2222\n\
+             11-25 13:14:58.250  2222  2222 E AndroidRuntime: java.lang.IllegalStateException: new crash\n"
+        );
+        let excerpt = parse_android_crash_probe(&with_new, "dev.tapwing.app", None, Duration::from_secs(5)).unwrap();
+        assert!(excerpt.contains("new crash"), "{excerpt}");
+        assert!(!excerpt.contains("old crash"), "{excerpt}");
+
+        // With known PID 2222, matches new crash; with stale PID 1111, rejects.
+        assert!(parse_android_crash_probe(&with_new, "dev.tapwing.app", Some(2222), Duration::from_secs(5)).is_some());
+        assert!(parse_android_crash_probe(&with_new, "dev.tapwing.app", Some(1111), Duration::from_secs(5)).is_none());
+    }
+
+    #[test]
+    fn android_crash_probe_without_clock_requires_known_pid() {
+        let log = "\
+11-25 13:10:00.000  1111  1111 E AndroidRuntime: FATAL EXCEPTION: main
+11-25 13:10:00.000  1111  1111 E AndroidRuntime: Process: dev.tapwing.app, PID: 1111
+";
+        assert!(parse_android_crash_probe(log, "dev.tapwing.app", None, Duration::from_secs(5)).is_none());
+        assert!(parse_android_crash_probe(log, "dev.tapwing.app", Some(1111), Duration::from_secs(5)).is_some());
     }
 }

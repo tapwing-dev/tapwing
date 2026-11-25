@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use crate::app_health::{self as health, AppErrorsPolicy};
-use crate::backend::{FlowDriver, is_maestro_error};
+use crate::backend::{FlowDriver, is_maestro_error, is_optional_downgradable};
 use crate::failure::{self, FailureDiagnostics};
 use crate::flow::ir::MaestroCommand;
 
@@ -190,7 +190,8 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
 
     /// F8: captures rich diagnostics (suggestions, compact UI tree, failure
     /// screenshot, and full hierarchy file) once at the failing leaf step.
-    /// Skipped during intermediate `retry` attempts that will be retried.
+    /// Skipped during intermediate `retry` attempts that will be retried, and
+    /// for downgradable errors inside `optional: true` `runFlow`/`repeat`.
     pub(super) fn capture_failure_diagnostics(
         &mut self,
         evaluated_cmd: &MaestroCommand,
@@ -201,7 +202,9 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
         if self.failure_captured {
             return None;
         }
-        if self.retry_attempts_remaining > 0 && is_maestro_error(err) {
+        if (self.retry_attempts_remaining > 0 && is_maestro_error(err))
+            || (self.optional_depth > 0 && is_optional_downgradable(err))
+        {
             return None;
         }
         self.failure_captured = true;

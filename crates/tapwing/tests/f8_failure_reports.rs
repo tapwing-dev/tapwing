@@ -208,3 +208,73 @@ appId: dev.tapwing.sample_app
 
     let _ = std::fs::remove_dir_all(&out);
 }
+
+#[test]
+fn optional_run_flow_failure_does_not_suppress_later_real_failure_diagnostics() {
+    let mut driver = make_driver();
+    let out = temp_dir("optional_runflow_then_real_fail");
+    let source = "\
+appId: dev.tapwing.sample_app
+---
+- runFlow:
+    optional: true
+    commands:
+      - tapOn: Missing Optional Button
+- tapOn: Sign in
+";
+    let res = run_flow(&mut driver, "checkout/smoke.yaml", source, Some(&out));
+    assert!(!res.success);
+
+    // Optional runFlow was downgraded to a warning and produced no failure artifacts.
+    let warned = res.steps.iter().find(|s| s["command"] == "runFlow").expect("runFlow step");
+    assert_eq!(warned["status"], "warned");
+    assert!(res.steps.iter().filter(|s| s["status"] == "warned").all(|s| s.get("failure").is_none()));
+
+    // The real failing step after the optional runFlow MUST get full diagnostics.
+    let real_fail = res
+        .steps
+        .iter()
+        .find(|s| {
+            s["status"] == "failed"
+                && s["command"] == "tapOn"
+                && s["description"].as_str().is_some_and(|d| d.contains("Sign in"))
+        })
+        .expect("real failing tapOn step");
+    let failure = &real_fail["failure"];
+    assert!(failure.is_object(), "expected failure diagnostics on real failure: {real_fail}");
+    assert_eq!(failure["suggestions"][0]["value"], "Sign in with Google");
+    assert!(failure["hierarchy"].as_str().unwrap().contains("Sign in with Google"));
+
+    let shot_path = Path::new(failure["screenshot"].as_str().expect("screenshot path"));
+    assert!(shot_path.exists());
+    let tree_path = Path::new(failure["hierarchyFile"].as_str().expect("hierarchyFile path"));
+    assert!(tree_path.exists());
+
+    // Exactly 1 PNG + 1 hierarchy.txt written (none from the optional runFlow).
+    let files: Vec<_> = std::fs::read_dir(out.join("failures")).unwrap().flatten().collect();
+    assert_eq!(files.len(), 2, "expected only 1 PNG + 1 hierarchy.txt from the real failure");
+
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+#[test]
+fn non_downgradable_error_inside_optional_run_flow_still_captures_diagnostics() {
+    let mut driver = make_driver();
+    let out = temp_dir("optional_runflow_js_err");
+    let source = "\
+appId: dev.tapwing.sample_app
+---
+- runFlow:
+    optional: true
+    commands:
+      - evalScript: ${nope.boom()}
+";
+    let res = run_flow(&mut driver, "opt_js.yaml", source, Some(&out));
+    assert!(!res.success);
+
+    let with_diag: Vec<&Value> = res.steps.iter().filter(|s| s.get("failure").is_some()).collect();
+    assert_eq!(with_diag.len(), 1, "expected failure diagnostics on non-downgradable JS error: {:?}", res.steps);
+    assert_eq!(with_diag[0]["command"], "evalScript");
+
+    let _ = std::fs::remove_dir_all(&out);
+}

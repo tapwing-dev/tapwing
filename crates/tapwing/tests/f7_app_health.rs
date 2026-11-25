@@ -180,19 +180,110 @@ fn clean_flows_have_no_summary() {
 }
 
 #[test]
-fn crash_behind_a_plain_connection_error_is_named_too() {
-    // The real driver reports a dropped socket as a plain error, not a
-    // TransportError; the backend only diagnoses once the connection is gone.
+fn non_transport_errors_never_trigger_crash_diagnosis() {
+    // Normal command/selector failures (ELEMENT_NOT_FOUND or plain non-transport errors)
+    // must not invoke crash diagnosis, even if a lingering crash is available.
     let mut driver = FakeDriver::new();
-    driver.command_error = Some(Box::new(|| anyhow::anyhow!("app closed the connection during `tapOn`")));
-    driver.crash = Some(crash_issue("App crashed", Some("AndroidRuntime: java.lang.IllegalStateException: boom")));
+    driver.crash = Some(crash_issue("App crashed", Some("AndroidRuntime: java.lang.IllegalStateException: old")));
+    let res = run(&mut driver, "appId: a\n---\n- tapOn: MissingElement\n", AppErrorsPolicy::Report, &[]);
+    assert!(!res.success);
+    let err_str = res.error.as_ref().unwrap().to_string();
+    assert!(!err_str.contains("App crashed"), "unexpected crash attribution: {err_str}");
+    assert!(res.steps[0].get("appIssues").is_none());
+
+    let mut driver = FakeDriver::new();
+    driver.command_error = Some(Box::new(|| anyhow::anyhow!("plain runtime error")));
+    driver.crash = Some(crash_issue("App crashed", Some("AndroidRuntime: java.lang.IllegalStateException: old")));
     let res = run(&mut driver, "appId: a\n---\n- back\n", AppErrorsPolicy::Report, &[]);
     assert!(!res.success);
+    assert_eq!(res.steps[0]["error"], "plain runtime error");
+    assert!(res.steps[0].get("appIssues").is_none());
+}
+
+#[test]
+fn crash_on_rpc_silence_error_is_diagnosed() {
+    let mut driver = FakeDriver::new();
+    driver.command_error = Some(Box::new(|| {
+        tapwing::driver::RpcSilenceError { method: "back".into(), silence: std::time::Duration::from_secs(10) }.into()
+    }));
+    driver.crash = Some(crash_issue(
+        "App crashed",
+        Some("AndroidRuntime: FATAL EXCEPTION: main\nAndroidRuntime: java.lang.IllegalStateException: boom"),
+    ));
+    let res = run(&mut driver, "appId: a\n---\n- back\n", AppErrorsPolicy::Report, &[]);
+    assert!(!res.success);
+    let err = res.error.unwrap();
+    assert!(tapwing::backend::is_transport_error(&err));
     assert_eq!(
         res.steps[0]["error"],
         "App crashed during `back`: AndroidRuntime: java.lang.IllegalStateException: boom"
     );
     assert_eq!(kinds(&res.steps[0]), ["appCrash"]);
+}
+
+#[test]
+fn intentional_app_stop_suppresses_crash_diagnosis_until_relaunch() {
+    for stop_cmd in
+        ["stopApp: dev.tapwing.sample_app", "killApp: dev.tapwing.sample_app", "clearState: dev.tapwing.sample_app"]
+    {
+        let mut driver = FakeDriver::new();
+        driver.add_installed_app("dev.tapwing.sample_app");
+        driver.command_error = Some(Box::new(|| TransportError("app is not connected".into()).into()));
+        driver.crash = Some(crash_issue("App crashed", Some("AndroidRuntime: java.lang.IllegalStateException: old")));
+
+        let stopped_flow = format!("appId: dev.tapwing.sample_app\n---\n- launchApp\n- {stop_cmd}\n- back\n");
+        let res = run(&mut driver, &stopped_flow, AppErrorsPolicy::Report, &[]);
+        assert!(!res.success);
+        let err = res.error.unwrap();
+        assert!(err.is::<TransportError>());
+        assert_eq!(err.to_string(), "app is not connected", "stop cmd `{stop_cmd}` should skip crash diagnosis");
+
+        // Relaunching clears the intentional-stop guard so a subsequent crash IS diagnosed.
+        let relaunched_flow =
+            format!("appId: dev.tapwing.sample_app\n---\n- launchApp\n- {stop_cmd}\n- launchApp\n- back\n");
+        let res = run(&mut driver, &relaunched_flow, AppErrorsPolicy::Report, &[]);
+        assert!(!res.success);
+        let err = res.error.unwrap();
+        assert!(err.is::<TransportError>());
+        assert!(err.to_string().contains("App crashed during `back`"), "{err}");
+    }
+}
+
+#[test]
+fn transport_errors_bypass_retry_and_optional_downgrade() {
+    for make_err in [
+        || TransportError("app is not connected".into()).into(),
+        || TransportError("invalid JSON from driver during `back`: expected value".into()).into(),
+    ] as [fn() -> anyhow::Error; 2]
+    {
+        let mut driver = FakeDriver::new();
+        driver.command_error = Some(Box::new(make_err));
+        let source = "\
+appId: dev.tapwing.sample_app
+---
+- retry:
+    maxRetries: 2
+    commands:
+      - back
+";
+        let res = run(&mut driver, source, AppErrorsPolicy::Report, &[]);
+        assert!(!res.success);
+        assert!(res.error.as_ref().unwrap().is::<TransportError>());
+        // Must escape immediately on the first attempt without retrying or recording failure diagnostics.
+        assert!(res.steps.is_empty(), "expected no retried/failed steps recorded: {:?}", res.steps);
+
+        let opt_source = "\
+appId: dev.tapwing.sample_app
+---
+- runFlow:
+    optional: true
+    commands:
+      - back
+";
+        let res = run(&mut driver, opt_source, AppErrorsPolicy::Report, &[]);
+        assert!(!res.success);
+        assert!(res.error.as_ref().unwrap().is::<TransportError>());
+    }
 }
 
 #[test]

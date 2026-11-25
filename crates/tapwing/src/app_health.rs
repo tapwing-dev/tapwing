@@ -233,30 +233,183 @@ pub fn crash_headline(crash: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
-/// Extracts the crash block for `pid` from `adb logcat -b crash -d` output
-/// (Java `FATAL EXCEPTION` or native `Fatal signal` + tombstone), without
+/// Device wall-clock date/time (`YYYY MM DD HH MM SS` from `date`) used to
+/// resolve `MM-DD` years and filter `logcat -v threadtime` entries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DeviceClock {
+    pub year: i32,
+    pub epoch_ms: i64,
+}
+
+/// Parses `date '+%Y %m %d %H %M %S'` output from an Android device.
+pub fn parse_device_datetime(raw: &str) -> Option<DeviceClock> {
+    let mut parts = raw.split_whitespace();
+    let year: i32 = parts.next()?.parse().ok()?;
+    let month: u32 = parts.next()?.parse().ok()?;
+    let day: u32 = parts.next()?.parse().ok()?;
+    let hour: u32 = parts.next()?.parse().ok()?;
+    let min: u32 = parts.next()?.parse().ok()?;
+    let sec: u32 = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    let epoch_ms = civil_to_ms(year, month, day, hour, min, sec, 0)?;
+    Some(DeviceClock { year, epoch_ms })
+}
+
+/// Parses the `MM-DD HH:MM:SS.mmm` timestamp of a `logcat -v threadtime` line
+/// into epoch milliseconds using `ref_clock` to resolve the year across Dec/Jan
+/// boundaries.
+pub fn parse_logcat_threadtime_ms(line: &str, ref_clock: DeviceClock) -> Option<i64> {
+    let mut parts = line.split_whitespace();
+    let date_part = parts.next()?;
+    let time_part = parts.next()?;
+    let (mm, dd) = date_part.split_once('-')?;
+    if mm.len() != 2 || dd.len() != 2 {
+        return None;
+    }
+    let month: u32 = mm.parse().ok()?;
+    let day: u32 = dd.parse().ok()?;
+
+    let (hh_mm_ss, frac) = match time_part.split_once('.') {
+        Some((t, f)) => (t, Some(f)),
+        None => (time_part, None),
+    };
+    let mut hms = hh_mm_ss.split(':');
+    let hour: u32 = hms.next()?.parse().ok()?;
+    let min: u32 = hms.next()?.parse().ok()?;
+    let sec: u32 = hms.next()?.parse().ok()?;
+    if hms.next().is_some() {
+        return None;
+    }
+    let ms = match frac {
+        Some(f) if !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit()) => {
+            let mut val = 0u32;
+            let mut weight = 100u32;
+            for b in f.bytes().take(3) {
+                val += u32::from(b - b'0') * weight;
+                weight /= 10;
+            }
+            val
+        }
+        Some(_) => return None,
+        None => 0,
+    };
+
+    // Pick the candidate year closest to `ref_clock` without placing the log
+    // entry more than 1 day in the future (handles Dec 31 -> Jan 1 rollover and
+    // rejects old entries from later months of the previous year).
+    const ONE_DAY_MS: i64 = 86_400_000;
+    [ref_clock.year, ref_clock.year - 1, ref_clock.year + 1]
+        .into_iter()
+        .filter_map(|y| civil_to_ms(y, month, day, hour, min, sec, ms))
+        .filter(|&ts| ts <= ref_clock.epoch_ms.saturating_add(ONE_DAY_MS))
+        .max()
+}
+
+fn is_leap_year(year: i32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+fn max_day_in_month(year: i32, month: u32) -> Option<u32> {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => Some(31),
+        4 | 6 | 9 | 11 => Some(30),
+        2 => Some(if is_leap_year(year) { 29 } else { 28 }),
+        _ => None,
+    }
+}
+
+/// Days since 1970-01-01 (proleptic Gregorian calendar, Howard Hinnant).
+fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
+    let y = i64::from(year) - i64::from(month <= 2);
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let m = i64::from(month);
+    let d = i64::from(day);
+    let doy = (153 * (m + if m > 2 { -3 } else { 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+fn civil_to_ms(year: i32, month: u32, day: u32, hour: u32, min: u32, sec: u32, ms: u32) -> Option<i64> {
+    let max_day = max_day_in_month(year, month)?;
+    if !(1..=max_day).contains(&day) || hour > 23 || min > 59 || sec > 60 || ms > 999 {
+        return None;
+    }
+    let days = days_from_civil(year, month, day);
+    let secs = days * 86_400 + i64::from(hour) * 3600 + i64::from(min) * 60 + i64::from(sec);
+    Some(secs * 1000 + i64::from(ms))
+}
+
+fn line_matches_package_process(line: &str, package: &str) -> bool {
+    let needle = format!("Process: {package}");
+    let Some(idx) = line.find(&needle) else {
+        return false;
+    };
+    let after = &line[idx + needle.len()..];
+    after.is_empty() || after.starts_with(',') || after.starts_with(char::is_whitespace)
+}
+
+fn block_names_other_package(lines: &[&str], idx: usize, package: &str) -> bool {
+    let end = (idx + 4).min(lines.len());
+    lines[idx..end].iter().any(|l| {
+        (l.contains("Process: ") && !line_matches_package_process(l, package))
+            || (l.contains(">>> ") && l.contains(" <<<") && !l.contains(&format!(">>> {package} <<<")))
+    })
+}
+
+fn line_matches_package_pid(lines: &[&str], idx: usize, package: &str, pid_str: &str) -> bool {
+    let line = lines[idx];
+    let java_needle = format!("Process: {package}, PID: {pid_str}");
+    if let Some(pos) = line.find(&java_needle) {
+        let after = &line[pos + java_needle.len()..];
+        if after.as_bytes().first().is_none_or(|b| !b.is_ascii_digit()) {
+            return true;
+        }
+    }
+    if line.contains(&format!("pid: {pid_str},")) && line.contains(&format!(">>> {package} <<<")) {
+        return true;
+    }
+    log_pid(line) == Some(pid_str)
+        && (line.contains("FATAL EXCEPTION") || line.contains("Fatal signal"))
+        && !block_names_other_package(lines, idx, package)
+}
+
+/// Extracts the crash block for `package` from `adb logcat -b crash -d -v threadtime`
+/// output (Java `FATAL EXCEPTION` or native `Fatal signal` + tombstone), without
 /// timestamps, capped at 30 lines.
-pub fn android_crash_excerpt(logcat: &str, package: &str, pid: Option<i64>) -> Option<String> {
+///
+/// Requires either a known `pid` or a `since` time window `(min_epoch_ms, device_now)`
+/// so crashes lingering in the ring buffer from before the flow started cannot
+/// be misattributed.
+pub fn android_crash_excerpt(
+    logcat: &str,
+    package: &str,
+    pid: Option<i64>,
+    since: Option<(i64, DeviceClock)>,
+) -> Option<String> {
+    if pid.is_none() && since.is_none() {
+        return None;
+    }
     let lines: Vec<&str> = logcat.lines().collect();
     let pid_text = pid.map(|p| p.to_string());
-    // With a known PID, only that process's crash counts (an older crash of
-    // the same package stays in the crash buffer).
-    let belongs = |line: &str| match pid_text.as_deref() {
-        Some(p) => {
-            line.contains(&format!("Process: {package}, PID: {p}"))
-                || line.contains(&format!("pid: {p},"))
-                || (log_pid(line) == Some(p) && (line.contains("FATAL EXCEPTION") || line.contains("Fatal signal")))
-        }
-        None => line.contains(&format!("Process: {package}")) || line.contains(&format!(">>> {package} <<<")),
+    let is_recent = |line: &str| match since {
+        None => true,
+        Some((min_ms, ref_clock)) => parse_logcat_threadtime_ms(line, ref_clock).is_some_and(|ts| ts >= min_ms),
     };
-    let hit = lines.iter().rposition(|l| belongs(l))?;
+    let belongs = |idx: usize| match pid_text.as_deref() {
+        Some(p) => line_matches_package_pid(&lines, idx, package, p),
+        None => line_matches_package_process(lines[idx], package) || lines[idx].contains(&format!(">>> {package} <<<")),
+    };
+    let hit = (0..lines.len()).rev().find(|&i| belongs(i) && is_recent(lines[i]))?;
     // Start at the block header just before the match (`FATAL EXCEPTION`
     // precedes `Process:`; `*** ***` precedes the tombstone `pid:` line).
     let start = (hit.saturating_sub(3)..=hit)
         .rev()
         .find(|&i| {
             let l = lines[i];
-            l.contains("FATAL EXCEPTION") || l.contains("*** *** ***") || l.contains("Fatal signal")
+            is_recent(l) && (l.contains("FATAL EXCEPTION") || l.contains("*** *** ***") || l.contains("Fatal signal"))
         })
         .unwrap_or(hit);
     let excerpt: Vec<String> = lines[start..].iter().take(30).map(|l| strip_logcat_prefix(l).to_string()).collect();
@@ -393,17 +546,32 @@ mod tests {
 11-21 15:40:01.100  4321  4321 E AndroidRuntime: java.lang.IllegalStateException: boom
 11-21 15:40:01.100  4321  4321 E AndroidRuntime: \tat dev.tapwing.sample_app.MainActivity.crash(MainActivity.kt:12)
 ";
-        let excerpt = android_crash_excerpt(log, "dev.tapwing.sample_app", Some(4321)).unwrap();
+        let clock = parse_device_datetime("2026 11 21 15 40 02").unwrap();
+        let after_old = parse_device_datetime("2026 11 21 15 40 01").unwrap();
+        let excerpt = android_crash_excerpt(log, "dev.tapwing.sample_app", Some(4321), None).unwrap();
         assert_eq!(
             excerpt,
             "AndroidRuntime: FATAL EXCEPTION: main\nAndroidRuntime: Process: dev.tapwing.sample_app, PID: 4321\n\
              AndroidRuntime: java.lang.IllegalStateException: boom\n\
              AndroidRuntime: \tat dev.tapwing.sample_app.MainActivity.crash(MainActivity.kt:12)"
         );
-        assert!(android_crash_excerpt(log, "dev.tapwing.missing", Some(1)).is_none());
+        assert!(android_crash_excerpt(log, "dev.tapwing.missing", Some(1), None).is_none());
         // An older crash of the same package (another PID) is not this crash.
-        assert!(android_crash_excerpt(log, "dev.tapwing.sample_app", Some(5555)).is_none());
-        assert!(android_crash_excerpt(log, "dev.tapwing.sample_app", None).is_some());
+        assert!(android_crash_excerpt(log, "dev.tapwing.sample_app", Some(5555), None).is_none());
+        // Prefix of PID or package name must not match.
+        assert!(android_crash_excerpt(log, "dev.tapwing.sample_app", Some(43), None).is_none());
+        assert!(android_crash_excerpt(log, "dev.tapwing", None, Some((after_old.epoch_ms, clock))).is_none());
+        // Unknown PID without timestamp boundary refuses to match lingering logcat crashes.
+        assert!(android_crash_excerpt(log, "dev.tapwing.sample_app", None, None).is_none());
+        // Unknown PID with timestamp boundary matches only crashes at/after flow start.
+        assert!(
+            android_crash_excerpt(log, "dev.tapwing.sample_app", None, Some((after_old.epoch_ms, clock))).is_some()
+        );
+        assert!(android_crash_excerpt(log, "dev.tapwing.sample_app", None, Some((clock.epoch_ms, clock))).is_none());
+        // Known PID is also rejected if older than the flow-start window.
+        assert!(
+            android_crash_excerpt(log, "dev.tapwing.sample_app", Some(4321), Some((clock.epoch_ms, clock))).is_none()
+        );
     }
 
     #[test]
@@ -414,9 +582,45 @@ mod tests {
 11-21 15:40:01.200  5000  5000 F DEBUG   : pid: 4321, tid: 4400, name: 1.ui  >>> dev.tapwing.sample_app <<<
 11-21 15:40:01.200  5000  5000 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
 ";
-        let excerpt = android_crash_excerpt(log, "dev.tapwing.sample_app", Some(4321)).unwrap();
+        let excerpt = android_crash_excerpt(log, "dev.tapwing.sample_app", Some(4321), None).unwrap();
         assert!(excerpt.starts_with("DEBUG   : *** ***"), "{excerpt}");
         assert!(excerpt.contains("signal 6 (SIGABRT)"));
+        // Tombstone with same PID but different package does not match.
+        assert!(android_crash_excerpt(log, "dev.tapwing.other_app", Some(4321), None).is_none());
+    }
+
+    #[test]
+    fn threadtime_timestamp_year_rollover_and_old_crashes() {
+        // Flow started Dec 31 23:59:55, crashed Dec 31 23:59:58, diagnosed Jan 1 00:00:05.
+        let jan1 = parse_device_datetime("2026 01 01 00 00 05").unwrap();
+        let dec31_start = parse_device_datetime("2025 12 31 23 59 55").unwrap();
+        let rollover_log = "\
+12-31 23:59:58.500  777  777 E AndroidRuntime: FATAL EXCEPTION: main
+12-31 23:59:58.500  777  777 E AndroidRuntime: Process: dev.tapwing.app, PID: 777
+";
+        assert!(
+            android_crash_excerpt(rollover_log, "dev.tapwing.app", None, Some((dec31_start.epoch_ms, jan1))).is_some()
+        );
+
+        // Old crash from November still in logcat when device clock is in June must NOT resolve to future November.
+        let june = parse_device_datetime("2026 06 01 12 00 00").unwrap();
+        let june_start = parse_device_datetime("2026 06 01 11 59 50").unwrap();
+        let stale_nov_log = "\
+11-21 15:40:01.100  4321  4321 E AndroidRuntime: FATAL EXCEPTION: main
+11-21 15:40:01.100  4321  4321 E AndroidRuntime: Process: dev.tapwing.app, PID: 4321
+";
+        assert!(
+            android_crash_excerpt(stale_nov_log, "dev.tapwing.app", None, Some((june_start.epoch_ms, june))).is_none()
+        );
+        assert!(
+            android_crash_excerpt(stale_nov_log, "dev.tapwing.app", Some(4321), Some((june_start.epoch_ms, june)))
+                .is_none()
+        );
+
+        // Leap day parsing across non-leap year.
+        let mar_non_leap = parse_device_datetime("2025 03 01 10 00 00").unwrap();
+        let leap_ts = parse_logcat_threadtime_ms("02-29 12:00:00.000  1  1 E Tag: msg", mar_non_leap).unwrap();
+        assert!(leap_ts < mar_non_leap.epoch_ms);
     }
 
     #[test]

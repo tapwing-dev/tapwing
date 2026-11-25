@@ -233,9 +233,16 @@ pub struct Orchestra<'a, D: FlowDriver + ?Sized> {
     /// F8: number of enclosing `retry` blocks that still have attempts left
     /// (suppresses failure screenshot/tree capture on intermediate retried attempts).
     retry_attempts_remaining: usize,
+    /// F8: number of enclosing `optional: true` `runFlow` / `repeat` blocks
+    /// (suppresses failure screenshot/tree capture for downgradable errors inside).
+    optional_depth: usize,
     /// F8: true once rich failure diagnostics have been captured for the failing
     /// leaf command so outer `runFlow`/`repeat`/`retry` wrappers do not duplicate them.
     failure_captured: bool,
+    /// F7: flow's active `appId`, used to match intentional `stopApp`/`killApp`/`clearState`.
+    flow_app_id: Option<String>,
+    /// F7: true after an intentional `stopApp`/`killApp`/`clearState` until `launchApp`.
+    app_intentionally_stopped: bool,
     /// F8b: flow start (trace `startMs` offsets).
     flow_t0: Instant,
     /// F8b: trace extras per step index.
@@ -277,7 +284,10 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
             screenshotted_issues: std::collections::HashSet::new(),
             dropped_app_issues: 0,
             retry_attempts_remaining: 0,
+            optional_depth: 0,
             failure_captured: false,
+            flow_app_id: None,
+            app_intentionally_stopped: false,
             flow_t0: Instant::now(),
             trace_extras: HashMap::new(),
             pending_trace: None,
@@ -300,7 +310,10 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
         let t0 = Instant::now();
         self.last_interaction = Instant::now();
         self.retry_attempts_remaining = 0;
+        self.optional_depth = 0;
         self.failure_captured = false;
+        self.flow_app_id = None;
+        self.app_intentionally_stopped = false;
         self.flow_t0 = t0;
         self.trace_extras.clear();
         self.pending_trace = None;
@@ -353,6 +366,7 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                 // Evaluate flow appId after variables are defined (`Orchestra.kt:245`).
                 let eval_app_id = self.evaluated_app_id(config.as_ref());
                 if let Some(app) = &eval_app_id {
+                    self.flow_app_id = Some(app.clone());
                     self.driver.set_flow_app_id(app);
                 }
 
@@ -654,11 +668,14 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                     other => other,
                 };
 
-                // F7: when the command failed because the app process died,
-                // say so (with the crash log) instead of "connection lost".
+                // F7: when a transport error occurs (and the app was not
+                // intentionally stopped), check whether the app process crashed
+                // and surface the crash log instead of a generic socket error.
+                // Never run crash diagnosis on normal command/selector errors
+                // such as ELEMENT_NOT_FOUND.
                 let mut crashed = false;
                 let exec_res = match exec_res {
-                    Err(e) if !e.is::<CommandSkipped>() && !e.is::<AppHealthError>() => {
+                    Err(e) if is_transport_error(&e) && !self.app_intentionally_stopped => {
                         match self.driver.diagnose_crash() {
                             Some(crash) => {
                                 let what = crash["message"].as_str().unwrap_or("App crashed").to_string();
@@ -807,6 +824,7 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                         return Err(e);
                     }
                     Err(e) if is_optional(cmd) && is_optional_downgradable(&e) => {
+                        self.failure_captured = false;
                         let desc = describe_command(cmd);
                         if self.opts.print_progress {
                             print_prefixed(
