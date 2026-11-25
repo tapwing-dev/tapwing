@@ -42,6 +42,10 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 /// busy simulator, so long text gets a deadline that grows with its length
 /// instead of running past a fixed one while the runner keeps typing.
 const TYPING_CHARS_PER_SEC: u64 = 15;
+/// Upper bound on a typing / erasing call's deadline, matching the runner's
+/// `RequestBudget.maxSeconds` (600 s) so both sides agree on when a huge input
+/// runs out of time.
+const MAX_TYPING_TIMEOUT: Duration = Duration::from_secs(600);
 /// Connecting to the loopback runner either works at once or not at all.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 /// Largest accepted response body (a hierarchy / @3x PNG screenshot).
@@ -347,9 +351,11 @@ impl IosNativeClient {
         Ok(Answer { status, body })
     }
 
-    /// Deadline of a call that types or erases `chars` characters.
+    /// Deadline of a call that types or erases `chars` characters, capped at
+    /// [`MAX_TYPING_TIMEOUT`] to match the runner's own ceiling.
     fn typing_timeout(&self, chars: u64) -> Duration {
-        self.call_timeout + Duration::from_millis(chars.saturating_mul(1000) / TYPING_CHARS_PER_SEC)
+        let extra = Duration::from_millis(chars.saturating_mul(1000) / TYPING_CHARS_PER_SEC);
+        self.call_timeout.saturating_add(extra).min(self.call_timeout.max(MAX_TYPING_TIMEOUT))
     }
 
     /// The runner's own message for an HTTP error status.
@@ -517,12 +523,14 @@ impl IosNativeClient {
         let mut fresh = recovery()?;
         fresh.recovery = Some(recovery);
         fresh.restarts = self.restarts + 1;
-        fresh.restart_notices = std::mem::take(&mut self.restart_notices);
-        fresh.restart_notices.push(format!(
+        let mut notices = std::mem::take(&mut self.restart_notices);
+        notices.extend(fresh.restart_notices);
+        notices.push(format!(
             "iOS native driver {} ({cause}); restarted it (restart {}/{MAX_RESTARTS})",
             trouble.notice(),
             fresh.restarts
         ));
+        fresh.restart_notices = notices;
         // The new runner starts with its screen size uncached.
         *self = fresh;
         Ok(())
@@ -1405,7 +1413,7 @@ mod tests {
         assert_eq!(budget("inputText", 1), "130000", "characters, not UTF-8 bytes");
         assert_eq!(budget("eraseText", 0), "50000");
         assert_eq!(budget("eraseText", 1), "30000");
-        assert_eq!(c.typing_timeout(u64::MAX), CALL_TIMEOUT + Duration::from_millis(u64::MAX / 15));
+        assert_eq!(c.typing_timeout(u64::MAX), MAX_TYPING_TIMEOUT);
     }
 
     #[test]
@@ -1885,5 +1893,34 @@ mod tests {
         // Subsequent calls fail fast without attempting restart #3.
         assert!(c.view_hierarchy(&apps(), false).is_err());
         assert_eq!(*attempts.lock().unwrap(), 2);
+    }
+
+    #[test]
+    fn restart_preserves_notices_attached_to_replacement_client() {
+        let fresh_runner = runner();
+        let fresh_port = fresh_runner.port;
+        let mut c = IosNativeClient::connect(dead_port());
+        c.add_notice("prior notice".to_string());
+        c.set_restart(Box::new(move || {
+            let mut next = IosNativeClient::connect(fresh_port);
+            next.add_notice("unverified session notice".to_string());
+            Ok(next)
+        }));
+
+        assert_eq!(c.device_info().unwrap().width_points, 402);
+        let notices = c.take_restart_notices();
+        assert_eq!(notices.len(), 3, "{notices:?}");
+        assert_eq!(notices[0], "prior notice");
+        assert_eq!(notices[1], "unverified session notice");
+        assert!(notices[2].contains("restarted it (restart 1/"), "{notices:?}");
+    }
+
+    #[test]
+    fn typing_timeout_caps_at_runner_ceiling() {
+        let c = IosNativeClient::connect(dead_port());
+        assert_eq!(c.typing_timeout(0), CALL_TIMEOUT);
+        assert_eq!(c.typing_timeout(150), CALL_TIMEOUT + Duration::from_secs(10));
+        assert_eq!(c.typing_timeout(50_000), MAX_TYPING_TIMEOUT);
+        assert_eq!(c.typing_timeout(u64::MAX), MAX_TYPING_TIMEOUT);
     }
 }

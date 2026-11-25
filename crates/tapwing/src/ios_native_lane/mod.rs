@@ -498,8 +498,10 @@ fn start_session(udid: &str, cancel: &AtomicBool) -> Result<IosNativeClient> {
     let mut client = IosNativeClient::connect(port);
     client.expect_session(session_id);
     let ready = wait_for_runner(&client, driver_label, || guard.exited(), cancel, Instant::now() + startup_timeout())?;
-    if ready == Readiness::Unverified {
-        client.add_notice(session::unverified_notice());
+    if ready == Readiness::Unverified
+        && let Some(notice) = session::unverified_notice_once()
+    {
+        client.add_notice(notice);
     }
     client.set_runner(Box::new(guard));
     Ok(client)

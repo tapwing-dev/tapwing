@@ -8,6 +8,7 @@
 //! every session starts its runner with a fresh id (`TEST_RUNNER_TAPWING_SESSION`)
 //! and readiness waits until `/status` echoes it.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::sha256_hex;
@@ -40,6 +41,13 @@ pub(crate) fn unverified_notice() -> String {
     "the iOS native driver does not report a session id (it was built before Tapwing checked it), so a runner \
      left over from an earlier run cannot be told apart; rebuild it with scripts/build-ios-driver.sh"
         .to_string()
+}
+
+/// Returns [`unverified_notice`] at most once per process (later shards and
+/// restarts stay quiet).
+pub(crate) fn unverified_notice_once() -> Option<String> {
+    static NOTICED: AtomicBool = AtomicBool::new(false);
+    (!NOTICED.swap(true, Ordering::Relaxed)).then(unverified_notice)
 }
 
 #[cfg(test)]
