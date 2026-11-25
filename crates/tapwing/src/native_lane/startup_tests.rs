@@ -203,7 +203,7 @@ fn an_instrumentation_that_crashes_is_not_restarted_again() {
     let mut budget = roomy_budget();
 
     let err = restart(&host, &adb, &CancelSignal::new(), &mut budget).err().expect("the start fails");
-    assert_eq!(classify_start_failure(&err), StartFailure::Permanent);
+    assert_eq!(classify_start_failure(&err), StartFailure::RetryOnce);
     let text = format!("{err:#}");
     assert!(text.starts_with("not retried, starting the driver again cannot fix this: "), "{text}");
     assert!(
@@ -211,12 +211,12 @@ fn an_instrumentation_that_crashes_is_not_restarted_again() {
             && text.contains("Process crashed."),
         "{text}"
     );
-    assert_eq!(host.attempts(), 1, "{text}");
+    assert_eq!(host.attempts(), 2, "{text}");
 
-    // The failed start still cleaned up after itself.
+    // Both failed attempts still cleaned up after themselves.
     let requests = fake.requests();
-    assert_eq!(count(&requests, &shell(FORCE_STOP)), 2, "{requests:?}");
-    assert_eq!(count(&requests, &host_service(format!("killforward:tcp:{dead_forward}"))), 1, "{requests:?}");
+    assert_eq!(count(&requests, &shell(FORCE_STOP)), 4, "{requests:?}");
+    assert_eq!(count(&requests, &host_service(format!("killforward:tcp:{dead_forward}"))), 2, "{requests:?}");
     fake.assert_scripts_parse();
 }
 

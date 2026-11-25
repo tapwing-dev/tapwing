@@ -10,8 +10,8 @@
 //!   not back yet, the driver is slow to answer) from those it cannot (no
 //!   driver APK, `adb install` rejected it, the instrumentation crashed).
 //! * [`RestartBudget`] caps the time of one restart and of all restarts of a
-//!   run. The attempt in flight gets what is left, so the cap holds for the
-//!   readiness wait too and not only between attempts.
+//!   run. Each attempt's readiness wait gets what is left (subprocess calls
+//!   such as `adb install` keep their own timeout).
 
 use std::fmt;
 use std::time::{Duration, Instant};
@@ -35,6 +35,10 @@ pub(super) const RESTART_RETRY_INTERVAL: Duration = Duration::from_millis(500);
 pub(super) enum StartFailure {
     /// The device or the driver may just not be there yet.
     Retryable,
+    /// Likely permanent, except for a brief race right after tearing down an
+    /// earlier instrumentation (`UiAutomationService already registered`,
+    /// package manager settling): allow one retry before giving up.
+    RetryOnce,
     /// The same start would fail the same way.
     Permanent,
 }
@@ -97,9 +101,10 @@ pub(super) fn classify_start_failure(err: &anyhow::Error) -> StartFailure {
     if let Some(exited) = err.downcast_ref::<InstrumentationExited>() {
         // `adb shell` also ends when the device goes away under it; it then says so, or
         // says nothing at all. A driver that crashed or could not be instrumented leaves
-        // `am instrument`'s report behind.
+        // `am instrument`'s report behind; allow one retry in case the previous
+        // UiAutomation connection or package manager was still settling.
         let lost_device = exited.output.trim().is_empty() || is_adb_transport_error(&exited.output);
-        return if lost_device { StartFailure::Retryable } else { StartFailure::Permanent };
+        return if lost_device { StartFailure::Retryable } else { StartFailure::RetryOnce };
     }
     let text = format!("{err:#}");
     if is_install_rejection(&text) && !is_adb_transport_error(&text) {
@@ -215,6 +220,7 @@ fn run_attempts<T>(
 ) -> Result<T, Stop> {
     let remaining = || allowance.saturating_sub(clock.now().saturating_duration_since(started));
     let mut last = None;
+    let mut retry_once_used = false;
     loop {
         let left = remaining();
         if left.is_zero() {
@@ -227,8 +233,11 @@ fn run_attempts<T>(
         if clock.is_cancelled() {
             return Err(Stop::Cancelled(err));
         }
-        if classify_start_failure(&err) == StartFailure::Permanent {
-            return Err(Stop::Permanent(err));
+        match classify_start_failure(&err) {
+            StartFailure::Permanent => return Err(Stop::Permanent(err)),
+            StartFailure::RetryOnce if retry_once_used => return Err(Stop::Permanent(err)),
+            StartFailure::RetryOnce => retry_once_used = true,
+            StartFailure::Retryable => {}
         }
         let left = remaining();
         if left.is_zero() {
@@ -300,9 +309,6 @@ mod tests {
             anyhow!("APK not found").context(Unrecoverable("the driver APK is unusable")),
             // The marker is found under later context too.
             anyhow!("sha mismatch").context(Unrecoverable("the driver APK is unusable")).context("starting the driver"),
-            exited("INSTRUMENTATION_RESULT: shortMsg=Process crashed.\nINSTRUMENTATION_CODE: 0"),
-            exited("android.util.AndroidException: INSTRUMENTATION_FAILED: dev.tapwing.driver/.TapwingDriverInstrumentation"),
-            exited("java.lang.SecurityException: Permission Denial").context("starting the Tapwing Android driver"),
             anyhow!("adb install -r -t -d /k.apk failed: adb: failed to install /k.apk: Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]")
                 .context("installing /k.apk"),
             anyhow!("adb install failed: Failure [INSTALL_PARSE_FAILED_NO_CERTIFICATES]"),
@@ -311,6 +317,46 @@ mod tests {
         for err in permanent {
             assert_eq!(classify_start_failure(&err), StartFailure::Permanent, "{err:#}");
         }
+
+        let retry_once = [
+            exited("INSTRUMENTATION_RESULT: shortMsg=Process crashed.\nINSTRUMENTATION_CODE: 0"),
+            exited(
+                "android.util.AndroidException: INSTRUMENTATION_FAILED: dev.tapwing.driver/.TapwingDriverInstrumentation",
+            ),
+            exited("java.lang.SecurityException: Permission Denial").context("starting the Tapwing Android driver"),
+        ];
+        for err in retry_once {
+            assert_eq!(classify_start_failure(&err), StartFailure::RetryOnce, "{err:#}");
+        }
+    }
+
+    #[test]
+    fn instrumentation_exit_retries_once_then_stops_as_permanent() {
+        let mut budget = RestartBudget::new(30 * S, 60 * S);
+        let clock = FakeClock::new();
+        let mut attempts = 0;
+        let ok = restart_within_budget(&mut budget, &clock, S, |_| {
+            attempts += 1;
+            if attempts == 1 {
+                Err(exited("INSTRUMENTATION_RESULT: shortMsg=UiAutomationService already registered"))
+            } else {
+                Ok("recovered")
+            }
+        })
+        .unwrap();
+        assert_eq!(ok, "recovered");
+        assert_eq!(attempts, 2);
+
+        let mut budget = RestartBudget::new(30 * S, 60 * S);
+        let clock = FakeClock::new();
+        let mut attempts = 0;
+        let err = restart_within_budget::<()>(&mut budget, &clock, S, |_| {
+            attempts += 1;
+            Err(exited("INSTRUMENTATION_RESULT: shortMsg=Process crashed.\nINSTRUMENTATION_CODE: 0"))
+        })
+        .unwrap_err();
+        assert_eq!(attempts, 2, "must stop after one retry instead of burning the whole budget");
+        assert!(format!("{err:#}").contains("not retried"), "{err:#}");
     }
 
     #[test]
@@ -398,17 +444,14 @@ mod tests {
         let err = restart_within_budget::<()>(&mut budget, &clock, S / 2, |_| {
             attempts += 1;
             clock.advance(S);
-            Err(exited("INSTRUMENTATION_RESULT: shortMsg=Process crashed."))
+            Err(anyhow!("adb install failed: Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]"))
         })
         .unwrap_err();
         let text = format!("{err:#}");
         assert_eq!(attempts, 1, "{text}");
         assert_eq!(clock.waits.get(), 0);
         assert!(text.starts_with("not retried, starting the driver again cannot fix this: "), "{text}");
-        assert!(
-            text.contains("the instrumentation exited during startup") && text.contains("Process crashed"),
-            "{text}"
-        );
+        assert!(text.contains("INSTALL_FAILED_INSUFFICIENT_STORAGE"), "{text}");
         assert_eq!(budget.spent(), S);
     }
 
