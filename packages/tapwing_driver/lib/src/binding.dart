@@ -34,19 +34,23 @@ mixin TapwingBindingMixin on WidgetsBinding {
     // Capture app health issues from the very first frame (F7). The host
     // enables delivery (or uninstalls) via `configure` `appIssues`.
     AppErrorHooks.instance.install();
-    // Apps typically install crash reporters in main() after the binding;
-    // re-wrap once the first frame is out, then at every RPC.
-    addPostFrameCallback((_) => AppErrorHooks.instance.ensureInstalled());
+    // Apps typically install crash reporters or HttpOverrides in main() after
+    // the binding; re-wrap once the first frame is out, then at every RPC.
+    addPostFrameCallback((_) {
+      AppErrorHooks.instance.ensureInstalled();
+      IdleDetector.instance.httpTracker.ensureInstalled();
+    });
     TapwingServer.instance.start();
   }
 
   @override
   void drawFrame() {
-    // A crash reporter that replaces `FlutterError.onError` between two RPCs
-    // (a consent-gated Sentry/Crashlytics init, say) must not hide this
-    // frame's build/layout/paint errors from Tapwing: re-wrap first. Two
-    // identity checks; a no-op while our handler is still outermost.
-    AppErrorHooks.instance.ensureInstalled();
+    // A crash reporter or HttpOverrides installed between two RPCs must not
+    // hide this frame's errors or HTTP requests from Tapwing: re-wrap first.
+    if (isDriverEnabled()) {
+      AppErrorHooks.instance.ensureInstalled();
+      IdleDetector.instance.httpTracker.ensureInstalled();
+    }
     super.drawFrame();
   }
 

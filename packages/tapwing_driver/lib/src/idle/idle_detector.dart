@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import '../input/text_input.dart';
 import '../snapshot/snapshot.dart';
 import 'animation_scanner.dart';
+import 'channel_tracker.dart';
 import 'http_tracker.dart';
 import 'keyboard_waiter.dart';
 
@@ -38,13 +39,15 @@ class BusyReport {
     required this.httpInFlight,
     required this.pendingImages,
     required this.animations,
+    this.pendingChannels = 0,
   });
 
   /// Whether no frame is scheduled, no tickers are active, and the scheduler
   /// is idle.
   final bool framesIdle;
 
-  /// Whether no tracked HTTP requests or image loads are pending.
+  /// Whether no tracked HTTP requests, platform-channel replies, or image loads
+  /// are pending.
   final bool loadingIdle;
 
   /// Number of active transient frame callbacks (tickers/animations).
@@ -52,6 +55,9 @@ class BusyReport {
 
   /// Number of in-flight `dart:io` HTTP requests.
   final int httpInFlight;
+
+  /// Number of non-system platform-channel calls currently awaiting a reply.
+  final int pendingChannels;
 
   /// Number of images currently pending in Flutter's [ImageCache].
   final int pendingImages;
@@ -66,6 +72,7 @@ class BusyReport {
     'loadingIdle': loadingIdle,
     'transientCallbacks': transientCallbacks,
     'httpInFlight': httpInFlight,
+    'pendingChannels': pendingChannels,
     'pendingImages': pendingImages,
     'animations': animations
         .map((SignificantAnimation a) => a.toJson())
@@ -77,7 +84,12 @@ class BusyReport {
 ///
 /// The app is fully `'idle'` when no frame is scheduled, no transient frame
 /// callbacks (tickers/animations) are active, no tracked HTTP requests are in
-/// flight, and no images are pending.
+/// flight, no non-system platform-channel replies are pending, and no images
+/// are pending.
+///
+/// Known gap: native FFI/JNI HTTP clients (`cupertino_http`, `cronet_http`)
+/// bypass `dart:io` [HttpOverrides] and do not use `BinaryMessenger`, so their
+/// in-flight requests are not observed by [HttpTracker] or [ChannelTracker].
 ///
 /// Because infinite animations (such as loading spinners or text cursors) keep
 /// transient callbacks active forever, [waitForIdle] also reports `'stable'`
@@ -89,6 +101,7 @@ class IdleDetector {
   /// Creates an idle detector with injectable collaborators for testing.
   IdleDetector({
     HttpTracker? httpTracker,
+    ChannelTracker? channelTracker,
     TextInputController? textInput,
     AnimationScanner? animationScanner,
     int Function()? computeSemanticsHash,
@@ -96,6 +109,7 @@ class IdleDetector {
     Future<void> Function(Duration timeout)? waitForFirstFrame,
     Duration Function()? clock,
   }) : _httpTracker = httpTracker ?? HttpTracker.instance,
+       _channelTracker = channelTracker ?? ChannelTracker.instance,
        _animationScanner = animationScanner ?? AnimationScanner(clock: clock),
        _computeSemanticsHash = computeSemanticsHash ?? Snapshot.computeHash,
        _readBottomInset = readBottomInset ?? _defaultBottomInset,
@@ -123,6 +137,7 @@ class IdleDetector {
 
   final Stopwatch _clock = Stopwatch()..start();
   final HttpTracker _httpTracker;
+  final ChannelTracker _channelTracker;
   final AnimationScanner _animationScanner;
   final int Function() _computeSemanticsHash;
   final double Function() _readBottomInset;
@@ -135,8 +150,14 @@ class IdleDetector {
   /// Number of tracked `dart:io` HTTP requests currently in flight.
   int get httpInFlight => _httpTracker.inFlight;
 
+  /// Number of non-system platform-channel calls currently awaiting a reply.
+  int get pendingChannels => _channelTracker.pending;
+
   /// HTTP tracker observing `dart:io` traffic (also owns the F8b request log).
   HttpTracker get httpTracker => _httpTracker;
+
+  /// Platform-channel tracker observing pending `BinaryMessenger.send` replies.
+  ChannelTracker get channelTracker => _channelTracker;
 
   /// Whether the adaptive keyboard waiter currently treats the soft keyboard
   /// as absent (hardware-keyboard device or CLI hint).
@@ -159,9 +180,11 @@ class IdleDetector {
       SchedulerBinding.instance.transientCallbackCount == 0 &&
       SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle;
 
-  /// Whether no tracked HTTP requests or image loads are currently pending.
+  /// Whether no tracked HTTP requests, platform-channel calls, or image loads
+  /// are currently pending.
   bool get loadingIdle =>
       _httpTracker.isIdle &&
+      _channelTracker.isIdle &&
       PaintingBinding.instance.imageCache.pendingImageCount == 0;
 
   void _ensureFrameCallback() {
@@ -218,6 +241,7 @@ class IdleDetector {
     loadingIdle: loadingIdle,
     transientCallbacks: SchedulerBinding.instance.transientCallbackCount,
     httpInFlight: _httpTracker.inFlight,
+    pendingChannels: _channelTracker.pending,
     pendingImages: PaintingBinding.instance.imageCache.pendingImageCount,
     animations: _animationScanner.scan(treeHash: _computeSemanticsHash()),
   );
@@ -357,10 +381,15 @@ class IdleDetector {
     if (maxWait <= Duration.zero || (isCancelled != null && isCancelled())) {
       return Future<void>.value();
     }
-    // When only HTTP requests are pending, wake immediately upon drain.
-    if (!_httpTracker.isIdle &&
-        PaintingBinding.instance.imageCache.pendingImageCount == 0) {
+    final bool noPendingImages =
+        PaintingBinding.instance.imageCache.pendingImageCount == 0;
+    // When only HTTP requests or platform-channel replies are pending, wake
+    // immediately upon drain.
+    if (!_httpTracker.isIdle && noPendingImages) {
       return _httpTracker.waitForIdle(maxWait, isCancelled: isCancelled);
+    }
+    if (!_channelTracker.isIdle && noPendingImages) {
+      return _channelTracker.waitForIdle(maxWait, isCancelled: isCancelled);
     }
     final Duration step = maxWait < _imagePollStep ? maxWait : _imagePollStep;
     return Future<void>.delayed(step);

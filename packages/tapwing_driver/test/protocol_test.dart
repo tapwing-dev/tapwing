@@ -127,6 +127,7 @@ void main() {
           loadingIdle: true,
           transientCallbacks: 1,
           httpInFlight: 0,
+          pendingChannels: 2,
           pendingImages: 0,
           animations: <SignificantAnimation>[
             SignificantAnimation(
@@ -138,6 +139,7 @@ void main() {
         ).toJson();
         expect(busy['framesIdle'], isFalse);
         expect(busy['transientCallbacks'], 1);
+        expect(busy['pendingChannels'], 2);
         expect(busy['animations'], <Map<String, Object?>>[
           <String, Object?>{
             'widget': 'FadeTransition',

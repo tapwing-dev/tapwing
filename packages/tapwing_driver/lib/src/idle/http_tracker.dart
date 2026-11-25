@@ -12,10 +12,14 @@ import '../diagnostics/http_log.dart';
 /// so abandoned requests can never wedge idleness permanently.
 ///
 /// With [log] enabled (`configure` `httpLog: true`, F8b `--trace`), every
-/// request is also recorded with privacy-redacted metadata. While logging,
-/// [ensureInstalled] re-wraps an `HttpOverrides` the app installed after the
-/// binding with a log-only layer that chains to it (no idle counting there,
-/// so settle behavior never changes).
+/// request is also recorded with privacy-redacted metadata. [ensureInstalled]
+/// re-wraps any `HttpOverrides` the app installed after the binding so both
+/// idle counting and (when enabled) request logging stay active without
+/// double-counting chaining overrides.
+///
+/// Known limitation: `HttpTracker` hooks `dart:io`'s `HttpOverrides`. Native
+/// FFI/JNI HTTP clients such as `cupertino_http` and `cronet_http` bypass
+/// `dart:io` `HttpClient` and are not observed for idle waiting or `httpLog`.
 class HttpTracker {
   /// Creates an HTTP request tracker.
   HttpTracker();
@@ -32,6 +36,7 @@ class HttpTracker {
   static const Duration _cancelPollInterval = Duration(milliseconds: 25);
 
   int _inFlight = 0;
+  bool _creatingClient = false;
   final Set<Completer<void>> _idleWaiters = <Completer<void>>{};
 
   /// Number of `dart:io` HTTP requests currently in flight.
@@ -48,36 +53,18 @@ class HttpTracker {
     HttpOverrides.global = _TrackingHttpOverrides(HttpOverrides.current, this);
   }
 
-  /// While [log] is enabled, makes sure a Tapwing layer is outermost: an app
-  /// that set `HttpOverrides.global` after the binding (crash reporters,
-  /// certificate pinning, proxies) gets a log-only layer that chains to its
-  /// override. Called at every RPC boundary; an identity check when nothing
-  /// changed.
+  /// Makes sure a Tapwing layer is outermost: an app that set
+  /// `HttpOverrides.global` after the binding (crash reporters, certificate
+  /// pinning, proxies) gets wrapped so idle counting (and HTTP logging when
+  /// enabled) stays active while delegating to the app's override. Called at
+  /// first frame and every RPC boundary; an identity check when nothing changed.
   void ensureInstalled() {
-    if (!log.enabled) {
-      return;
-    }
     final HttpOverrides? current = HttpOverrides.current;
     if (current is _TrackingHttpOverrides &&
         identical(current._tracker, this)) {
       return;
     }
-    HttpOverrides.global = _TrackingHttpOverrides(
-      current,
-      this,
-      countIdle: false,
-    );
-  }
-
-  /// Removes an outermost log-only layer added by [ensureInstalled] (when
-  /// logging is switched off), restoring the app's override.
-  void removeLogLayer() {
-    final HttpOverrides? current = HttpOverrides.current;
-    if (current is _TrackingHttpOverrides &&
-        identical(current._tracker, this) &&
-        !current._countIdle) {
-      HttpOverrides.global = current._previous;
-    }
+    HttpOverrides.global = _TrackingHttpOverrides(current, this);
   }
 
   /// Waits until [inFlight] drops to zero, [maxWait] elapses, or [isCancelled]
@@ -85,10 +72,7 @@ class HttpTracker {
   ///
   /// Tracks each waiter individually so timed-out or cancelled waits remove
   /// themselves cleanly without accumulating `.then()` chains.
-  Future<void> waitForIdle(
-    Duration maxWait, {
-    bool Function()? isCancelled,
-  }) {
+  Future<void> waitForIdle(Duration maxWait, {bool Function()? isCancelled}) {
     if (_inFlight == 0 ||
         maxWait <= Duration.zero ||
         (isCancelled != null && isCancelled())) {
@@ -143,24 +127,32 @@ class HttpTracker {
 }
 
 class _TrackingHttpOverrides extends HttpOverrides {
-  _TrackingHttpOverrides(this._previous, this._tracker, {bool countIdle = true})
-    : _countIdle = countIdle;
+  _TrackingHttpOverrides(this._previous, this._tracker);
 
   final HttpOverrides? _previous;
   final HttpTracker _tracker;
 
-  /// `false` for the log-only layer added by [HttpTracker.ensureInstalled].
-  final bool _countIdle;
-
   @override
   HttpClient createHttpClient(SecurityContext? context) {
-    final HttpClient inner =
-        _previous?.createHttpClient(context) ?? super.createHttpClient(context);
-    // The app's override chained to an inner Tapwing layer: already tracked.
-    if (!_countIdle && inner is _TrackingHttpClient) {
+    if (_tracker._creatingClient) {
+      // An outer _TrackingHttpOverrides for the same tracker is already
+      // wrapping this client creation chain (e.g. a chaining app override).
+      return _previous?.createHttpClient(context) ??
+          super.createHttpClient(context);
+    }
+    _tracker._creatingClient = true;
+    final HttpClient inner;
+    try {
+      inner =
+          _previous?.createHttpClient(context) ??
+          super.createHttpClient(context);
+    } finally {
+      _tracker._creatingClient = false;
+    }
+    if (inner is _TrackingHttpClient && identical(inner._tracker, _tracker)) {
       return inner;
     }
-    return _TrackingHttpClient(inner, _tracker, countIdle: _countIdle);
+    return _TrackingHttpClient(inner, _tracker);
   }
 
   @override
@@ -171,15 +163,14 @@ class _TrackingHttpOverrides extends HttpOverrides {
 
 /// Per-request bookkeeping: the idle counter release and the log entry.
 class _RequestTracking {
-  _RequestTracking(this._tracker, bool countIdle, this.entry)
-    : _idleReleased = !countIdle;
+  _RequestTracking(this._tracker, this.entry);
 
   final HttpTracker _tracker;
 
   /// Log entry, or `null` when the request log is disabled.
   final HttpLogEntry? entry;
 
-  bool _idleReleased;
+  bool _idleReleased = false;
   bool _logFinished = false;
   Timer? _safety;
 
@@ -237,12 +228,10 @@ class _RequestTracking {
 
 /// Delegating [HttpClient] that tracks every opened request through completion.
 class _TrackingHttpClient implements HttpClient {
-  _TrackingHttpClient(this._inner, this._tracker, {bool countIdle = true})
-    : _countIdle = countIdle;
+  _TrackingHttpClient(this._inner, this._tracker);
 
   final HttpClient _inner;
   final HttpTracker _tracker;
-  final bool _countIdle;
 
   Future<HttpClientRequest> _track(
     String method,
@@ -250,18 +239,8 @@ class _TrackingHttpClient implements HttpClient {
     Future<HttpClientRequest> pending,
   ) async {
     final HttpLogEntry? entry = _tracker.log.begin(method, url);
-    if (!_countIdle && entry == null) {
-      // Log-only layer while logging is off: pure pass-through.
-      return pending;
-    }
-    if (_countIdle) {
-      _tracker._onRequestOpened();
-    }
-    final _RequestTracking tracking = _RequestTracking(
-      _tracker,
-      _countIdle,
-      entry,
-    );
+    _tracker._onRequestOpened();
+    final _RequestTracking tracking = _RequestTracking(_tracker, entry);
     // Safety net in case a request is opened and abandoned without close()/abort().
     tracking.armTimeout(HttpTracker.openSafetyTimeout);
     try {
@@ -660,6 +639,7 @@ class _TrackingResponse extends StreamView<List<int>>
     _tracking.release(HttpLogState.completed);
     return _inner.redirect(method, url, followLoops);
   }
+
   @override
   List<RedirectInfo> get redirects => _inner.redirects;
   @override

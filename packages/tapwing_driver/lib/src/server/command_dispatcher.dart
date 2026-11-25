@@ -114,7 +114,6 @@ class CommandDispatcher {
       http.log
         ..enabled = false
         ..reset();
-      http.removeLogLayer();
     }
     return ConfigureResult(
       appIssues: issues.deliveryEnabled,
