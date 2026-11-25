@@ -1062,4 +1062,32 @@ mod tests {
         assert!(t0.elapsed() < Duration::from_millis(500));
         handle.join().unwrap();
     }
+
+    #[test]
+    fn skipped_polls_preserve_connection_and_deliver_buffered_events_on_resume() {
+        let (mut drv, handle) = fake_app(44, |mut app| {
+            let id = read_request_id(&app);
+            writeln!(
+                app,
+                r#"{{"id":{id},"result":"ok","us":1,"issues":[{{"seq":1,"id":1,"kind":"uncaughtError","request":{id}}}],"http":[{{"seq":1,"method":"GET","url":"http://h/resumed","request":{id}}}]}}"#
+            )
+            .unwrap();
+            let _ = BufReader::new(app).read_line(&mut String::new());
+        });
+        drv.set_http_log(true);
+        // Simulate skipping poll_issues / poll_http while the app is backgrounded:
+        // taking batches advances boundaries without writing to the socket.
+        assert!(drv.take_issue_batch().current.is_empty());
+        assert!(drv.take_http_batch().current.is_empty());
+        assert!(drv.is_connected());
+
+        // When the app returns to foreground, the next RPC piggybacks buffered events intact.
+        assert_eq!(drv.call("assertVisible", json!({})).unwrap(), "ok");
+        assert_eq!(drv.take_issue_batch().current.len(), 1);
+        let http = drv.take_http_batch();
+        assert_eq!(http.current.len(), 1);
+        assert_eq!(http.current[0]["url"], "http://h/resumed");
+        drop(drv);
+        handle.join().unwrap();
+    }
 }

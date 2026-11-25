@@ -267,8 +267,10 @@ pub const SYSTEM_DIALOG_PACKAGES: &[&str] = &[
     "com.android.systemui",
 ];
 
-/// `dumpsys window` probe for the focused window (one `adb shell` round-trip).
-pub const FOCUS_PROBE: &str = "dumpsys window 2>/dev/null | grep -m1 mCurrentFocus";
+/// Display-scoped `dumpsys window` probe for the focused window (one `adb shell`
+/// round-trip, ~10× smaller than a full `dumpsys window`), falling back to
+/// `dumpsys window windows` on Android API <29 where `displays` omits `mCurrentFocus`.
+pub const FOCUS_PROBE: &str = "dumpsys window displays 2>/dev/null | grep -m1 mCurrentFocus || dumpsys window windows 2>/dev/null | grep -m1 mCurrentFocus";
 
 /// Parses `mCurrentFocus=Window{<hash> u0 <package>/<activity>}` into the
 /// owning package. Non-activity windows (`NotificationShade`, `Splash Screen
@@ -1090,5 +1092,53 @@ mod tests {
         );
         assert!(tracker.is_sticky("com.example.app"));
         assert!(!tracker.is_sticky("com.other.app"));
+    }
+
+    #[test]
+    fn focus_probe_uses_displays_first_and_falls_back_to_windows_on_older_android() {
+        use crate::device::adb_client::fake::{FakeAdb, ShDevice, sh_available};
+
+        if !sh_available() {
+            return;
+        }
+        // API 29+: `dumpsys window displays` prints `mCurrentFocus`; `windows` is never called.
+        {
+            let device = ShDevice::new(
+                r#"
+dumpsys() {
+  rec dumpsys "$@"
+  if [ "$1" = "window" ] && [ "$2" = "displays" ]; then
+    echo "  mCurrentFocus=Window{1f2e3d u0 com.example.app/com.example.app.MainActivity}"
+  fi
+}
+"#,
+            );
+            let fake = FakeAdb::with_device(&device);
+            let adb = Adb::with_client("fake-serial", fake.client());
+            assert_eq!(focused_package(&adb).as_deref(), Some("com.example.app"));
+            assert_eq!(device.lines("dumpsys"), vec!["dumpsys window displays"]);
+            fake.assert_scripts_parse();
+        }
+
+        // API <29 fallback: `dumpsys window displays` omits `mCurrentFocus`, so `windows` runs.
+        {
+            let device = ShDevice::new(
+                r#"
+dumpsys() {
+  rec dumpsys "$@"
+  if [ "$1" = "window" ] && [ "$2" = "displays" ]; then
+    echo "WINDOW MANAGER DISPLAY CONTENTS (dumpsys window displays)"
+  elif [ "$1" = "window" ] && [ "$2" = "windows" ]; then
+    echo "  mCurrentFocus=Window{4cb6b2c u0 com.google.android.permissioncontroller/.GrantPermissionsActivity}"
+  fi
+}
+"#,
+            );
+            let fake = FakeAdb::with_device(&device);
+            let adb = Adb::with_client("fake-serial", fake.client());
+            assert_eq!(focused_package(&adb).as_deref(), Some("com.google.android.permissioncontroller"));
+            assert_eq!(device.lines("dumpsys"), vec!["dumpsys window displays", "dumpsys window windows"]);
+            fake.assert_scripts_parse();
+        }
     }
 }
