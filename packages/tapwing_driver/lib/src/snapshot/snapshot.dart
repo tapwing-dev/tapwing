@@ -3,6 +3,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 
 import '../platform.dart';
+import 'semantics_hash_cache.dart';
+
+export 'semantics_hash_cache.dart'
+    show SemanticsHashCache, computeSemanticsHashFromRoot;
 
 /// One UI element as Maestro sees it through the platform accessibility layer.
 ///
@@ -224,6 +228,7 @@ class Snapshot {
   static Snapshot capture({
     DriverPlatform platform = DriverPlatform.android,
     String? appName,
+    SemanticsHashCache? hashCache,
   }) {
     final bool ios = platform == DriverPlatform.ios;
     final double unit = ios ? _primaryDevicePixelRatio() : 1.0;
@@ -234,8 +239,9 @@ class Snapshot {
             _truncUnits(physical.height / unit),
           )
         : physical;
-    final SemanticsNode? rootNode = _rootSemanticsNode();
-    if (rootNode == null) {
+    final SemanticsOwner? owner = SemanticsHashCache.defaultSemanticsOwner();
+    final SemanticsNode? rootNode = owner?.rootSemanticsNode;
+    if (owner == null || rootNode == null) {
       return Snapshot(null, const <KNode>[], screen, 0);
     }
 
@@ -272,15 +278,15 @@ class Snapshot {
       KNode? parent,
       SemanticsData data,
     ) {
-      final Matrix4 transform = _composeTransform(
+      final Matrix4 transform = composeSemanticsTransform(
         parentTransform,
         node.transform,
       );
       final Rect rawRect = MatrixUtils.transformRect(transform, node.rect);
       final Rect rect = rawRect.isFinite ? rawRect : Rect.zero;
       final bool clickable = data.hasAction(SemanticsAction.tap);
-      final bool scrollable = _isScrollable(data);
-      final _ExtractedFlags flags = _extractFlags(
+      final bool scrollable = isSemanticsScrollable(data);
+      final ExtractedSemanticsFlags flags = extractSemanticsFlags(
         data.flagsCollection,
         clickable: clickable,
         scrollable: scrollable,
@@ -329,7 +335,7 @@ class Snapshot {
         );
       }
       out.add(k);
-      hash = _accumulateHash(hash, data, flags.bits, rect);
+      hash = accumulateSemanticsHash(hash, data, flags.bits, rect);
       parent?.children.add(k);
 
       // Merged descendants are already folded into getSemanticsData() and are
@@ -348,7 +354,7 @@ class Snapshot {
           // bounds are never double-translated.
           final Matrix4 childParentTransform = identical(child.parent, node)
               ? transform
-              : _globalTransform(child.parent);
+              : globalSemanticsTransform(child.parent);
           visit(child, childParentTransform, k, childData);
         }
       }
@@ -361,54 +367,17 @@ class Snapshot {
       app,
       rootNode.getSemanticsData(),
     );
+    (hashCache ?? SemanticsHashCache.instance).seed(owner, hash);
     return Snapshot(app ?? flutterRoot, out, screen, hash);
   }
 
-  /// Computes the structural hash of the semantics tree without allocating
+  /// Returns the structural hash of the semantics tree without allocating
   /// [KNode]s, child lists, or joined display strings.
   ///
-  /// Called on every rendered frame inside the idle detector's settle loop.
-  static int computeHash() {
-    final SemanticsNode? rootNode = _rootSemanticsNode();
-    if (rootNode == null) return 0;
-
-    int hash = 17;
-    void visit(
-      SemanticsNode node,
-      Matrix4 parentTransform,
-      SemanticsData data,
-    ) {
-      final Matrix4 transform = _composeTransform(
-        parentTransform,
-        node.transform,
-      );
-      final Rect rawRect = MatrixUtils.transformRect(transform, node.rect);
-      final Rect rect = rawRect.isFinite ? rawRect : Rect.zero;
-      final _ExtractedFlags flags = _extractFlags(
-        data.flagsCollection,
-        clickable: data.hasAction(SemanticsAction.tap),
-        scrollable: _isScrollable(data),
-      );
-      hash = _accumulateHash(hash, data, flags.bits, rect);
-
-      if (!node.mergeAllDescendantsIntoThisNode) {
-        for (final SemanticsNode child in node.debugListChildrenInOrder(
-          DebugSemanticsDumpOrder.traversalOrder,
-        )) {
-          final SemanticsData childData = child.getSemanticsData();
-          if (!childData.flagsCollection.isHidden) {
-            final Matrix4 childParentTransform = identical(child.parent, node)
-                ? transform
-                : _globalTransform(child.parent);
-            visit(child, childParentTransform, childData);
-          }
-        }
-      }
-    }
-
-    visit(rootNode, Matrix4.identity(), rootNode.getSemanticsData());
-    return hash;
-  }
+  /// Backed by [SemanticsHashCache.instance], so paint-only frames and calls
+  /// immediately following [capture] return in O(1) until the live
+  /// [SemanticsOwner] notifies a semantics update.
+  static int computeHash() => SemanticsHashCache.instance.hash();
 }
 
 /// The binding's dispatcher: `PlatformDispatcher.instance` in an app, the
@@ -498,38 +467,6 @@ _IosAttributes _composeIos(SemanticsData data) {
   );
 }
 
-SemanticsNode? _rootSemanticsNode() {
-  final RenderView? view = RendererBinding.instance.renderViews.firstOrNull;
-  return view?.owner?.semanticsOwner?.rootSemanticsNode;
-}
-
-Matrix4 _composeTransform(Matrix4 parentTransform, Matrix4? nodeTransform) =>
-    nodeTransform == null
-    ? parentTransform
-    : parentTransform.multiplied(nodeTransform);
-
-/// Computes the global transform of [node] by walking its structural `parent`
-/// chain (the coordinate space `SemanticsNode.transform` is relative to).
-Matrix4 _globalTransform(SemanticsNode? node) {
-  if (node == null) return Matrix4.identity();
-  final List<Matrix4> chain = <Matrix4>[];
-  for (SemanticsNode? cur = node; cur != null; cur = cur.parent) {
-    final Matrix4? t = cur.transform;
-    if (t != null) chain.add(t);
-  }
-  final Matrix4 out = Matrix4.identity();
-  for (int i = chain.length - 1; i >= 0; i--) {
-    out.multiply(chain[i]);
-  }
-  return out;
-}
-
-bool _isScrollable(SemanticsData data) =>
-    data.hasAction(SemanticsAction.scrollUp) ||
-    data.hasAction(SemanticsAction.scrollDown) ||
-    data.hasAction(SemanticsAction.scrollLeft) ||
-    data.hasAction(SemanticsAction.scrollRight);
-
 typedef _ComposedText = ({
   String? text,
   String? hintText,
@@ -572,62 +509,6 @@ _ComposedText _composeText(SemanticsData data) {
   // nodes, which affects `Filters.hasText()` and empty-string regexes.
   return (text: '', hintText: null, accessibilityText: accessibilityText);
 }
-
-typedef _ExtractedFlags = ({
-  bool enabled,
-  bool focused,
-  bool checked,
-  bool selected,
-  int bits,
-});
-
-_ExtractedFlags _extractFlags(
-  ui.SemanticsFlags f, {
-  required bool clickable,
-  required bool scrollable,
-}) {
-  final bool hasChecked = f.isChecked != ui.CheckedState.none;
-  final bool hasToggled = f.isToggled != ui.Tristate.none;
-  final bool enabled = f.isEnabled != ui.Tristate.isFalse;
-  final bool focused = f.isFocused == ui.Tristate.isTrue;
-  final bool checked = hasChecked
-      ? f.isChecked == ui.CheckedState.isTrue
-      : hasToggled && f.isToggled == ui.Tristate.isTrue;
-  final bool selected = f.isSelected == ui.Tristate.isTrue;
-  // Include clickable, isTextField, scopesRoute, and scrollable so hash-gated
-  // waits and retryTapIfNoChange detect all selector-visible state changes.
-  final int bits =
-      (enabled ? 1 : 0) |
-      (focused ? 2 : 0) |
-      (checked ? 4 : 0) |
-      (selected ? 8 : 0) |
-      (clickable ? 16 : 0) |
-      (f.isTextField ? 32 : 0) |
-      (f.scopesRoute ? 64 : 0) |
-      (scrollable ? 128 : 0);
-  return (
-    enabled: enabled,
-    focused: focused,
-    checked: checked,
-    selected: selected,
-    bits: bits,
-  );
-}
-
-int _accumulateHash(int hash, SemanticsData data, int flagBits, Rect rect) =>
-    Object.hash(
-      hash,
-      data.label,
-      data.value,
-      data.hint,
-      data.tooltip,
-      data.identifier,
-      flagBits,
-      rect.left.round(),
-      rect.top.round(),
-      rect.width.round(),
-      rect.height.round(),
-    );
 
 String? _join2(String a, String b) {
   if (a.isEmpty) return b.isEmpty ? null : b;

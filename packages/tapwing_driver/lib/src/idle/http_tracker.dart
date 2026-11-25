@@ -108,12 +108,16 @@ class HttpTracker {
     HttpOverrides.global = _TrackingHttpOverrides(current, this);
   }
 
-  /// Waits until [inFlight] drops to zero, [maxWait] elapses, or [isCancelled]
-  /// returns `true`.
+  /// Waits until [inFlight] drops to zero, [maxWait] elapses, [isCancelled]
+  /// returns `true`, or [cancelSignal] completes.
   ///
   /// Tracks each waiter individually so timed-out or cancelled waits remove
   /// themselves cleanly without accumulating `.then()` chains.
-  Future<void> waitForIdle(Duration maxWait, {bool Function()? isCancelled}) {
+  Future<void> waitForIdle(
+    Duration maxWait, {
+    bool Function()? isCancelled,
+    Future<void>? cancelSignal,
+  }) {
     if (_inFlight == 0 ||
         maxWait <= Duration.zero ||
         (isCancelled != null && isCancelled())) {
@@ -129,17 +133,24 @@ class HttpTracker {
       cancelPoll?.cancel();
     }
 
-    timer = Timer(maxWait, () {
+    void finish() {
       cleanup();
       if (!waiter.isCompleted) waiter.complete();
-    });
+    }
+
+    timer = Timer(maxWait, finish);
     if (isCancelled != null) {
       cancelPoll = Timer.periodic(_cancelPollInterval, (_) {
-        if (isCancelled()) {
-          cleanup();
-          if (!waiter.isCompleted) waiter.complete();
-        }
+        if (isCancelled()) finish();
       });
+    }
+    if (cancelSignal != null) {
+      unawaited(
+        cancelSignal.then(
+          (_) => finish(),
+          onError: (Object _, StackTrace _) => finish(),
+        ),
+      );
     }
     return waiter.future.whenComplete(cleanup);
   }

@@ -129,13 +129,15 @@ class TapwingServer {
     unawaited(_loop(gen));
   }
 
-  /// Stops the reconnect loop and closes any active socket.
+  /// Stops the reconnect loop, closes any active socket, and detaches driver
+  /// listeners.
   void stop() {
     _stopped = true;
     _started = false;
     _generation++;
     _activeSocket?.destroy();
     _activeSocket = null;
+    _session.dispose();
   }
 
   Future<void> _loop(int gen) async {

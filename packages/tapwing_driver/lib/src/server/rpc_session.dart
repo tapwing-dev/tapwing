@@ -63,10 +63,18 @@ class RpcSession {
   void Function()? _cancelActive;
   Future<void> _previousWork = Future<void>.value();
 
+  /// Cancels any active connection handler and detaches cached driver
+  /// listeners (called when `TapwingServer.stop()` tears down the driver).
+  void dispose() {
+    _cancelActive?.call();
+    _dispatcher.context.dispose();
+  }
+
   /// Runs the session until [transport] closes and all queued requests finish.
   Future<void> serve(RpcTransport transport) async {
     // Cancel any lingering wait loop from a dropped prior connection.
     _cancelActive?.call();
+    _dispatcher.context.invalidateSemanticsCache();
 
     bool cancelled = false;
     void cancelThis() {
@@ -105,6 +113,7 @@ class RpcSession {
     } finally {
       cancelled = true;
       _previousWork = connectionQueue;
+      _dispatcher.context.invalidateSemanticsCache();
       if (identical(_cancelActive, cancelThis)) {
         _cancelActive = null;
       }

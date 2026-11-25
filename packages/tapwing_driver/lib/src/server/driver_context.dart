@@ -30,6 +30,7 @@ class DriverContext {
     TextInputController? textInput,
     Snapshot Function()? captureSnapshot,
     int Function()? computeSemanticsHash,
+    SemanticsHashCache? semanticsHashCache,
     ui.Size Function()? readScreenSize,
     ui.Brightness Function()? readPlatformBrightness,
     double Function()? readBottomInset,
@@ -47,12 +48,15 @@ class DriverContext {
        pointer = pointer ?? PointerInput.instance,
        textInput = textInput ?? TextInputController.instance,
        _captureOverride = captureSnapshot,
-       // Only use allocation-free Snapshot.computeHash for hash-gating when
+       _semanticsHashCache = semanticsHashCache ?? SemanticsHashCache.instance,
+       // Only use allocation-free cached semantics hashing for hash-gating when
        // captureSnapshot wasn't overridden (or caller also injected a matching
        // hash function).
        _computeSemanticsHash =
            computeSemanticsHash ??
-           (captureSnapshot == null ? Snapshot.computeHash : null),
+           (captureSnapshot == null
+               ? (semanticsHashCache ?? SemanticsHashCache.instance).hash
+               : null),
        _screenSizeOverride = readScreenSize,
        readPlatformBrightness =
            readPlatformBrightness ?? _defaultPlatformBrightness,
@@ -79,6 +83,8 @@ class DriverContext {
   final TextInputController textInput;
 
   final Snapshot Function()? _captureOverride;
+
+  final SemanticsHashCache _semanticsHashCache;
 
   final int Function()? _computeSemanticsHash;
 
@@ -116,7 +122,22 @@ class DriverContext {
   /// Captures the current semantics tree snapshot in Maestro units.
   Snapshot captureSnapshot() =>
       _captureOverride?.call() ??
-      Snapshot.capture(platform: platform, appName: appName);
+      Snapshot.capture(
+        platform: platform,
+        appName: appName,
+        hashCache: _semanticsHashCache,
+      );
+
+  /// Marks the cached semantics hash dirty (for example on `configure` or
+  /// session reset).
+  void invalidateSemanticsCache() {
+    _semanticsHashCache.invalidate();
+  }
+
+  /// Detaches any live semantics hash listener held by this context.
+  void dispose() {
+    _semanticsHashCache.dispose();
+  }
 
   /// Returns the current screen size in Maestro units (physical pixels on
   /// Android, whole logical points on iOS) for percentage point parsing.
