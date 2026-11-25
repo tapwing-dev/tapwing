@@ -415,6 +415,10 @@ void main() {
     test('ConfigureParams rejects invalid values', () {
       for (final Map<String, Object?> bad in <Map<String, Object?>>[
         <String, Object?>{'settleLoadTimeoutMs': -1},
+        <String, Object?>{
+          'settleLoadTimeoutMs': ConfigureParams.maxSettleLoadTimeoutMs + 1,
+        },
+        <String, Object?>{'settleLoadTimeoutMs': double.infinity},
         <String, Object?>{'settleLoadTimeoutMs': '5s'},
         <String, Object?>{'settleHttpIgnore': '/poll'},
         <String, Object?>{

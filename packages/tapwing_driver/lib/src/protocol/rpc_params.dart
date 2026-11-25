@@ -35,9 +35,14 @@ class ConfigureParams {
       throw DriverError.invalidCommand('Unknown platform: $platform');
     }
     final Object? loadTimeout = json['settleLoadTimeoutMs'];
-    if (loadTimeout != null && (loadTimeout is! num || loadTimeout < 0)) {
+    if (loadTimeout != null &&
+        (loadTimeout is! num ||
+            !loadTimeout.isFinite ||
+            loadTimeout < 0 ||
+            loadTimeout > maxSettleLoadTimeoutMs)) {
       throw DriverError.invalidCommand(
-        'settleLoadTimeoutMs must be a non-negative number: $loadTimeout',
+        'settleLoadTimeoutMs must be between 0 and $maxSettleLoadTimeoutMs: '
+        '$loadTimeout',
       );
     }
     return ConfigureParams(
@@ -89,6 +94,10 @@ class ConfigureParams {
       );
     }
   }
+
+  /// Maximum accepted `settleLoadTimeoutMs` (24 hours), preventing 64-bit
+  /// microsecond overflow in `Duration(milliseconds: ...)`. Use `0` for no bound.
+  static const int maxSettleLoadTimeoutMs = 24 * 60 * 60 * 1000;
 
   /// Optional bound (ms) on how long one HTTP request or pending image
   /// blocks settle (`--settle-load-timeout-ms`); `0` removes the bound.

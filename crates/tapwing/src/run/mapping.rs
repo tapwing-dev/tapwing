@@ -377,15 +377,18 @@ mod tests {
             settle_http_ignore: vec!["/poll".into()],
             ..Default::default()
         };
-        assert_eq!(SettleLoadOpts::resolve(None, &[], &TapwingConfig::default()), SettleLoadOpts::default());
+        assert_eq!(SettleLoadOpts::resolve(None, &[], &TapwingConfig::default()).unwrap(), SettleLoadOpts::default());
         assert_eq!(SettleLoadOpts::default().timeout_ms, 5000);
         assert_eq!(
-            SettleLoadOpts::resolve(None, &[], &config),
+            SettleLoadOpts::resolve(None, &[], &config).unwrap(),
             SettleLoadOpts { timeout_ms: 2000, http_ignore: vec!["/poll".into()] }
         );
         // The CLI timeout wins (0 removes the bound); CLI patterns are added.
-        let merged = SettleLoadOpts::resolve(Some(0), &["analytics".to_string()], &config);
+        let merged = SettleLoadOpts::resolve(Some(0), &["analytics".to_string()], &config).unwrap();
         assert_eq!(merged, SettleLoadOpts { timeout_ms: 0, http_ignore: vec!["/poll".into(), "analytics".into()] });
+        // Huge values that would overflow Dart Duration microseconds are rejected.
+        let huge = SettleLoadOpts::resolve(Some(crate::run::MAX_SETTLE_LOAD_TIMEOUT_MS + 1), &[], &config);
+        assert!(huge.is_err(), "expected timeout above 24h cap to fail");
 
         let opts = Opts {
             settle_policy: "v2".into(),

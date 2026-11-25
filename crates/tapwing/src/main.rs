@@ -365,7 +365,7 @@ fn run(cli: Cli) -> Result<bool> {
                 args.app_errors_screenshot || tapwing_cfg.app_errors_screenshot.unwrap_or(false),
             )?;
             let settle_load =
-                run::SettleLoadOpts::resolve(args.settle_load_timeout_ms, &args.settle_http_ignore, tapwing_cfg);
+                run::SettleLoadOpts::resolve(args.settle_load_timeout_ms, &args.settle_http_ignore, tapwing_cfg)?;
             run_test_suite(SuiteRunConfig {
                 plan,
                 shard_split: args.shard_split,

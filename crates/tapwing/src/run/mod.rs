@@ -44,6 +44,10 @@ use launch::{LaunchPlan, LaunchPlanInput, decide_launch_plan, format_blackbox_de
 /// (`HttpTracker.defaultSettleBound`) when the host sends nothing.
 pub const DEFAULT_SETTLE_LOAD_TIMEOUT_MS: u64 = 5000;
 
+/// Maximum `--settle-load-timeout-ms` (24 hours), preventing Dart `Duration`
+/// microsecond overflow on huge values; pass `0` to remove the bound.
+pub const MAX_SETTLE_LOAD_TIMEOUT_MS: u64 = 24 * 60 * 60 * 1000;
+
 /// Which loads may keep settle waiting (`configure` `settleLoadTimeoutMs` /
 /// `settleHttpIgnore`): CLI flags merged over `config.yaml` `tapwing:`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -69,13 +73,17 @@ impl SettleLoadOpts {
         cli_timeout_ms: Option<u64>,
         cli_http_ignore: &[String],
         config: &crate::workspace::config::TapwingConfig,
-    ) -> Self {
+    ) -> Result<Self> {
+        let timeout_ms = cli_timeout_ms.or(config.settle_load_timeout_ms).unwrap_or(DEFAULT_SETTLE_LOAD_TIMEOUT_MS);
+        if timeout_ms > MAX_SETTLE_LOAD_TIMEOUT_MS {
+            anyhow::bail!(
+                "--settle-load-timeout-ms ({timeout_ms}) exceeds the maximum of {MAX_SETTLE_LOAD_TIMEOUT_MS} ms \
+                 (24 hours); use 0 to disable the bound"
+            );
+        }
         let mut http_ignore = config.settle_http_ignore.clone();
         http_ignore.extend(cli_http_ignore.iter().cloned());
-        Self {
-            timeout_ms: cli_timeout_ms.or(config.settle_load_timeout_ms).unwrap_or(DEFAULT_SETTLE_LOAD_TIMEOUT_MS),
-            http_ignore,
-        }
+        Ok(Self { timeout_ms, http_ignore })
     }
 
     /// A driver that predates these options never confirms them and keeps
