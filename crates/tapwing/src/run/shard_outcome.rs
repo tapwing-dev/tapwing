@@ -109,11 +109,20 @@ pub(crate) fn catch_shard_panic<R>(work: impl FnOnce() -> Result<R>) -> Result<R
 /// - interrupted during setup: every flow [`FlowStatus::NotRun`];
 /// - any other error (or panic): every flow errored with the shard's error.
 pub(crate) fn suite_from_shard_result(plan: &ShardPlan, meta: &ShardMeta, result: Result<SuiteResult>) -> SuiteResult {
+    suite_from_shard_result_with(plan, meta, result, crate::interrupt::is_interrupted())
+}
+
+fn suite_from_shard_result_with(
+    plan: &ShardPlan,
+    meta: &ShardMeta,
+    result: Result<SuiteResult>,
+    process_interrupted: bool,
+) -> SuiteResult {
     let err = match result {
         Ok(suite) => return suite,
         Err(err) => err,
     };
-    let error = (!is_interrupted_error(&err)).then(|| format!("{err:#}"));
+    let error = (!(is_interrupted_error(&err) || process_interrupted)).then(|| format!("{err:#}"));
     let unrun = match &error {
         Some(message) => UnrunFlow::Errored(message),
         None => UnrunFlow::NotRun,
@@ -583,6 +592,12 @@ mod tests {
         assert_eq!(suite.error, None);
         assert_eq!(suite.device_id.as_deref(), Some("emu-2"));
         assert!(!suite.passed);
+        assert_eq!(suite.flows[0].status, FlowStatus::NotRun);
+
+        // Child process died from the process-group SIGINT first and surfaced as a plain error.
+        let transport_err = anyhow::anyhow!("adb reverse failed: connection reset by peer");
+        let suite = suite_from_shard_result_with(&plan(Some(1), &[], &["c"]), &meta("emu-2"), Err(transport_err), true);
+        assert_eq!(suite.error, None);
         assert_eq!(suite.flows[0].status, FlowStatus::NotRun);
 
         let summary = summary(vec![suite], Some(2));

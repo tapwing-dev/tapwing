@@ -292,8 +292,12 @@ pub(crate) fn build_flow_record(
     lanes: LaneStats,
     blackbox: bool,
 ) -> FlowRunRecord {
-    // A flow cut short by SIGINT/SIGTERM is not a test failure: it gets its own status.
-    let interrupted = result.error.as_ref().is_some_and(crate::interrupt::is_interrupted_error);
+    // A flow cut short by SIGINT/SIGTERM is not a test failure: it gets its own
+    // status even when a child process (`adb`, `iproxy`, `xcrun`) died from the
+    // process-group signal first and surfaced as a transport error.
+    let interrupted = !result.success
+        && (result.error.as_ref().is_some_and(crate::interrupt::is_interrupted_error)
+            || crate::interrupt::is_interrupted());
     let mut raw_json = result.to_report_json(name, &flow.path, settle_policy);
     if interrupted {
         raw_json["status"] = json!("interrupted");

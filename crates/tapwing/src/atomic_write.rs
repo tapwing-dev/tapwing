@@ -45,10 +45,20 @@ pub fn write_with(path: &Path, fill: impl FnOnce(&mut File) -> io::Result<()>) -
         _ => path.to_path_buf(),
     };
     let existing = std::fs::metadata(&target).ok();
-    if existing.as_ref().is_some_and(|meta| !meta.is_file()) {
-        let mut file = OpenOptions::new().write(true).open(&target)?;
-        fill(&mut file)?;
-        return file.flush();
+    if let Some(meta) = &existing {
+        if !meta.is_file() {
+            let mut file = OpenOptions::new().write(true).open(&target)?;
+            fill(&mut file)?;
+            return file.flush();
+        }
+        // `rename` ignores the target file's mode; match `std::fs::write` and
+        // refuse to overwrite a read-only file.
+        if meta.permissions().readonly() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("cannot overwrite read-only file {}", target.display()),
+            ));
+        }
     }
 
     let (mut file, mut temp) = match TempFile::create_next_to(&target, &TEMP_COUNTER) {
@@ -288,5 +298,23 @@ mod tests {
     fn non_regular_targets_are_written_in_place() {
         write(Path::new("/dev/null"), "discarded").unwrap();
         assert!(!std::fs::metadata("/dev/null").unwrap().is_file(), "/dev/null must not be replaced by a file");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_only_target_returns_permission_denied_and_keeps_original() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let scratch = Scratch::new("readonly");
+        let path = scratch.0.join("pubspec.yaml");
+        std::fs::write(&path, "original").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).unwrap();
+
+        let err = write(&path, "replacement").unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied, "{err:?}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "original");
+        assert_eq!(scratch.entries(), ["pubspec.yaml"]);
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
     }
 }
