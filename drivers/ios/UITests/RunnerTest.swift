@@ -1,5 +1,6 @@
 // XCUITest entry point for Tapwing's iOS Simulator native-lane runner.
-// Launched via `xcodebuild test-without-building` with `TEST_RUNNER_PORT=<port>`.
+// Launched via `xcodebuild test-without-building` with `TEST_RUNNER_PORT=<port>`
+// and `TEST_RUNNER_TAPWING_SESSION=<id>` (xcodebuild strips the prefix).
 
 import Foundation
 import XCTest
@@ -22,7 +23,8 @@ final class RunnerTest: XCTestCase {
             port = Self.defaultPort
         }
 
-        let server = HttpServer(port: port, router: Router())
+        let session = GateReply.session(fromEnvironment: ProcessInfo.processInfo.environment)
+        let server = HttpServer(port: port, router: Router(), session: session)
         try await server.start()
         NSLog("[TapwingRunner] Listening on 127.0.0.1:%u", port)
 

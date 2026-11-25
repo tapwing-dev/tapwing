@@ -32,7 +32,6 @@ final class ContinuationOnceGuard: @unchecked Sendable {
 @MainActor
 enum TextInputHelper {
     private static let typingFrequency: UInt64 = 30
-    private static let slowPrefixCount = 1
 
     /// Waits up to 1 second for the soft keyboard to appear when a text field
     /// was just focused.
@@ -53,17 +52,21 @@ enum TextInputHelper {
     /// autocorrection / hardware-keyboard listeners do not drop characters after
     /// the first one (preserving exact Maestro 2.12.1 reliability, including
     /// non-ASCII Unicode such as Czech diacritics).
-    static func inputText(_ text: String) async throws {
-        guard !text.isEmpty else { return }
+    ///
+    /// The rest is typed in `TypingPlan` chunks; between chunks `shouldStop`
+    /// (the request's deadline / client-gone flag) is checked and typing stops
+    /// with `TypingStopped` once the request is dead. A chunk already handed
+    /// to XCTest cannot be cancelled.
+    static func inputText(_ text: String, shouldStop: () -> Bool) async throws {
+        var plan = TypingPlan(text: text)
+        guard plan.hasMore else { return }
 
         let orientation = ScreenSizeHelper.currentInterfaceOrientation()
-        let firstCharacter = String(text.prefix(slowPrefixCount))
-        try await synthesizeText(firstCharacter, typingSpeed: 1, orientation: orientation)
-
-        if text.count > slowPrefixCount {
-            try await Task.sleep(nanoseconds: 500_000_000)
-            let remainingText = String(text.dropFirst(slowPrefixCount))
-            try await synthesizeText(remainingText, typingSpeed: typingFrequency, orientation: orientation)
+        while let step = try plan.next(shouldStop: shouldStop()) {
+            try await synthesizeText(step.text, typingSpeed: step.slow ? 1 : typingFrequency, orientation: orientation)
+            if step.slow && plan.hasMore {
+                try await Task.sleep(nanoseconds: 500_000_000)
+            }
         }
     }
 

@@ -88,20 +88,22 @@ enum Actions {
         return HttpResponse.ok()
     }
 
-    static func inputText(_ request: HttpRequest) async -> HttpResponse {
+    static func inputText(_ request: HttpRequest, ticket: RequestTicket) async -> HttpResponse {
         guard let body = try? JSONDecoder().decode(InputTextRequest.self, from: request.body) else {
             return AppError(type: .precondition, message: "Incorrect request body provided for inputText").httpResponse
         }
         do {
             await TextInputHelper.waitUntilKeyboardIsPresented()
-            try await TextInputHelper.inputText(body.text)
+            try await TextInputHelper.inputText(body.text) { ticket.shouldStop }
             return HttpResponse.ok()
+        } catch let stopped as TypingStopped {
+            return stopped.appError.httpResponse
         } catch {
             return AppError(message: "Error inputting text: \(error.localizedDescription)").httpResponse
         }
     }
 
-    static func eraseText(_ request: HttpRequest) async -> HttpResponse {
+    static func eraseText(_ request: HttpRequest, ticket: RequestTicket) async -> HttpResponse {
         guard let body = try? JSONDecoder().decode(EraseTextRequest.self, from: request.body) else {
             return AppError(type: .precondition, message: "Incorrect request body provided for eraseText").httpResponse
         }
@@ -116,8 +118,10 @@ enum Actions {
         }
         do {
             let deleteText = String(repeating: XCUIKeyboardKey.delete.rawValue, count: body.charactersToErase)
-            try await TextInputHelper.inputText(deleteText)
+            try await TextInputHelper.inputText(deleteText) { ticket.shouldStop }
             return HttpResponse.ok()
+        } catch let stopped as TypingStopped {
+            return stopped.appError.httpResponse
         } catch {
             return AppError(message: "Failure erasing text: \(error.localizedDescription)").httpResponse
         }

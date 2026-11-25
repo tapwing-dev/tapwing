@@ -16,7 +16,8 @@
 #     install.sh
 #     bin/tapwing
 #     share/tapwing/drivers/android/tapwing-driver.apk (+ .sha256; drivers/android, F11a)
-#     share/tapwing/drivers/ios/tapwing-ios-runner.* (+ .sha256; drivers/ios, F11b, *-apple-darwin only)
+#     share/tapwing/drivers/ios/tapwing-ios-runner.* (+ .sha256; drivers/ios, F11b, *-apple-darwin only;
+#       includes tapwing-ios-runner.build-info.json when the driver directory has one)
 #     share/tapwing/drivers/SHA256SUMS
 #     share/tapwing/licenses/THIRD_PARTY_NOTICES.md
 #     share/tapwing/release
@@ -118,6 +119,7 @@ fi
 
 # Tapwing's iOS Simulator driver (macOS targets only).
 TAPWING_IOS_FILES=(tapwing-ios-runner.xctestrun tapwing-ios-runnerUITests-Runner.zip tapwing-ios-runner.zip)
+TAPWING_IOS_BUILD_INFO=tapwing-ios-runner.build-info.json
 tapwing_ios_dir=""
 if $needs_ios && $with_ios_driver; then
   if [[ -n "${TAPWING_IOS_DRIVER_DIR:-}" ]]; then
@@ -136,6 +138,14 @@ if $needs_ios && $with_ios_driver; then
     printf '%s  %s\n' "$sum" "$f" >"$WORK/tapwing-ios/$f.sha256"
     note "Tapwing iOS driver $f sha256 $sum"
   done
+  # Build Xcode / SDK of the runner: shipped when present (a driver directory
+  # built before the file existed has none, and `tapwing` works without it).
+  if [[ -f "$tapwing_ios_dir/$TAPWING_IOS_BUILD_INFO" ]]; then
+    cp "$tapwing_ios_dir/$TAPWING_IOS_BUILD_INFO" "$WORK/tapwing-ios/$TAPWING_IOS_BUILD_INFO"
+    sum=$(sha256 "$WORK/tapwing-ios/$TAPWING_IOS_BUILD_INFO")
+    printf '%s  %s\n' "$sum" "$TAPWING_IOS_BUILD_INFO" >"$WORK/tapwing-ios/$TAPWING_IOS_BUILD_INFO.sha256"
+    TAPWING_IOS_FILES+=("$TAPWING_IOS_BUILD_INFO")
+  fi
 fi
 
 # --- Per-target tarballs ----------------------------------------------------------

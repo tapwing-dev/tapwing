@@ -13,6 +13,8 @@
 //! * [`tapwing_driver`]: finds the runner (env override, release bundle, checkout build).
 //! * [`ops`]: Maestro-style commands (tap, assert, swipe, ...) on top of the client.
 //! * `orphans`: removes runners a hard-killed earlier run left on the simulator.
+//! * `session`: the per-session id that tells this run's runner from a stale one.
+//! * `xcode_compat`: one warning when the runner was built with another major Xcode.
 //!
 //! The release bundle is unpacked once into `~/.tapwing/ios-native-driver/<key>/`
 //! (an atomic marker makes warm runs free). [`IosNativeLaneHandle`] starts the
@@ -25,7 +27,9 @@ pub mod client;
 pub mod hierarchy;
 pub mod ops;
 mod orphans;
+mod session;
 pub mod tapwing_driver;
+mod xcode_compat;
 
 use std::collections::HashSet;
 use std::fs;
@@ -43,7 +47,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use sha2::{Digest, Sha256};
 
 use crate::native_lane::{BlackboxDemotion, BlackboxTracker};
-pub use client::{IosDeviceInfo, IosNativeClient, MAX_RESTARTS, RestartFn, RunnerProcess, is_runner_answer};
+pub use client::{IosDeviceInfo, IosNativeClient, MAX_RESTARTS, Readiness, RestartFn, RunnerProcess, is_runner_answer};
 pub use hierarchy::IosHierarchy;
 pub use ops::IosNativeOps;
 
@@ -402,41 +406,52 @@ impl Drop for RunnerGuard {
     }
 }
 
-/// Polls `GET /status` until the runner answers. Checks `cancel` and `exited`
-/// on every iteration (never sleeping longer than [`POLL_SLEEP`]), so
-/// cancellation is observed within one probe.
+/// Polls `GET /status` until the runner this client started answers (see
+/// [`session`]): another runner on the port is not readiness, however healthy.
+/// Checks `cancel` and `exited` on every iteration (never sleeping longer than
+/// [`POLL_SLEEP`]), so cancellation is observed within one probe.
 fn wait_for_runner(
     client: &IosNativeClient,
     driver_label: &str,
     mut exited: impl FnMut() -> Option<String>,
     cancel: &AtomicBool,
     deadline: Instant,
-) -> Result<()> {
+) -> Result<Readiness> {
+    let mut foreign: Option<String> = None;
+    let hint = |foreign: &Option<String>| {
+        session::foreign_hint(foreign.as_deref(), PORT_ENV, tapwing_driver::RUNNER_BUNDLE_ID)
+    };
     loop {
         if cancel.load(Ordering::Relaxed) || crate::interrupt::is_interrupted() {
             bail!("cancelled");
         }
         if let Some(why) = exited() {
-            bail!("{driver_label} exited during startup ({why})");
+            bail!("{driver_label} exited during startup ({why}){}", hint(&foreign));
         }
         let rem = deadline.saturating_duration_since(Instant::now());
         if rem.is_zero() {
-            bail!("{driver_label} did not start in time");
+            bail!("{driver_label} did not start in time{}", hint(&foreign));
         }
-        match client.status(rem.min(PROBE_TIMEOUT)) {
-            Ok(()) => return Ok(()),
+        match client.probe(rem.min(PROBE_TIMEOUT)) {
+            // Keep waiting: `xcodebuild` may still replace a stale runner with ours.
+            Ok(Readiness::Foreign(other)) => foreign = Some(other),
+            Ok(ready) => return Ok(ready),
             Err(e) if Instant::now() >= deadline => {
-                return Err(e.context(format!("{driver_label} did not start in time")));
+                return Err(e.context(format!("{driver_label} did not start in time{}", hint(&foreign))));
             }
-            Err(_) => std::thread::sleep(POLL_SLEEP.min(deadline.saturating_duration_since(Instant::now()))),
+            Err(_) => {}
         }
+        std::thread::sleep(POLL_SLEEP.min(deadline.saturating_duration_since(Instant::now())));
     }
 }
 
 /// Unpacks (if needed), launches the runner and waits for HTTP readiness. The
 /// returned client owns the runner process (dropping it stops the runner).
 fn start_session(udid: &str, cancel: &AtomicBool) -> Result<IosNativeClient> {
-    let xctestrun = tapwing_driver::locate(cancel)?.xctestrun;
+    let driver = tapwing_driver::locate(cancel)?;
+    // One advisory line per process if the runner was built with another major Xcode.
+    xcode_compat::warn_once(driver.source.path(), cancel);
+    let xctestrun = driver.xctestrun;
     let driver_label = "the Tapwing iOS driver";
     if cancel.load(Ordering::Relaxed) || crate::interrupt::is_interrupted() {
         bail!("cancelled");
@@ -448,6 +463,7 @@ fn start_session(udid: &str, cancel: &AtomicBool) -> Result<IosNativeClient> {
     let port_guard = reserve_port()?;
     let port = port_guard.port();
     let seq = SESSION_SEQ.fetch_add(1, Ordering::Relaxed);
+    let session_id = session::new_id(seq, port);
     let dir = std::env::temp_dir().join(session_dir_name(std::process::id(), seq, port));
     fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let log = dir.join("xcodebuild.log");
@@ -456,6 +472,7 @@ fn start_session(udid: &str, cancel: &AtomicBool) -> Result<IosNativeClient> {
     let mut cmd = Command::new("xcodebuild");
     cmd.args(xcodebuild_args(&xctestrun, udid, &dir.join("derived")))
         .env("TEST_RUNNER_PORT", port.to_string())
+        .env(session::RUNNER_ENV, &session_id)
         .stdin(Stdio::null())
         .stdout(Stdio::from(log_file.try_clone()?))
         .stderr(Stdio::from(log_file));
@@ -479,7 +496,13 @@ fn start_session(udid: &str, cancel: &AtomicBool) -> Result<IosNativeClient> {
     };
 
     let mut client = IosNativeClient::connect(port);
-    wait_for_runner(&client, driver_label, || guard.exited(), cancel, Instant::now() + startup_timeout())?;
+    client.expect_session(session_id);
+    let ready = wait_for_runner(&client, driver_label, || guard.exited(), cancel, Instant::now() + startup_timeout())?;
+    if ready == Readiness::Unverified
+        && let Some(notice) = session::unverified_notice_once()
+    {
+        client.add_notice(notice);
+    }
     client.set_runner(Box::new(guard));
     Ok(client)
 }
@@ -904,6 +927,71 @@ mod tests {
         .unwrap();
         assert!(t.elapsed() < Duration::from_secs(1));
         assert_eq!(r.calls("status").len(), 1);
+    }
+
+    /// A runner that reports `session` in `/status`, as the Swift runner does.
+    fn runner_of_session(session: &'static str) -> MockRunner {
+        MockRunner::start(Box::new(move |_| Resp::json(&format!(r#"{{"status":"ok","session":"{session}"}}"#))))
+    }
+
+    #[test]
+    fn a_stale_runner_answering_status_is_not_readiness() {
+        // The hole: a runner of an earlier, hard-killed run still listens on the port
+        // and answers `/status` 200 at once, long before `xcodebuild` started ours.
+        let stale = runner_of_session("stale-run");
+        let soon = || Instant::now() + Duration::from_millis(400);
+
+        // Without a session to check (the behaviour before session ids) it passes for ready.
+        let unchecked = IosNativeClient::connect(stale.port);
+        assert_eq!(wait_for_runner(&unchecked, "the driver", || None, &no_cancel(), soon()).unwrap(), Readiness::Ready);
+
+        // With one, readiness keeps waiting and fails naming the foreign runner.
+        let mut client = IosNativeClient::connect(stale.port);
+        client.expect_session("this-run".into());
+        let err = format!("{:#}", wait_for_runner(&client, "the driver", || None, &no_cancel(), soon()).unwrap_err());
+        assert!(err.contains("did not start in time"), "{err}");
+        assert!(err.contains("another Tapwing iOS runner (session `stale-run`)"), "{err}");
+        assert!(err.contains(PORT_ENV) && err.contains(tapwing_driver::RUNNER_BUNDLE_ID), "{err}");
+        assert!(stale.calls("status").len() > 2, "it kept polling instead of accepting the first answer");
+
+        // `xcodebuild` giving up (our runner could not bind the taken port) carries the same hint.
+        let err = wait_for_runner(&client, "the driver", || Some("exit status: 65".into()), &no_cancel(), soon());
+        let err = format!("{:#}", err.unwrap_err());
+        assert!(err.contains("exited during startup"), "{err}");
+        let mut seen = false;
+        let exits_after_a_probe = || std::mem::replace(&mut seen, true).then(|| "exit status: 65".to_string());
+        let err = wait_for_runner(&client, "the driver", exits_after_a_probe, &no_cancel(), soon());
+        let err = format!("{:#}", err.unwrap_err());
+        assert!(err.contains("exited during startup") && err.contains("session `stale-run`"), "{err}");
+    }
+
+    #[test]
+    fn readiness_waits_for_the_runner_of_this_session_to_replace_a_stale_one() {
+        // One live listener: it answers as the stale runner twice, then as ours.
+        let probes = Arc::new(AtomicUsize::new(0));
+        let n = probes.clone();
+        let r = MockRunner::start(Box::new(move |_| {
+            let session = if n.fetch_add(1, Ordering::Relaxed) < 2 { "stale-run" } else { "this-run" };
+            Resp::json(&format!(r#"{{"status":"ok","session":"{session}"}}"#))
+        }));
+        let mut client = IosNativeClient::connect(r.port);
+        client.expect_session("this-run".into());
+        let far = Instant::now() + Duration::from_secs(10);
+        assert_eq!(wait_for_runner(&client, "the driver", || None, &no_cancel(), far).unwrap(), Readiness::Ready);
+        assert_eq!(probes.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn a_runner_without_session_ids_is_ready_but_reported_as_unverified() {
+        let old = status_runner();
+        let mut client = IosNativeClient::connect(old.port);
+        client.expect_session("this-run".into());
+        let far = Instant::now() + Duration::from_secs(5);
+        assert_eq!(wait_for_runner(&client, "the driver", || None, &no_cancel(), far).unwrap(), Readiness::Unverified);
+        assert_eq!(old.calls("status").len(), 1);
+        client.add_notice(session::unverified_notice());
+        let notices = client.take_restart_notices();
+        assert!(notices[0].contains("does not report a session id") && notices[0].contains("build-ios-driver.sh"));
     }
 
     #[test]
