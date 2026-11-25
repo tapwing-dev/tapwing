@@ -27,8 +27,16 @@ enum MaestroCompat {
 }
 
 #[derive(Parser)]
-#[command(name = "tapwing", version, about = "Flutter-first runner for Maestro YAML flows")]
+#[command(
+    name = "tapwing",
+    version,
+    about = "Flutter-first runner for Maestro YAML flows",
+    disable_version_flag = true
+)]
 struct Cli {
+    /// Print version.
+    #[arg(short = 'v', visible_short_alias = 'V', long = "version", action = clap::ArgAction::Version)]
+    version: Option<bool>,
     /// adb serial, booted iOS simulator UDID/name, or comma-separated list for sharded runs.
     #[arg(long, visible_alias = "udid", global = true)]
     device: Option<String>,
@@ -38,6 +46,27 @@ struct Cli {
     /// Host port the app dials (0 = a free port per session/shard).
     #[arg(long, global = true)]
     port: Option<u16>,
+    /// Maestro CLI compatibility no-op: disable ANSI output.
+    #[arg(long, global = true, hide = true)]
+    no_ansi: bool,
+    /// Maestro CLI compatibility no-op: disable color output.
+    #[arg(long, global = true, hide = true)]
+    no_color: bool,
+    /// Maestro CLI compatibility no-op: enable ANSI output.
+    #[arg(long, global = true, hide = true)]
+    ansi: bool,
+    /// Maestro CLI compatibility no-op: enable color output.
+    #[arg(long, global = true, hide = true)]
+    color: bool,
+    /// Maestro CLI compatibility no-op: verbose logging toggle.
+    #[arg(long, global = true, hide = true)]
+    verbose: bool,
+    /// Maestro CLI compatibility no-op: remote driver host.
+    #[arg(long, global = true, hide = true, value_name = "HOST")]
+    host: Option<String>,
+    /// Maestro CLI compatibility no-op: driver host port.
+    #[arg(long, global = true, hide = true, value_name = "PORT")]
+    driver_host_port: Option<u16>,
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -124,6 +153,33 @@ struct TestArgs {
     /// With `--trace`: capture a screenshot and UI tree after every step (`steps`) or only on failures.
     #[arg(long, value_enum, default_value = "failures", requires = "trace")]
     trace_screenshots: TraceScreenshots,
+    /// Maestro CLI compatibility no-op: continuous watch mode (not implemented).
+    #[arg(short = 'c', long, hide = true)]
+    continuous: bool,
+    /// Maestro CLI compatibility no-op: headless web mode.
+    #[arg(long, hide = true)]
+    headless: bool,
+    /// Maestro CLI compatibility no-op: headless web browser size.
+    #[arg(long, hide = true, value_name = "WIDTHxHEIGHT")]
+    screen_size: Option<String>,
+    /// Maestro CLI compatibility no-op: AI insights analysis.
+    #[arg(long, hide = true)]
+    analyze: bool,
+    /// Maestro CLI compatibility no-op: Maestro Cloud API base URL.
+    #[arg(long, hide = true, value_name = "URL")]
+    api_url: Option<String>,
+    /// Maestro CLI compatibility no-op: Maestro Cloud API key.
+    #[arg(long, hide = true, value_name = "KEY")]
+    api_key: Option<String>,
+    /// Maestro CLI compatibility no-op: force driver reinstall.
+    #[arg(long, hide = true)]
+    reinstall_driver: bool,
+    /// Maestro CLI compatibility no-op: skip driver reinstall.
+    #[arg(long, hide = true)]
+    no_reinstall_driver: bool,
+    /// Maestro CLI compatibility no-op: Apple Team ID for XCTest signing.
+    #[arg(long, hide = true, value_name = "TEAM_ID")]
+    apple_team_id: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -161,7 +217,7 @@ fn main() {
     };
     // `--version` also reports where the native-lane drivers come from, which
     // needs the filesystem, so it is answered before clap's static version.
-    if matches!(expanded_args.get(1).and_then(|a| a.to_str()), Some("-V" | "--version")) {
+    if matches!(expanded_args.get(1).and_then(|a| a.to_str()), Some("-V" | "-v" | "--version")) {
         print!("{}", tapwing::driver_bundle::version_report());
         return;
     }
@@ -183,21 +239,106 @@ fn main() {
     std::process::exit(code);
 }
 
+/// Merges `-e KEY=VALUE` pairs with `MAESTRO_*` process environment variables,
+/// matching Maestro 2.12.1 (`Env.withInjectedShellEnvVars`).
+///
+/// Explicit `-e` / `--env` entries take precedence. Process variables are
+/// included only when the key starts with `MAESTRO_`, the key is not an
+/// internal shard variable (`MAESTRO_SHARD_ID` / `MAESTRO_SHARD_INDEX`), and
+/// the value is non-empty; the `MAESTRO_` prefix is preserved.
+fn merge_flow_env<I, S, P>(cli_pairs: I, process_env: P) -> Result<HashMap<String, String>>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+    P: IntoIterator<Item = (String, String)>,
+{
+    let mut merged: HashMap<String, String> = HashMap::new();
+    for kv in cli_pairs {
+        let kv = kv.as_ref();
+        let (k, v) = kv.split_once('=').ok_or_else(|| anyhow!("invalid -e/--env value `{kv}` (expected KEY=VALUE)"))?;
+        merged.insert(k.to_string(), v.to_string());
+    }
+    for (k, v) in process_env {
+        if k.starts_with("MAESTRO_")
+            && !v.is_empty()
+            && !tapwing::orchestra::INTERNAL_ONLY_ENV_VARS.contains(&k.as_str())
+        {
+            merged.entry(k).or_insert(v);
+        }
+    }
+    Ok(merged)
+}
+
+/// Returns stderr warnings for accepted Maestro CLI flags that Tapwing ignores.
+fn compat_flag_warnings(cli: &Cli) -> Vec<String> {
+    let mut warnings = Vec::new();
+    let global_bools = [
+        (cli.no_ansi, "--no-ansi", "Tapwing emits plain text output"),
+        (cli.no_color, "--no-color", "Tapwing emits plain text output"),
+        (cli.ansi, "--ansi", "Tapwing emits plain text output"),
+        (cli.color, "--color", "Tapwing emits plain text output"),
+        (cli.verbose, "--verbose", "Tapwing does not have a verbose logging toggle"),
+    ];
+    for (set, flag, reason) in global_bools {
+        if set {
+            warnings.push(format!("warning: {flag} is accepted for Maestro compatibility and ignored ({reason})"));
+        }
+    }
+    if cli.host.is_some() {
+        warnings.push(
+            "warning: --host is accepted for Maestro compatibility and ignored (Tapwing manages driver connections locally)"
+                .into(),
+        );
+    }
+    if cli.driver_host_port.is_some() {
+        warnings.push(
+            "warning: --driver-host-port is accepted for Maestro compatibility and ignored (Tapwing allocates driver ports automatically)"
+                .into(),
+        );
+    }
+    if let Cmd::Test(args) = &cli.cmd {
+        let test_bools = [
+            (args.continuous, "-c/--continuous", "watch mode is not implemented; running once"),
+            (args.headless, "--headless", "Web target is not supported"),
+            (args.analyze, "--analyze", "Maestro Cloud AI insights are not supported"),
+            (args.reinstall_driver, "--reinstall-driver", "Tapwing manages its native driver lifecycle automatically"),
+            (
+                args.no_reinstall_driver,
+                "--no-reinstall-driver",
+                "Tapwing manages its native driver lifecycle automatically",
+            ),
+        ];
+        for (set, flag, reason) in test_bools {
+            if set {
+                warnings.push(format!("warning: {flag} is accepted for Maestro compatibility and ignored ({reason})"));
+            }
+        }
+        let test_opts = [
+            (args.screen_size.is_some(), "--screen-size", "Web target is not supported"),
+            (args.api_url.is_some(), "--api-url", "Maestro Cloud is not supported"),
+            (args.api_key.is_some(), "--api-key", "Maestro Cloud is not supported"),
+            (args.apple_team_id.is_some(), "--apple-team-id", "Tapwing does not sign Xcode runner bundles"),
+        ];
+        for (set, flag, reason) in test_opts {
+            if set {
+                warnings.push(format!("warning: {flag} is accepted for Maestro compatibility and ignored ({reason})"));
+            }
+        }
+    }
+    warnings
+}
+
 fn run(cli: Cli) -> Result<bool> {
+    for warning in compat_flag_warnings(&cli) {
+        eprintln!("{warning}");
+    }
+    let _ = cli.version;
     let global_device = cli.device;
     let global_platform = cli.platform;
     let global_port = cli.port.unwrap_or(0);
     match cli.cmd {
         Cmd::Test(args) => {
-            let cli_env: HashMap<String, String> = args
-                .env
-                .iter()
-                .map(|kv| {
-                    kv.split_once('=')
-                        .map(|(k, v)| (k.to_string(), v.to_string()))
-                        .ok_or_else(|| anyhow!("invalid -e/--env value `{kv}` (expected KEY=VALUE)"))
-                })
-                .collect::<Result<_>>()?;
+            let cli_env = merge_flow_env(&args.env, std::env::vars())?;
             let plan = workspace::plan(&args.flows, &args.include_tags, &args.exclude_tags, args.config.as_deref())?;
             let tapwing_cfg = &plan.config.tapwing;
             for (origin, value) in [
@@ -361,4 +502,134 @@ fn collect_yaml(p: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
         out.push(p.to_path_buf());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merge_flow_env_injects_maestro_vars_and_cli_wins() {
+        let proc_env = vec![
+            ("MAESTRO_EXAMPLE".into(), "from_shell".into()),
+            ("MAESTRO_API_TOKEN".into(), "secret-123".into()),
+            ("MAESTRO_EMPTY".into(), "".into()),
+            ("MAESTRO_SHARD_ID".into(), "99".into()),
+            ("MAESTRO_SHARD_INDEX".into(), "98".into()),
+            ("maestro_lowercase".into(), "ignored".into()),
+            ("PATH".into(), "/usr/bin".into()),
+            ("APP_ID".into(), "ignored_without_prefix".into()),
+        ];
+        let cli_pairs = ["MAESTRO_EXAMPLE=from_cli", "CUSTOM=a=b=c", "EMPTY_CLI="];
+
+        let merged = merge_flow_env(cli_pairs, proc_env).unwrap();
+
+        assert_eq!(merged.get("MAESTRO_EXAMPLE").map(String::as_str), Some("from_cli"));
+        assert_eq!(merged.get("MAESTRO_API_TOKEN").map(String::as_str), Some("secret-123"));
+        assert_eq!(merged.get("CUSTOM").map(String::as_str), Some("a=b=c"));
+        assert_eq!(merged.get("EMPTY_CLI").map(String::as_str), Some(""));
+        assert!(!merged.contains_key("EXAMPLE"));
+        assert!(!merged.contains_key("MAESTRO_EMPTY"));
+        assert!(!merged.contains_key("MAESTRO_SHARD_ID"));
+        assert!(!merged.contains_key("MAESTRO_SHARD_INDEX"));
+        assert!(!merged.contains_key("maestro_lowercase"));
+        assert!(!merged.contains_key("PATH"));
+        assert!(!merged.contains_key("APP_ID"));
+    }
+
+    #[test]
+    fn merge_flow_env_rejects_malformed_cli_entry() {
+        let err = merge_flow_env(["NO_EQUALS"], std::iter::empty()).unwrap_err();
+        assert!(err.to_string().contains("invalid -e/--env value `NO_EQUALS`"));
+    }
+
+    #[test]
+    fn cli_parses_representative_maestro_ci_invocations_and_warns() {
+        let cli = Cli::try_parse_from([
+            "tapwing",
+            "--no-ansi",
+            "--verbose",
+            "--host",
+            "127.0.0.1",
+            "--driver-host-port",
+            "7001",
+            "-p",
+            "ios",
+            "--udid",
+            "SIM-123",
+            "test",
+            "--no-reinstall-driver",
+            "--apple-team-id",
+            "ABCDE12345",
+            "--flatten-debug-output",
+            "--debug-output",
+            "./artifacts",
+            "--format",
+            "junit",
+            "--output",
+            "junit.xml",
+            "-e",
+            "FOO=bar",
+            "flow.yaml",
+        ])
+        .unwrap();
+
+        let warnings = compat_flag_warnings(&cli);
+        assert!(warnings.iter().any(|w| w.contains("--no-ansi")), "{warnings:?}");
+        assert!(warnings.iter().any(|w| w.contains("--verbose")), "{warnings:?}");
+        assert!(warnings.iter().any(|w| w.contains("--host")), "{warnings:?}");
+        assert!(warnings.iter().any(|w| w.contains("--driver-host-port")), "{warnings:?}");
+        assert!(warnings.iter().any(|w| w.contains("--no-reinstall-driver")), "{warnings:?}");
+        assert!(warnings.iter().any(|w| w.contains("--apple-team-id")), "{warnings:?}");
+        assert!(!warnings.iter().any(|w| w.contains("--flatten-debug-output")), "{warnings:?}");
+        assert!(!warnings.iter().any(|w| w.contains("--debug-output")), "{warnings:?}");
+    }
+
+    #[test]
+    fn cli_parses_remaining_maestro_test_and_global_flags() {
+        let cli = Cli::try_parse_from([
+            "tapwing",
+            "test",
+            "--no-color",
+            "--ansi",
+            "--color",
+            "-c",
+            "--headless",
+            "--screen-size",
+            "1920x1080",
+            "--analyze",
+            "--api-url",
+            "https://api.copilot.mobile.dev",
+            "--api-key",
+            "secret",
+            "--reinstall-driver",
+            "flows/",
+        ])
+        .unwrap();
+
+        let warnings = compat_flag_warnings(&cli);
+        for flag in [
+            "--no-color",
+            "--ansi",
+            "--color",
+            "-c/--continuous",
+            "--headless",
+            "--screen-size",
+            "--analyze",
+            "--api-url",
+            "--api-key",
+            "--reinstall-driver",
+        ] {
+            assert!(warnings.iter().any(|w| w.contains(flag)), "missing warning for {flag}: {warnings:?}");
+        }
+
+        let clean = Cli::try_parse_from(["tapwing", "test", "-p", "android", "flow.yaml"]).unwrap();
+        assert!(compat_flag_warnings(&clean).is_empty());
+
+        let version_err = Cli::try_parse_from(["tapwing", "-v"]).err().expect("-v triggers DisplayVersion");
+        assert_eq!(version_err.kind(), clap::error::ErrorKind::DisplayVersion);
+
+        use clap::CommandFactory;
+        Cli::command().debug_assert();
+    }
 }

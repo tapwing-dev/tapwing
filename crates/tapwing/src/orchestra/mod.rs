@@ -37,7 +37,7 @@ use diagnostics::traces_screen;
 use eval::evaluate_define_variables;
 
 /// Reserved internal env vars controlled exclusively by Maestro (`Env.kt:102-105`).
-const INTERNAL_ONLY_ENV_VARS: &[&str] = &["MAESTRO_SHARD_ID", "MAESTRO_SHARD_INDEX"];
+pub const INTERNAL_ONLY_ENV_VARS: &[&str] = &["MAESTRO_SHARD_ID", "MAESTRO_SHARD_INDEX"];
 
 /// Resolution returned by `on_command_failed` (`Orchestra.ErrorResolution`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
