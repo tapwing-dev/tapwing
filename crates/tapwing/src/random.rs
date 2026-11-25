@@ -11,12 +11,77 @@ const LETTERS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 const FIRST_NAMES: &[&str] = &[
     "Alex", "Sam", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Jamie", "Quinn", "Avery", "Elena", "Marcus",
-    "Clara", "Liam", "Noah", "Maya", "Lucas", "Nora", "Owen", "Hannah",
+    "Clara", "Liam", "Noah", "Maya", "Lucas", "Nora", "Owen", "Hannah", "Adrian", "Alice", "Arthur", "Bella", "Caleb",
+    "Chloe", "Daniel", "Diana", "Dylan", "Emma", "Ethan", "Eva", "Felix", "Fiona", "Gabriel", "Grace", "Henry", "Iris",
+    "Isaac", "Ivy", "Jack", "Julia", "Julian", "Klara", "Leo", "Lydia", "Mason", "Mia", "Nathan", "Olive", "Oscar",
+    "Paige", "Peter", "Rachel", "Roman", "Ruby", "Ryan", "Sofia", "Theo", "Vera", "Victor", "Violet", "Wyatt", "Zoe",
 ];
 
 const LAST_NAMES: &[&str] = &[
-    "Miller", "Smith", "Johnson", "Brown", "Davis", "Wilson", "Clark", "Lewis", "Walker", "Hall", "Young", "Allen",
-    "King", "Wright", "Scott", "Green", "Baker", "Adams", "Nelson", "Carter",
+    "Miller",
+    "Smith",
+    "Johnson",
+    "Brown",
+    "Davis",
+    "Wilson",
+    "Clark",
+    "Lewis",
+    "Walker",
+    "Hall",
+    "Young",
+    "Allen",
+    "King",
+    "Wright",
+    "Scott",
+    "Green",
+    "Baker",
+    "Adams",
+    "Nelson",
+    "Carter",
+    "Anderson",
+    "Bailey",
+    "Barnes",
+    "Bell",
+    "Bennett",
+    "Brooks",
+    "Campbell",
+    "Collins",
+    "Cook",
+    "Cooper",
+    "Cox",
+    "Edwards",
+    "Evans",
+    "Fisher",
+    "Foster",
+    "Gray",
+    "Harris",
+    "Hayes",
+    "Hill",
+    "Howard",
+    "Hughes",
+    "James",
+    "Jenkins",
+    "Kelly",
+    "Lee",
+    "Long",
+    "Martin",
+    "Mitchell",
+    "Moore",
+    "Morgan",
+    "Morris",
+    "Murphy",
+    "Parker",
+    "Perry",
+    "Phillips",
+    "Powell",
+    "Price",
+    "Reed",
+    "Richardson",
+    "Roberts",
+    "Robinson",
+    "Rogers",
+    "Ross",
+    "Russell",
 ];
 
 const JOB_TITLES: &[&str] = &[
@@ -30,7 +95,8 @@ const JOB_TITLES: &[&str] = &[
     "Operations Manager",
 ];
 
-const DOMAINS: &[&str] = &["example.com", "test.org", "mail.net", "sample.io"];
+const DOMAINS: &[&str] =
+    &["example.com", "example.org", "example.net", "test.org", "mail.net", "sample.io", "demo.org", "qa.example.com"];
 
 const CITIES: &[&str] = &[
     "London",
@@ -135,13 +201,21 @@ const PRODUCTS: &[&str] =
 
 static COUNTER: AtomicU64 = AtomicU64::new(1);
 
+fn splitmix64(mut x: u64) -> u64 {
+    x = x.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^ (x >> 31)
+}
+
 pub struct Rng(u64);
 
 impl Rng {
     pub fn from_clock() -> Self {
         let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0x9e37_79b9);
         let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let seed = nanos ^ seq.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        let pid = u64::from(std::process::id());
+        let seed = splitmix64(nanos ^ seq.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ pid.rotate_left(32));
         Self(if seed == 0 { 0xdead_beef_cafe_babe } else { seed })
     }
 
@@ -207,12 +281,17 @@ fn random_text_str(len: usize, rng: &mut Rng) -> String {
     out
 }
 
-fn email_with_rng(rng: &mut Rng) -> String {
+fn username_with_rng(rng: &mut Rng) -> String {
     let first = rng.pick(FIRST_NAMES).to_lowercase();
     let last = rng.pick(LAST_NAMES).to_lowercase();
-    let num = 10 + rng.range(990);
+    let num = 10_000_000 + (rng.next_u64() % 90_000_000);
+    format!("{first}.{last}{num}")
+}
+
+fn email_with_rng(rng: &mut Rng) -> String {
+    let local = username_with_rng(rng);
     let domain = rng.pick(DOMAINS);
-    format!("{first}.{last}{num}@{domain}")
+    format!("{local}@{domain}")
 }
 
 // --- Native Rust faker helpers (exposed to QuickJS without any JS library overhead) ---
@@ -231,8 +310,7 @@ pub fn faker_full_name() -> String {
 }
 
 pub fn faker_username() -> String {
-    let mut rng = Rng::from_clock();
-    format!("{}.{}{}", rng.pick(FIRST_NAMES).to_lowercase(), rng.pick(LAST_NAMES).to_lowercase(), rng.range(100))
+    username_with_rng(&mut Rng::from_clock())
 }
 
 pub fn faker_title() -> String {
@@ -455,5 +533,40 @@ mod tests {
         assert_eq!(faker_text(1_000_000).len(), MAX_FAKER_LEN);
         assert_eq!(faker_number_digits(1_000_000).len(), MAX_FAKER_LEN);
         assert!(faker_password(1_000_000, 2_000_000).len() <= MAX_FAKER_LEN);
+    }
+
+    #[test]
+    fn faker_names_are_distinct_ascii_alphabetic() {
+        let firsts: std::collections::HashSet<&str> = FIRST_NAMES.iter().copied().collect();
+        let lasts: std::collections::HashSet<&str> = LAST_NAMES.iter().copied().collect();
+        assert_eq!(firsts.len(), FIRST_NAMES.len());
+        assert_eq!(lasts.len(), LAST_NAMES.len());
+        assert!(FIRST_NAMES.iter().all(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_alphabetic())));
+        assert!(LAST_NAMES.iter().all(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_alphabetic())));
+    }
+
+    #[test]
+    fn faker_usernames_and_emails_have_valid_format_and_high_entropy() {
+        // Output space: 64 * 64 * 90_000_000 = 368.64B usernames; * 8 = 2.95T emails.
+        assert!(FIRST_NAMES.len() * LAST_NAMES.len() * 90_000_000 >= 1_000_000_000);
+
+        let mut usernames = std::collections::HashSet::new();
+        let mut emails = std::collections::HashSet::new();
+        for _ in 0..1_000 {
+            let u = faker_username();
+            assert!(u.is_ascii() && u == u.to_lowercase(), "username must be lowercase ASCII: {u}");
+            let (first, rest) = u.split_once('.').expect("username has dot separator");
+            assert!(!first.is_empty() && first.chars().all(|c| c.is_ascii_lowercase()));
+            assert!(rest.len() >= 9 && rest[rest.len() - 8..].chars().all(|c| c.is_ascii_digit()));
+            usernames.insert(u);
+
+            let e = faker_email();
+            assert!(e.is_ascii() && e == e.to_lowercase(), "email must be lowercase ASCII: {e}");
+            let (local, domain) = e.split_once('@').expect("email has @");
+            assert!(local.contains('.') && domain.contains('.'));
+            emails.insert(e);
+        }
+        assert_eq!(usernames.len(), 1_000, "unexpected username collision in 1000 samples");
+        assert_eq!(emails.len(), 1_000, "unexpected email collision in 1000 samples");
     }
 }

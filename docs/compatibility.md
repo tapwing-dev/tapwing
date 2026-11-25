@@ -18,8 +18,47 @@ Every Maestro command, shorthand syntax, `runFlow`, `retry`, `repeat`, `when`/`w
 Tapwing runs the same orchestration rules as Maestro:
 
 - **Control flow:** file-based and inline `runFlow`, `repeat` (`times` and `while`), `retry` (only on command errors, not script or transport errors), `onFlowStart`, and `onFlowComplete` (always runs, even if the flow fails).
-- **Variables:** `-e KEY=VALUE` overrides top-level flow `env`, alongside built-in variables like `MAESTRO_FILENAME`, `MAESTRO_DEVICE_UDID`, `MAESTRO_SHARD_INDEX`, and `MAESTRO_SHARD_ID`.
+- **Variables:** `-e KEY=VALUE` overrides top-level flow `env` and shell variables. Shell environment variables prefixed with `MAESTRO_` are injected automatically (preserving the `MAESTRO_` prefix; empty values and internal shard variables `MAESTRO_SHARD_ID`/`MAESTRO_SHARD_INDEX` are excluded), alongside built-in variables `MAESTRO_FILENAME`, `MAESTRO_DEVICE_UDID`, `MAESTRO_SHARD_INDEX`, and `MAESTRO_SHARD_ID`.
 - **JavaScript:** powered by an embedded QuickJS engine supporting `output`, `maestro` (`platform`, `copiedText`), `json()`, `relativePoint()`, `console.log`, synchronous `http.{get,post,put,delete,request}` (with `headers`, `body`, and `multipartForm`), and `faker` (including `faker.expression(...)`).
+
+## CLI flags parity
+
+Tapwing mirrors Maestro 2.12.1's global and `test` flags so existing CI invocations work when switching `maestro` to `tapwing`. Maestro flags that Tapwing does not implement are accepted as hidden options and emit a warning on `stderr` naming the flag.
+
+### Maestro 2.12.1 global and `test` flags
+
+| Flag | Status | Behavior in Tapwing |
+|---|---|---|
+| `-v`, `-V`, `--version`, `-h`, `--help` | Supported | Prints Tapwing + bundled driver version or help |
+| `-p`, `--platform <android\|ios>` | Supported | Forces target platform |
+| `--device`, `--udid <ID[,ID...]>` | Supported | Selects device(s) or shard targets |
+| `--port <PORT>` | Supported | Host TCP port the Flutter driver dials (`0` = ephemeral) |
+| `--config`, `--include-tags`, `--exclude-tags` | Supported | Workspace config and tag filtering |
+| `--shard-split`, `--shard-all`, `-s`, `--shards` | Supported | Multi-device sharded execution |
+| `-e`, `--env <KEY=VALUE>` | Supported | Sets flow env vars (overrides shell `MAESTRO_*` and flow `env:`) |
+| `--format`, `--output`, `--test-suite-name` | Supported | `junit`, `html`, `html-detailed`, or `noop` suite reports |
+| `--test-output-dir`, `--debug-output`, `--flatten-debug-output` | Supported | Controls run artifact directory layout |
+| `--no-ansi`, `--ansi`, `--no-color`, `--color` | Accepted (warns) | Ignored no-op (Tapwing emits plain text output) |
+| `--verbose` | Accepted (warns) | Ignored no-op |
+| `--host`, `--driver-host-port` | Accepted (warns) | Ignored no-op (Tapwing manages local driver ports) |
+| `-c`, `--continuous` | Accepted (warns) | Ignored no-op (watch mode is not implemented; runs once) |
+| `--headless`, `--screen-size` | Accepted (warns) | Ignored no-op (Web target is not supported) |
+| `--analyze`, `--api-url`, `--api-key` | Accepted (warns) | Ignored no-op (Maestro Cloud / AI insights are not supported) |
+| `--reinstall-driver`, `--no-reinstall-driver` | Accepted (warns) | Ignored no-op (Tapwing manages driver installation automatically) |
+| `--apple-team-id` | Accepted (warns) | Ignored no-op (Tapwing does not sign Xcode runner bundles) |
+
+### Tapwing-specific `test` flags
+
+| Flag | Purpose |
+|---|---|
+| `--report <PATH>` | Write JSON report with per-command timings and lane stats |
+| `--input <auto\|flutter\|native>` | Control UI routing lane (default `auto`) |
+| `--settle-policy <v2\|legacy>`, `--check-settle` | Driver idle detection policy and post-action settle check |
+| `--strict-input` | Fail `inputText`/`eraseText` when no text field is focused |
+| `--maestro-compat <default\|strict>` | Emulate Maestro bugs (e.g. iOS `hideKeyboard` failure) in `strict` mode |
+| `--app-errors`, `--app-errors-ignore`, `--app-errors-screenshot` | Capture/fail on Flutter overflows, exceptions, and crashes |
+| `--trace`, `--trace-screenshots <failures\|steps>` | Write offline `trace.html` + `trace.json` diagnostics |
+| `--native-driver <DRIVER>` | Deprecated no-op (warns for non-`tapwing` values) |
 
 ## Intentional differences
 
