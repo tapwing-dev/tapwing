@@ -292,8 +292,8 @@ impl Driver {
 
     /// [`Self::accept_with_pid`] that stops waiting, with `Ok(None)`, as soon as
     /// `abort` returns `true` (checked every poll step, at most 10 ms apart). A
-    /// hello that arrives first still wins: the abort only ends a wait that has
-    /// not produced one.
+    /// hello that arrives first still wins: after the abort fires the sockets
+    /// are read once more, and the wait only ends if that finds none.
     pub fn accept_with_pid_or_abort(
         &mut self,
         timeout: Duration,
@@ -305,11 +305,15 @@ impl Driver {
         let deadline = started + timeout;
         let mut pending: Vec<PendingConn> = Vec::new();
         let mut rejected_connections = 0usize;
+        // Set once `abort` fired: the sockets get one last look before the wait
+        // ends, so a hello that arrived between the previous look and the abort
+        // is not thrown away.
+        let mut aborting = false;
 
         loop {
             crate::interrupt::check()?;
             let now = Instant::now();
-            if now > deadline {
+            if now > deadline && !aborting {
                 bail!("app did not connect within {} ms (is tapwing_driver in the build?)", timeout.as_millis());
             }
 
@@ -406,8 +410,12 @@ impl Driver {
                 }
             }
 
-            if abort() {
+            if aborting {
                 return Ok(None);
+            }
+            if abort() {
+                aborting = true;
+                continue;
             }
 
             // Keep 1 ms responsiveness during the initial fast-connect window,
@@ -990,7 +998,8 @@ mod tests {
         app.flush().unwrap();
         let outcome = drv
             .accept_with_pid_or_abort(Duration::from_secs(5), Some(77), &[], || {
-                // Give the hello time to arrive: an abort never beats a connection that is there.
+                // Let the hello reach the socket after the first look at it: the
+                // last look, after the abort, must still find it.
                 std::thread::sleep(Duration::from_millis(30));
                 true
             })
