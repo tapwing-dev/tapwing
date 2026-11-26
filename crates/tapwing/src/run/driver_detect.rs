@@ -61,13 +61,24 @@ impl LaunchProbe {
     ) -> Option<Self> {
         let app = app_id.to_string();
         Self::start_with(runner, move |cancel| {
-            let deadline = Instant::now() + PROBE_DEADLINE;
-            match &target {
+            let started = Instant::now();
+            let deadline = started + PROBE_DEADLINE;
+            let report = match &target {
                 Target::Android { serial, adb } => {
                     driver_probe::android::probe(adb, serial, &app, deadline, cancel, cache.as_ref())
                 }
                 Target::Ios { udid } => driver_probe::ios::probe(udid, &app, deadline, cancel, cache.as_ref()),
+            };
+            if crate::driver_bundle::debug_enabled() {
+                eprintln!(
+                    "tapwing: driver probe {app}: {} via {:?} in {} ms: {}",
+                    report.verdict.presence.as_str(),
+                    report.source,
+                    started.elapsed().as_millis(),
+                    report.verdict.evidence
+                );
             }
+            report
         })
     }
 

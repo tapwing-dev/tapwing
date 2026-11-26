@@ -146,8 +146,8 @@ pub(super) fn format_driver_skip_warning(log_prefix: &str, app_id: &str, reason:
         }
         SkipReason::LearnedMisses { misses } => format!(
             "{log_prefix}warning: launchApp {app_id}: the last {misses} launches of this installed build waited \
-             {secs} s for a tapwing_driver handshake with the app running and got none, and its payload could \
-             not be shown to hold the driver ({evidence}); not waiting again, driving it black-box via the \
+             {secs} s for a tapwing_driver handshake with the app running and got none, and the build cannot be \
+             shown to start the driver ({evidence}); not waiting again, driving it black-box via the \
              native lane (pass --input flutter to wait for the driver anyway; a handshake clears this)"
         ),
     }

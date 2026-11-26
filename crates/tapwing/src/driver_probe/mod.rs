@@ -358,6 +358,80 @@ mod tests {
     }
 
     #[test]
+    fn skip_reason_table() {
+        let report = |presence, dials, source, learned_misses| Report {
+            verdict: Verdict { presence, dials, evidence: "e".into() },
+            source,
+            fingerprint: Some("f".into()),
+            learned_misses,
+        };
+        use VerdictSource::{Cache, Scan};
+        let cases = [
+            (
+                "absent from a scan",
+                report(Presence::Absent, false, Scan, None),
+                Some(SkipReason::NoDriver { cached: false }),
+            ),
+            (
+                "absent from the cache",
+                report(Presence::Absent, false, Cache, None),
+                Some(SkipReason::NoDriver { cached: true }),
+            ),
+            (
+                "absent wins over stale misses",
+                report(Presence::Absent, false, Scan, Some(3)),
+                Some(SkipReason::NoDriver { cached: false }),
+            ),
+            ("a build that dials is never skipped", report(Presence::Present, true, Scan, None), None),
+            (
+                "a build that dials is not second-guessed by misses",
+                report(Presence::Present, true, Cache, Some(5)),
+                None,
+            ),
+            ("driver linked without a dial path, no misses", report(Presence::Present, false, Scan, None), None),
+            (
+                "driver linked without a dial path, learned misses",
+                report(Presence::Present, false, Scan, Some(2)),
+                Some(SkipReason::LearnedMisses { misses: 2 }),
+            ),
+            ("unknown behaves as before", report(Presence::Unknown, false, Scan, None), None),
+            (
+                "unknown with learned misses",
+                report(Presence::Unknown, false, Scan, Some(2)),
+                Some(SkipReason::LearnedMisses { misses: 2 }),
+            ),
+        ];
+        for (name, report, expected) in cases {
+            assert_eq!(report.skip_reason(), expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn resolve_without_a_fingerprint_or_cache_always_inspects_and_stores_nothing() {
+        let mut inspected = 0;
+        let report = resolve("d", "a", None, None, || {
+            inspected += 1;
+            Verdict { presence: Presence::Absent, dials: false, evidence: "x".into() }
+        });
+        assert_eq!(
+            (inspected, report.source, report.fingerprint, report.learned_misses),
+            (1, VerdictSource::Scan, None, None)
+        );
+        let dir = std::env::temp_dir().join(format!("tapwing-resolve-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let cache = DriverCache::at(dir.join("driver-probe.json"));
+        // A cache but no fingerprint: nothing can be keyed, so nothing is read or written.
+        resolve("d", "a", None, Some(&cache), || Verdict::unknown("x"));
+        resolve("d", "a", None, Some(&cache), || Verdict {
+            presence: Presence::Absent,
+            dials: false,
+            evidence: "x".into(),
+        });
+        assert!(!dir.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn human_bytes_rounds_sensibly() {
         assert_eq!(human_bytes(49_568), "49 KB");
         assert_eq!(human_bytes(7_996_376), "7.6 MB");
