@@ -590,6 +590,7 @@ mod tests {
             log_prefix: String::new(),
             app_errors: crate::app_health::AppErrorsPolicy::Report,
             trace: false,
+            driver_probe: false,
         }
     }
 

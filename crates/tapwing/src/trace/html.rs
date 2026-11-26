@@ -322,7 +322,7 @@ const SCRIPT: &str = r#"
     if (flow.http === 'enabled') meta.push('HTTP log on');
     else if (flow.http === 'unsupported') meta.push('HTTP log unavailable (no Tapwing driver connection: --input native, black-box app, or an older driver)');
     if (typeof flow.httpDropped === 'number' && flow.httpDropped > 0) meta.push(flow.httpDropped + ' HTTP entries dropped');
-    if (flow.blackbox) meta.push('black-box');
+    if (flow.blackbox) meta.push(flow.blackboxReason ? 'black-box (' + flow.blackboxReason + ')' : 'black-box');
     add(head, title, el('span', 'flow-meta', meta.join(' · ')));
     add(section, head);
     if (flow.file || flow.path) add(section, el('div', 'muted mono', flow.file || flow.path));

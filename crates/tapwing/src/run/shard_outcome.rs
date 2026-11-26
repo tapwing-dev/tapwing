@@ -73,6 +73,7 @@ pub(crate) fn unrun_flow_record(flow: &ParsedFlow, why: UnrunFlow<'_>) -> FlowRu
         flutter_steps: 0,
         native_steps: 0,
         blackbox: false,
+        blackbox_reason: None,
         steps: Vec::new(),
         failure_diagnostics: None,
         raw_json,
@@ -215,6 +216,7 @@ pub(crate) fn conclude_run(summary: &TestExecutionSummary, sinks: &ReportSinks<'
 
 #[cfg(test)]
 mod tests {
+    use crate::run::Blackbox;
     use std::cell::Cell;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -283,9 +285,13 @@ mod tests {
         driver
     }
 
-    fn run_on_fake(driver: &mut FakeDriver, flow: &ParsedFlow, opts: OrchestraOpts) -> (FlowResult, LaneStats, bool) {
+    fn run_on_fake(
+        driver: &mut FakeDriver,
+        flow: &ParsedFlow,
+        opts: OrchestraOpts,
+    ) -> (FlowResult, LaneStats, Blackbox) {
         let result = Orchestra::new(driver, opts).run_parsed_flow(flow);
-        (result, LaneStats::default(), false)
+        (result, LaneStats::default(), Blackbox::default())
     }
 
     fn target(device: &str) -> ShardTarget<'_> {
@@ -514,7 +520,7 @@ mod tests {
                 if workspace::flow_name(flow) == "b" {
                     // SIGTERM arrives while `b` runs: the orchestrator unwinds with InterruptedError.
                     interrupted.set(true);
-                    return (interrupted_flow_result(15), LaneStats::default(), false);
+                    return (interrupted_flow_result(15), LaneStats::default(), Blackbox::default());
                 }
                 run_on_fake(&mut driver, flow, opts)
             },

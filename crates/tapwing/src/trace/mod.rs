@@ -352,6 +352,9 @@ fn flow_trace(record: &FlowRunRecord) -> Value {
     if record.blackbox {
         flow["blackbox"] = Value::Bool(true);
     }
+    if let Some(reason) = &record.blackbox_reason {
+        flow["blackboxReason"] = Value::from(reason.as_str());
+    }
     if let Some(err) = &record.failure_message {
         flow["error"] = Value::from(err.as_str());
     }

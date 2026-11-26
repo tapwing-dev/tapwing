@@ -348,6 +348,7 @@ mod tests {
             log_prefix: String::new(),
             app_errors: crate::app_health::AppErrorsPolicy::Report,
             trace: false,
+            driver_probe: false,
         };
         let ios = driver_config(&opts, Platform::Ios, Some("Sample App"));
         assert_eq!(ios["platform"], "ios");
@@ -405,6 +406,7 @@ mod tests {
             log_prefix: String::new(),
             app_errors: crate::app_health::AppErrorsPolicy::Report,
             trace: false,
+            driver_probe: false,
         };
         let cfg = driver_config(&opts, Platform::Android, None);
         assert_eq!(cfg["settleLoadTimeoutMs"], 0);

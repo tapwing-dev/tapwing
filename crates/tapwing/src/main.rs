@@ -440,6 +440,7 @@ fn run(cli: Cli) -> Result<bool> {
                 log_prefix: String::new(),
                 app_errors: tapwing::app_health::AppErrorsPolicy::Off,
                 trace: false,
+                driver_probe: false,
             };
             drv.call("configure", run::driver_config(&opts, dev.platform(), app_name.as_deref()))?;
             let snap = drv.call("snapshot", json!({}))?;

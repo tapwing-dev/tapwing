@@ -557,6 +557,9 @@ pub fn render_html_for_path(summary: &TestExecutionSummary, detailed: bool, repo
             let mut flow_sub = vec![escape_html(&flow.lane)];
             if flow.blackbox {
                 flow_sub.push("blackbox".into());
+                if let Some(reason) = &flow.blackbox_reason {
+                    flow_sub.push(format!("<span class=\"muted\">{}</span>", escape_html(reason)));
+                }
             }
             if issue_count > 0 {
                 flow_sub.push(format!(
@@ -690,6 +693,7 @@ mod tests {
             flutter_steps: 1,
             native_steps: 1,
             blackbox: true,
+            blackbox_reason: Some("no tapwing_driver in the installed build: read <app> completely".into()),
             steps: vec![
                 StepRecord {
                     index: 0,
@@ -756,6 +760,12 @@ mod tests {
         assert!(basic.contains("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;"));
         assert!(basic.contains("details class=\"flow-card\" open"));
         assert!(basic.contains("blackbox"));
+        assert!(
+            basic.contains(
+                "<span class=\"muted\">no tapwing_driver in the installed build: read &lt;app&gt; completely</span>"
+            ),
+            "the reason is shown, escaped"
+        );
         assert!(!basic.contains("<table class=\"steps\">"));
 
         let detailed = render_html(&summary, true);

@@ -34,7 +34,8 @@ pub use recording::{
     OrphanRecording, orphan_recordings, remote_recording_path, screenrecord_command, stop_orphan_recorders_script,
 };
 
-use helpers::{ADB_SERVER_START_TIMEOUT, media_scan_script, plan_media, sh_quote, validate_package_name};
+use helpers::{ADB_SERVER_START_TIMEOUT, media_scan_script, plan_media};
+pub(crate) use helpers::{sh_quote, validate_package_name};
 use permissions::{translate_appops_value, translate_permission_value};
 use recording::AndroidRecording;
 
@@ -88,6 +89,12 @@ impl Android {
 
     pub fn with_adb_client(serial: String, adb: AdbClient) -> Self {
         Self { serial, adb, app_cache: HashMap::new(), api_level: AtomicU32::new(0), recording: None }
+    }
+
+    /// The adb client this device talks through, for work that must run off
+    /// this thread with its own deadlines (the driver probe).
+    pub(crate) fn adb_client(&self) -> &AdbClient {
+        &self.adb
     }
 
     /// [`crate::driver::LivenessProbe`] for an app process on this device.
