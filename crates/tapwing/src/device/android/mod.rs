@@ -461,6 +461,7 @@ impl Android {
             pid,
             old_pids,
             unsupported_permissions: Vec::new(),
+            clear_state_fallback: None,
         })
     }
 

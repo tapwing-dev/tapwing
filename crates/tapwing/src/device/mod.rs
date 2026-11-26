@@ -49,6 +49,10 @@ pub struct LaunchMetrics {
     /// Requested permissions the platform tooling cannot set (iOS: services
     /// `simctl privacy` does not cover).
     pub unsupported_permissions: Vec<String>,
+    /// Why `clearState` reinstalled the app after the faster way of clearing
+    /// failed (iOS: the data container could not be emptied). `None` when the
+    /// chosen method worked. Reported with the launch, not only on stderr.
+    pub clear_state_fallback: Option<String>,
 }
 
 /// The device a session runs on.

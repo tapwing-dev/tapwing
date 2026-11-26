@@ -49,6 +49,7 @@ fn metrics() -> LaunchMetrics {
         old_pids: vec![],
         granted_permissions: 0,
         unsupported_permissions: vec![],
+        clear_state_fallback: None,
         stop_clear_ms: 0,
         permissions_ms: 0,
         start_ms: 1,

@@ -647,10 +647,12 @@ impl IosSim {
     /// (`LocalSimulatorUtils.clearAppState`). Without a flow's permissions at
     /// hand (the `clearState` command), privacy is reset as well.
     pub fn clear_state(&mut self, bundle: &str) -> Result<()> {
-        self.clear_state_for(bundle, true)
+        self.clear_state_for(bundle, true).map(|_| ())
     }
 
-    fn clear_state_for(&mut self, bundle: &str, reset_privacy: bool) -> Result<()> {
+    /// Returns the fallback warning when the wipe failed and the app was
+    /// reinstalled instead (already printed on stderr).
+    fn clear_state_for(&mut self, bundle: &str, reset_privacy: bool) -> Result<Option<String>> {
         self.terminate(bundle)?;
         self.clear_terminated_state_with(bundle, reset_privacy, simctl)
     }
@@ -661,19 +663,19 @@ impl IosSim {
         bundle: &str,
         reset_privacy: bool,
         simctl: impl Fn(&[&str]) -> Result<String> + Sync,
-    ) -> Result<()> {
+    ) -> Result<Option<String>> {
         let step = clear_step(clear_method(self.strict_clear_state), bundle, || {
             self.wipe_data_container_with(bundle, reset_privacy, &simctl)
         });
-        match step {
-            ClearStep::Cleared => return Ok(()),
-            ClearStep::Reinstall { warning } => {
-                if let Some(warning) = warning {
-                    eprintln!("{warning}");
-                }
-            }
+        let warning = match step {
+            ClearStep::Cleared => return Ok(None),
+            ClearStep::Reinstall { warning } => warning,
+        };
+        if let Some(warning) = &warning {
+            eprintln!("{warning}");
         }
-        self.reinstall(bundle)
+        self.reinstall(bundle)?;
+        Ok(warning)
     }
 
     /// Empties the data container of the terminated app, keeping its cached
@@ -857,8 +859,9 @@ impl IosSim {
     {
         let t0 = Instant::now();
         let terminate_in_launch = terminate_with_launch(clear_state, stop_app, permissions);
+        let mut clear_state_fallback = None;
         if clear_state {
-            self.clear_state_for(bundle, needs_privacy_reset(permissions))?;
+            clear_state_fallback = self.clear_state_for(bundle, needs_privacy_reset(permissions))?;
         } else if stop_app && !terminate_in_launch {
             self.terminate(bundle)?;
         }
@@ -881,6 +884,7 @@ impl IosSim {
             pid: Some(pid),
             old_pids: Vec::new(),
             unsupported_permissions: unsupported,
+            clear_state_fallback,
         })
     }
 

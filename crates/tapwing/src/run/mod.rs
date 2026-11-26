@@ -507,7 +507,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
                 if hs.retries > 0 {
                     res["phases"]["handshakeRetries"] = json!(hs.retries);
                 }
-                add_unsupported_permissions_warning(&mut res, &launch.unsupported_permissions);
+                add_launch_warnings(&mut res, &launch);
                 Ok(res)
             }
             LaunchPlan::ReuseConnection => {
@@ -532,7 +532,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
                         "waitIdleMs": wait_idle_ms,
                     }
                 });
-                add_unsupported_permissions_warning(&mut res, &launch.unsupported_permissions);
+                add_launch_warnings(&mut res, &launch);
                 Ok(res)
             }
         }
@@ -1062,6 +1062,22 @@ pub fn driver_config(opts: &Opts, platform: Platform, app_name: Option<&str>) ->
     cfg
 }
 
+/// Puts what a launch could not do as asked into its result, so the report
+/// carries it and not only stderr: permissions the platform cannot set, and a
+/// `clearState` that fell back to reinstalling the app.
+pub(super) fn add_launch_warnings(res: &mut Value, launch: &crate::device::LaunchMetrics) {
+    add_unsupported_permissions_warning(res, &launch.unsupported_permissions);
+    if let Some(fallback) = &launch.clear_state_fallback {
+        // The stderr line starts with `warning: `; the report field is one already.
+        let fallback = fallback.strip_prefix("warning: ").unwrap_or(fallback);
+        res["clearStateFallback"] = Value::from(fallback);
+        res["warning"] = match res["warning"].as_str() {
+            Some(earlier) => Value::from(format!("{earlier}; {fallback}")),
+            None => Value::from(fallback),
+        };
+    }
+}
+
 pub(super) fn add_unsupported_permissions_warning(res: &mut Value, unsupported: &[String]) {
     if !unsupported.is_empty() {
         res["unsupportedPermissions"] = json!(unsupported);
@@ -1094,6 +1110,41 @@ fn parse_android_crash_probe(output: &str, package: &str, pid: Option<i64>, elap
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_clear_state_fallback_reaches_the_launch_result_next_to_other_warnings() {
+        let launch = |unsupported: &[&str], fallback: Option<&str>| crate::device::LaunchMetrics {
+            stop_clear_ms: 0,
+            permissions_ms: 0,
+            start_ms: 0,
+            granted_permissions: 0,
+            pid: Some(1),
+            old_pids: vec![],
+            unsupported_permissions: unsupported.iter().map(|s| s.to_string()).collect(),
+            clear_state_fallback: fallback.map(str::to_string),
+        };
+        let fallback = "warning: clearState dev.example.app: could not empty the data container (denied); \
+                        reinstalling the app instead";
+
+        // Nothing to say: the result is left alone.
+        let mut res = json!({});
+        add_launch_warnings(&mut res, &launch(&[], None));
+        assert_eq!(res, json!({}));
+
+        // The fallback alone, without the stderr prefix.
+        let mut res = json!({});
+        add_launch_warnings(&mut res, &launch(&[], Some(fallback)));
+        let text = res["warning"].as_str().unwrap();
+        assert!(text.starts_with("clearState dev.example.app: could not empty"), "{text}");
+        assert_eq!(res["clearStateFallback"], res["warning"]);
+
+        // With unsupported permissions both are kept.
+        let mut res = json!({});
+        add_launch_warnings(&mut res, &launch(&["notifications"], Some(fallback)));
+        let text = res["warning"].as_str().unwrap();
+        assert!(text.contains("notifications") && text.contains("reinstalling the app instead"), "{text}");
+        assert_eq!(res["unsupportedPermissions"], json!(["notifications"]));
+    }
 
     #[test]
     fn android_crash_probe_rejects_old_crashes_and_allows_recent_ones() {
