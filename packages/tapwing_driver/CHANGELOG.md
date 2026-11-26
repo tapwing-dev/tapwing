@@ -1,5 +1,6 @@
 ## Unreleased
 
+* The `hello` event carries `driver: tapwing_driver_hello_v1`. `tapwing test` looks for that literal (and the driver's older strings) in the installed app to skip the 15 s handshake wait for a build without the driver; it exists only in builds where the driver starts.
 * Settle no longer waits without limit for a single HTTP request or pending image: each counts as busy for at most 5 s (`configure` `settleLoadTimeoutMs`, `0` = no bound), and requests whose URL matches `configure` `settleHttpIgnore` never count. Both stay in the HTTP request log.
 
 ## 0.1.1

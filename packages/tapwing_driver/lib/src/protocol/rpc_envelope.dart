@@ -8,6 +8,18 @@ import '../platform.dart';
 /// Wire protocol version advertised in the initial `hello` event.
 const int protocolVersion = 1;
 
+/// Literal that identifies this driver in the `hello` event, and that
+/// `tapwing test` looks for inside the installed app to learn, before it waits
+/// for a handshake, whether the build can ever send one.
+///
+/// It lives only on the path that runs once the driver has started dialing the
+/// host, so a build that compiles the driver out (a plain `main.dart`, or the
+/// Tapwing entrypoint in a release build without `TAPWING_ALLOW_RELEASE`)
+/// does not contain it. Never change or remove it without teaching the host
+/// (`crates/tapwing/src/driver_probe/markers.rs`) the new value first: a build
+/// the host cannot recognize is judged to have no driver.
+const String driverProbeMarker = 'tapwing_driver_hello_v1';
+
 /// Default timeouts matching Maestro 2.12.1 and Tapwing's F0 contract.
 abstract final class DriverTimeouts {
   /// Default element lookup and assertion timeout (`tapOn`, `assertVisible`,
@@ -259,6 +271,7 @@ class RpcHelloEvent {
       'screen': <double>[screenWidth, screenHeight],
       'dpr': dpr,
       'platform': DriverPlatform.detect().name,
+      'driver': driverProbeMarker,
     },
   };
 }
