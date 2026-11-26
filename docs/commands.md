@@ -8,7 +8,7 @@ Tapwing supports the standard Maestro command set and selectors. If a flow works
 |---|---|
 | `launchApp` | Supports `clearState`, `clearKeychain`, `stopApp`, `permissions` (defaults to `all: allow`), and `launchArguments` (typed Android intent extras) |
 | `stopApp`, `killApp` | Stops or kills the app process (`killApp` equals `stopApp` on iOS Simulator) |
-| `clearState`, `clearKeychain` | On iOS Simulator, `clearState` reinstalls the app (matching Maestro) |
+| `clearState`, `clearKeychain` | On iOS Simulator, `clearState` empties the app's data container instead of reinstalling the app; `--maestro-compat strict` reinstalls like Maestro (see [Intentional differences](compatibility.md#intentional-differences)) |
 | `setPermissions` | Android via `pm`/`appops`; iOS Simulator via `simctl privacy` |
 | `openLink` | Opens a URL or deep link (supports `browser` pinning on Android) |
 | `setLocation`, `travel` | Emulator console or mock location provider on Android; `simctl location` on iOS |

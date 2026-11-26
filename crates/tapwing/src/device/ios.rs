@@ -321,6 +321,133 @@ fn apply_privacy_batch(actions: &[PrivacyAction], apply: &(impl Fn(&str, &str) -
     actions.iter().try_for_each(|(action, service)| apply(action, service))
 }
 
+/// The file `containermanagerd` keeps in every container; the simulator's
+/// installation records need it, so a wipe never touches it.
+const CONTAINER_METADATA_FILE: &str = ".com.apple.mobile_container_manager.metadata.plist";
+/// The directories an app expects in its data container, recreated by a wipe
+/// (the layout `installd` creates for a fresh install).
+const DATA_CONTAINER_DIRS: [&str; 5] = ["Documents", "Library/Caches", "Library/Preferences", "SystemData", "tmp"];
+
+/// How `clearState` puts the app back to a first-launch state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ClearMethod {
+    /// Empty the app's data container on the host file system (about 0.5 s with the terminate).
+    Wipe,
+    /// Copy the bundle aside, uninstall and install it again (about 0.7 s, what Maestro does).
+    Reinstall,
+}
+
+/// The default empties the data container; `--maestro-compat strict` keeps
+/// Maestro's reinstall (`LocalSimulatorUtils.clearAppState`).
+fn clear_method(maestro_compat_strict: bool) -> ClearMethod {
+    if maestro_compat_strict { ClearMethod::Reinstall } else { ClearMethod::Wipe }
+}
+
+/// What `clearState` does after the app is terminated.
+#[derive(Debug, PartialEq, Eq)]
+enum ClearStep {
+    /// The data container is empty; nothing else to do.
+    Cleared,
+    /// Reinstall the app; `warning` tells why when that is not the chosen method.
+    Reinstall { warning: Option<String> },
+}
+
+/// Runs `wipe` when `method` asks for it. A failed wipe falls back to the
+/// reinstall, with a warning: the app must never be left half cleared.
+fn clear_step(method: ClearMethod, bundle: &str, wipe: impl FnOnce() -> Result<()>) -> ClearStep {
+    if method == ClearMethod::Reinstall {
+        return ClearStep::Reinstall { warning: None };
+    }
+    match wipe() {
+        Ok(()) => ClearStep::Cleared,
+        Err(err) => ClearStep::Reinstall {
+            warning: Some(format!(
+                "warning: clearState {bundle}: could not empty the data container ({err:#}); \
+                 reinstalling the app instead"
+            )),
+        },
+    }
+}
+
+/// Whether a wipe must also run `simctl privacy reset all`. A reinstall resets
+/// every privacy (TCC) service; a wipe does not. With an `all` entry in the
+/// flow's permissions the launch sets every service explicitly right after
+/// the clear, so the reset would only cost a `simctl` call.
+fn needs_privacy_reset(permissions: &BTreeMap<String, String>) -> bool {
+    !permissions.contains_key("all")
+}
+
+/// Checks that `path` is the data container of `bundle` on simulator `udid`
+/// before anything is deleted in it:
+/// `.../<udid>/data/Containers/Data/Application/<UUID>`, a real directory
+/// holding the container manager's metadata file, which names `bundle`.
+fn validate_data_container(path: &Path, udid: &str, bundle: &str) -> Result<()> {
+    use std::path::Component;
+    let parts: Vec<&std::ffi::OsStr> = path
+        .components()
+        .map(|c| match c {
+            Component::Normal(name) => Ok(name),
+            _ => Err(anyhow!("`{}` is not a plain absolute path", path.display())),
+        })
+        .skip(1) // the root
+        .collect::<Result<_>>()?;
+    let n = parts.len();
+    let is_container_path = path.is_absolute()
+        && n >= 6
+        && parts[n - 6] == std::ffi::OsStr::new(udid)
+        && parts[n - 5..n - 1] == ["data", "Containers", "Data", "Application"].map(std::ffi::OsStr::new)
+        && parts[n - 1].to_str().is_some_and(is_simulator_udid);
+    if !is_container_path {
+        bail!("`{}` is not `<simulator {udid}>/data/Containers/Data/Application/<UUID>`", path.display());
+    }
+    if !std::fs::symlink_metadata(path).is_ok_and(|m| m.is_dir()) {
+        bail!("`{}` is not a directory", path.display());
+    }
+    let metadata = path.join(CONTAINER_METADATA_FILE);
+    if !std::fs::symlink_metadata(&metadata).is_ok_and(|m| m.is_file()) {
+        bail!("`{}` has no {CONTAINER_METADATA_FILE}", path.display());
+    }
+    // Binary and XML plists both hold the identifier as plain ASCII.
+    let names_bundle = std::fs::read(&metadata)
+        .map(|bytes| bytes.windows(bundle.len()).any(|w| w == bundle.as_bytes()))
+        .with_context(|| format!("reading {}", metadata.display()))?;
+    if !names_bundle {
+        bail!("`{}` belongs to another app than {bundle}", path.display());
+    }
+    Ok(())
+}
+
+/// Deletes everything in `container` except the container manager's metadata
+/// file, then recreates the standard directories. Fails on the first entry
+/// that cannot be removed, so a failed wipe is never reported as a clean one.
+fn empty_data_container(container: &Path) -> Result<()> {
+    let entries = std::fs::read_dir(container).with_context(|| format!("listing {}", container.display()))?;
+    for entry in entries {
+        let entry = entry.with_context(|| format!("listing {}", container.display()))?;
+        if entry.file_name() == CONTAINER_METADATA_FILE {
+            continue;
+        }
+        let path = entry.path();
+        // `remove_dir_all` and `remove_file` never follow a symlink out of the container.
+        let removed = if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            std::fs::remove_dir_all(&path)
+        } else {
+            std::fs::remove_file(&path)
+        };
+        removed.with_context(|| format!("removing {}", path.display()))?;
+    }
+    for dir in DATA_CONTAINER_DIRS {
+        let path = container.join(dir);
+        std::fs::create_dir_all(&path).with_context(|| format!("creating {}", path.display()))?;
+    }
+    Ok(())
+}
+
+/// Whether a failed `defaults delete` only reports that nothing was stored.
+fn defaults_found_nothing(err: &anyhow::Error) -> bool {
+    format!("{err:#}").contains("not found")
+}
+
 pub struct IosSim {
     pub udid: String,
     pub name: String,
@@ -331,6 +458,8 @@ pub struct IosSim {
     /// called with `stopApp: false` and unchanged permissions, because
     /// `simctl privacy` kills a running app on iOS.
     applied_permissions: HashMap<String, BTreeMap<String, String>>,
+    /// `--maestro-compat strict`: `clearState` reinstalls the app like Maestro.
+    strict_clear_state: bool,
     recording: Option<IosRecording>,
 }
 
@@ -441,8 +570,15 @@ impl IosSim {
             data_containers: HashMap::new(),
             display_names: HashMap::new(),
             applied_permissions: HashMap::new(),
+            strict_clear_state: false,
             recording: None,
         }
+    }
+
+    /// `--maestro-compat strict` makes `clearState` reinstall the app, as
+    /// Maestro does, instead of emptying its data container.
+    pub fn set_strict_clear_state(&mut self, strict: bool) {
+        self.strict_clear_state = strict;
     }
 
     fn simctl(&self, args: &[&str]) -> Result<String> {
@@ -506,11 +642,84 @@ impl IosSim {
         bail!("simctl terminate {bundle} failed: {}", err.trim())
     }
 
-    /// `clearState`: terminate and reinstall the app bundle, the "most stable
-    /// way to clear state" in Maestro (`LocalSimulatorUtils.clearAppState`).
+    /// `clearState`: terminate the app, then empty its data container (the
+    /// default) or, under `--maestro-compat strict`, reinstall it like Maestro
+    /// (`LocalSimulatorUtils.clearAppState`). Without a flow's permissions at
+    /// hand (the `clearState` command), privacy is reset as well.
     pub fn clear_state(&mut self, bundle: &str) -> Result<()> {
+        self.clear_state_for(bundle, true)
+    }
+
+    fn clear_state_for(&mut self, bundle: &str, reset_privacy: bool) -> Result<()> {
         self.terminate(bundle)?;
+        self.clear_terminated_state_with(bundle, reset_privacy, simctl)
+    }
+
+    /// [`Self::clear_state_for`] after the terminate, with `simctl` injected.
+    fn clear_terminated_state_with(
+        &mut self,
+        bundle: &str,
+        reset_privacy: bool,
+        simctl: impl Fn(&[&str]) -> Result<String> + Sync,
+    ) -> Result<()> {
+        let step = clear_step(clear_method(self.strict_clear_state), bundle, || {
+            self.wipe_data_container_with(bundle, reset_privacy, &simctl)
+        });
+        match step {
+            ClearStep::Cleared => return Ok(()),
+            ClearStep::Reinstall { warning } => {
+                if let Some(warning) = warning {
+                    eprintln!("{warning}");
+                }
+            }
+        }
         self.reinstall(bundle)
+    }
+
+    /// Empties the data container of the terminated app, keeping its cached
+    /// path (the container keeps its UUID; only a reinstall replaces it).
+    ///
+    /// 1. The app's preferences are dropped from `cfprefsd`: it serves a value
+    ///    the app wrote just before it stopped from memory even after the
+    ///    plist file is gone, so a wipe alone leaves the preference behind.
+    ///    `defaults` addresses the plist by path, which reaches the app's
+    ///    container from outside it.
+    /// 2. The container's contents are deleted (see [`empty_data_container`]).
+    /// 3. When `reset_privacy`, `simctl privacy reset all` runs alongside, as a
+    ///    reinstall would (the app is already terminated: `simctl privacy`
+    ///    kills a running app a moment after it returns).
+    ///
+    /// Any failure is an error and the caller reinstalls, which clears
+    /// everything the failed wipe may have left.
+    fn wipe_data_container_with(
+        &mut self,
+        bundle: &str,
+        reset_privacy: bool,
+        simctl: &(impl Fn(&[&str]) -> Result<String> + Sync),
+    ) -> Result<()> {
+        let container = self.data_container(bundle)?;
+        validate_data_container(&container, &self.udid, bundle)?;
+        // Whatever happens next, the permissions applied earlier no longer hold.
+        self.applied_permissions.remove(bundle);
+        let udid = self.udid.as_str();
+        std::thread::scope(|scope| {
+            let privacy = reset_privacy.then(|| scope.spawn(|| simctl(&["privacy", udid, "reset", "all", bundle])));
+            let prefs = container.join("Library/Preferences").join(bundle);
+            let wiped = path_str(&prefs)
+                .and_then(|prefs| match simctl(&["spawn", udid, "defaults", "delete", prefs]) {
+                    Err(err) if !defaults_found_nothing(&err) => Err(err.context("dropping the app's preferences")),
+                    _ => Ok(()),
+                })
+                .and_then(|()| empty_data_container(&container));
+            let privacy = privacy.map(|handle| {
+                handle
+                    .join()
+                    .unwrap_or_else(|_| Err(anyhow!("simctl privacy worker panicked")))
+                    .map(|_| ())
+                    .context("resetting privacy")
+            });
+            wiped.and(privacy.unwrap_or(Ok(())))
+        })
     }
 
     fn reinstall(&mut self, bundle: &str) -> Result<()> {
@@ -649,7 +858,7 @@ impl IosSim {
         let t0 = Instant::now();
         let terminate_in_launch = terminate_with_launch(clear_state, stop_app, permissions);
         if clear_state {
-            self.clear_state(bundle)?;
+            self.clear_state_for(bundle, needs_privacy_reset(permissions))?;
         } else if stop_app && !terminate_in_launch {
             self.terminate(bundle)?;
         }
@@ -1473,5 +1682,311 @@ mod tests {
         calls.lock().unwrap().clear();
         let (n_retry, _) = sim.apply_launch_permissions_with("dev.app", false, false, &unset_loc, record).unwrap();
         assert_eq!(n_retry, 1, "stale cache was cleared on failure");
+    }
+
+    // ---- clearState: wipe the data container instead of reinstalling ----
+
+    const SIM: &str = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE";
+    const CONTAINER_UUID: &str = "11111111-2222-3333-4444-555555555555";
+    const BUNDLE: &str = "dev.example.app";
+
+    /// A unique directory under the system temp dir, removed on drop.
+    struct TempTree(PathBuf);
+
+    impl TempTree {
+        fn new(label: &str) -> Self {
+            let dir =
+                std::env::temp_dir().join(format!("tapwing-wipe-{label}-{}-{}", std::process::id(), next_tmp_seq()));
+            std::fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+    }
+
+    impl Drop for TempTree {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// `<root>/Devices/<udid>/data/Containers/Data/Application/<UUID>` as `installd`
+    /// leaves it, plus what a running app adds to it.
+    fn fake_container(root: &Path, udid: &str, bundle: &str) -> PathBuf {
+        let c = root.join("Devices").join(udid).join("data/Containers/Data/Application").join(CONTAINER_UUID);
+        for dir in DATA_CONTAINER_DIRS {
+            std::fs::create_dir_all(c.join(dir)).unwrap();
+        }
+        // The real file is a binary plist; the identifier is stored as plain ASCII.
+        std::fs::write(c.join(CONTAINER_METADATA_FILE), format!("bplist00 MCMMetadataIdentifier {bundle} end"))
+            .unwrap();
+        std::fs::write(c.join("Documents/tapwing_state.txt"), "saved-file").unwrap();
+        std::fs::write(c.join("Library/Preferences").join(format!("{bundle}.plist")), "saved-pref").unwrap();
+        std::fs::create_dir_all(c.join("Library/Caches/deep/er")).unwrap();
+        std::fs::write(c.join("Library/Caches/deep/er/blob"), "x").unwrap();
+        std::fs::create_dir_all(c.join("Library/Saved Application State")).unwrap();
+        std::fs::write(c.join("tmp/tapwing_port"), "4242").unwrap();
+        std::fs::write(c.join("stray.txt"), "x").unwrap();
+        c
+    }
+
+    fn names(dir: &Path) -> Vec<String> {
+        let mut v: Vec<String> =
+            std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        v.sort();
+        v
+    }
+
+    fn sim_with_container(container: &Path) -> IosSim {
+        let mut sim = IosSim::new(SimInfo { udid: SIM.into(), name: "iPhone".into() });
+        sim.data_containers.insert(BUNDLE.into(), container.to_path_buf());
+        sim
+    }
+
+    /// Records every `simctl` call and answers with `reply`.
+    struct FakeSimctl {
+        calls: Mutex<Vec<Vec<String>>>,
+        reply: fn(&[&str]) -> Result<String>,
+        /// The container's `Documents` listing when `defaults delete` ran.
+        documents_at_defaults: Mutex<Option<Vec<String>>>,
+        container: PathBuf,
+    }
+
+    impl FakeSimctl {
+        fn new(container: &Path, reply: fn(&[&str]) -> Result<String>) -> Self {
+            Self {
+                calls: Mutex::default(),
+                reply,
+                documents_at_defaults: Mutex::default(),
+                container: container.into(),
+            }
+        }
+
+        fn run(&self, args: &[&str]) -> Result<String> {
+            self.calls.lock().unwrap().push(args.iter().map(|a| a.to_string()).collect());
+            if args.contains(&"defaults") {
+                *self.documents_at_defaults.lock().unwrap() = Some(names(&self.container.join("Documents")));
+            }
+            (self.reply)(args)
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().unwrap().iter().map(|c| c.join(" ")).collect()
+        }
+    }
+
+    fn ok(_: &[&str]) -> Result<String> {
+        Ok(String::new())
+    }
+
+    #[test]
+    fn a_wipe_keeps_the_metadata_file_and_recreates_the_standard_directories() {
+        let tree = TempTree::new("wipe");
+        let c = fake_container(&tree.0, SIM, BUNDLE);
+        let metadata = std::fs::read(c.join(CONTAINER_METADATA_FILE)).unwrap();
+
+        empty_data_container(&c).unwrap();
+
+        assert_eq!(names(&c), [CONTAINER_METADATA_FILE, "Documents", "Library", "SystemData", "tmp"]);
+        assert_eq!(names(&c.join("Library")), ["Caches", "Preferences"]);
+        for dir in ["Documents", "Library/Caches", "Library/Preferences", "SystemData", "tmp"] {
+            assert!(names(&c.join(dir)).is_empty(), "{dir} still has content");
+        }
+        assert!(names(&c.join("Library/Caches")).is_empty());
+        assert_eq!(std::fs::read(c.join(CONTAINER_METADATA_FILE)).unwrap(), metadata);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_wipe_never_follows_a_symlink_out_of_the_container() {
+        let tree = TempTree::new("symlink");
+        let c = fake_container(&tree.0, SIM, BUNDLE);
+        let outside = tree.0.join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("keep.txt"), "x").unwrap();
+        std::os::unix::fs::symlink(&outside, c.join("Documents/link")).unwrap();
+        std::os::unix::fs::symlink(&outside, c.join("linked")).unwrap();
+
+        empty_data_container(&c).unwrap();
+
+        assert_eq!(names(&outside), ["keep.txt"]);
+        assert!(!c.join("linked").exists());
+    }
+
+    #[test]
+    fn only_the_data_container_of_the_app_on_this_simulator_is_accepted() {
+        let tree = TempTree::new("validate");
+        let c = fake_container(&tree.0, SIM, BUNDLE);
+        assert!(validate_data_container(&c, SIM, BUNDLE).is_ok());
+
+        // Another simulator, another app.
+        assert!(validate_data_container(&c, "FFFFFFFF-BBBB-CCCC-DDDD-EEEEEEEEEEEE", BUNDLE).is_err());
+        let other = validate_data_container(&c, SIM, "dev.example.other").unwrap_err();
+        assert!(other.to_string().contains("another app"), "{other}");
+
+        // The bundle container, the simulator's own data, a plain directory, a relative path.
+        let bundle_container =
+            tree.0.join("Devices").join(SIM).join("data/Containers/Bundle/Application").join(CONTAINER_UUID);
+        std::fs::create_dir_all(&bundle_container).unwrap();
+        std::fs::write(bundle_container.join(CONTAINER_METADATA_FILE), BUNDLE).unwrap();
+        for bad in [
+            bundle_container,
+            tree.0.join("Devices").join(SIM).join("data"),
+            tree.0.clone(),
+            PathBuf::from("/"),
+            PathBuf::from("Devices").join(SIM).join("data/Containers/Data/Application").join(CONTAINER_UUID),
+            c.join("Documents"),
+            c.join("..").join(CONTAINER_UUID),
+        ] {
+            assert!(validate_data_container(&bad, SIM, BUNDLE).is_err(), "{} was accepted", bad.display());
+        }
+
+        // Right shape, but no metadata file (or the UUID is not one).
+        std::fs::remove_file(c.join(CONTAINER_METADATA_FILE)).unwrap();
+        let err = validate_data_container(&c, SIM, BUNDLE).unwrap_err();
+        assert!(err.to_string().contains(CONTAINER_METADATA_FILE), "{err}");
+        let not_uuid = tree.0.join("Devices").join(SIM).join("data/Containers/Data/Application/not-a-uuid");
+        std::fs::create_dir_all(&not_uuid).unwrap();
+        std::fs::write(not_uuid.join(CONTAINER_METADATA_FILE), BUNDLE).unwrap();
+        assert!(validate_data_container(&not_uuid, SIM, BUNDLE).is_err());
+    }
+
+    #[test]
+    fn a_refused_path_is_left_untouched_and_the_wipe_fails() {
+        let tree = TempTree::new("refused");
+        let c = fake_container(&tree.0, SIM, BUNDLE);
+        std::fs::remove_file(c.join(CONTAINER_METADATA_FILE)).unwrap();
+        let before = names(&c);
+        let simctl = FakeSimctl::new(&c, ok);
+
+        let err = sim_with_container(&c).wipe_data_container_with(BUNDLE, true, &|a| simctl.run(a)).unwrap_err();
+
+        assert!(err.to_string().contains(CONTAINER_METADATA_FILE), "{err}");
+        assert_eq!(names(&c), before);
+        assert!(c.join("Documents/tapwing_state.txt").exists());
+        assert!(simctl.calls().is_empty(), "{:?}", simctl.calls());
+    }
+
+    #[test]
+    fn a_wipe_drops_the_preferences_first_keeps_the_container_path_and_skips_the_reset_when_asked() {
+        let tree = TempTree::new("order");
+        let c = fake_container(&tree.0, SIM, BUNDLE);
+        let simctl = FakeSimctl::new(&c, ok);
+        let mut sim = sim_with_container(&c);
+        sim.applied_permissions.insert(BUNDLE.into(), perms(&[("all", "allow")]));
+
+        sim.wipe_data_container_with(BUNDLE, false, &|a| simctl.run(a)).unwrap();
+
+        // One call: the preference domain addressed by the plist path in this container.
+        let prefs = c.join("Library/Preferences").join(BUNDLE);
+        assert_eq!(simctl.calls(), [format!("spawn {SIM} defaults delete {}", prefs.display())]);
+        // It ran while the container still held its files, and the wipe came after.
+        assert_eq!(simctl.documents_at_defaults.lock().unwrap().clone().unwrap(), ["tapwing_state.txt"]);
+        assert!(names(&c.join("Documents")).is_empty());
+        // Same container UUID: the cached path stays, the permissions cache does not.
+        assert_eq!(sim.data_containers.get(BUNDLE), Some(&c));
+        assert!(!sim.applied_permissions.contains_key(BUNDLE));
+    }
+
+    #[test]
+    fn privacy_is_reset_with_the_wipe_only_when_the_flow_has_no_all_entry() {
+        assert!(needs_privacy_reset(&BTreeMap::new()));
+        assert!(needs_privacy_reset(&perms(&[("location", "unset")])));
+        assert!(needs_privacy_reset(&perms(&[("photos", "allow"), ("camera", "deny")])));
+        for all in ["allow", "deny", "unset"] {
+            assert!(!needs_privacy_reset(&perms(&[("all", all)])));
+            assert!(!needs_privacy_reset(&perms(&[("all", all), ("location", "never")])));
+        }
+
+        let tree = TempTree::new("privacy");
+        let c = fake_container(&tree.0, SIM, BUNDLE);
+        let simctl = FakeSimctl::new(&c, ok);
+        sim_with_container(&c).wipe_data_container_with(BUNDLE, true, &|a| simctl.run(a)).unwrap();
+        let mut calls = simctl.calls();
+        calls.sort();
+        assert_eq!(calls.len(), 2, "{calls:?}");
+        assert!(calls.contains(&format!("privacy {SIM} reset all {BUNDLE}")), "{calls:?}");
+        assert!(calls.iter().any(|c| c.starts_with(&format!("spawn {SIM} defaults delete "))), "{calls:?}");
+    }
+
+    #[test]
+    fn nothing_stored_is_fine_but_any_other_failure_stops_before_the_container_is_touched() {
+        let tree = TempTree::new("defaults");
+        let c = fake_container(&tree.0, SIM, BUNDLE);
+
+        let nothing = FakeSimctl::new(&c, |_| {
+            bail!("xcrun simctl spawn failed: Domain /x/y not found.\nDefaults have not been changed.")
+        });
+        sim_with_container(&c).wipe_data_container_with(BUNDLE, false, &|a| nothing.run(a)).unwrap();
+        assert!(names(&c.join("Documents")).is_empty());
+
+        let tree = TempTree::new("defaults-bad");
+        let c = fake_container(&tree.0, SIM, BUNDLE);
+        let broken = FakeSimctl::new(&c, |_| bail!("Unable to boot device in current state: Shutdown"));
+        let err = sim_with_container(&c).wipe_data_container_with(BUNDLE, false, &|a| broken.run(a)).unwrap_err();
+        assert!(format!("{err:#}").contains("Shutdown"), "{err:#}");
+        assert!(c.join("Documents/tapwing_state.txt").exists(), "the container was touched");
+    }
+
+    #[test]
+    fn a_failed_privacy_reset_fails_the_wipe() {
+        let tree = TempTree::new("privacy-fail");
+        let c = fake_container(&tree.0, SIM, BUNDLE);
+        let simctl = FakeSimctl::new(&c, |args| {
+            if args.first() == Some(&"privacy") { bail!("database is locked") } else { Ok(String::new()) }
+        });
+        let err = sim_with_container(&c).wipe_data_container_with(BUNDLE, true, &|a| simctl.run(a)).unwrap_err();
+        assert!(format!("{err:#}").contains("resetting privacy: database is locked"), "{err:#}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_wipe_that_cannot_remove_an_entry_is_an_error_never_a_clean_success() {
+        use std::os::unix::fs::PermissionsExt;
+        let tree = TempTree::new("stuck");
+        let c = fake_container(&tree.0, SIM, BUNDLE);
+        let stuck = c.join("Library/Caches/deep/er");
+        std::fs::set_permissions(&stuck, std::fs::Permissions::from_mode(0o555)).unwrap();
+        // Root ignores directory permissions: only assert the error where they hold.
+        let enforced = std::fs::File::create(stuck.join("probe")).is_err();
+
+        let result = empty_data_container(&c);
+
+        std::fs::set_permissions(&stuck, std::fs::Permissions::from_mode(0o755)).unwrap();
+        if enforced {
+            let err = result.unwrap_err();
+            assert!(format!("{err:#}").contains("removing"), "{err:#}");
+        } else {
+            assert!(result.is_ok());
+            assert!(names(&c.join("Library/Caches")).is_empty());
+        }
+    }
+
+    #[test]
+    fn the_default_wipes_strict_compat_reinstalls_and_a_failed_wipe_falls_back_with_a_warning() {
+        assert_eq!(clear_method(false), ClearMethod::Wipe);
+        assert_eq!(clear_method(true), ClearMethod::Reinstall);
+
+        // Wipe worked: nothing else to do.
+        assert_eq!(clear_step(ClearMethod::Wipe, BUNDLE, || Ok(())), ClearStep::Cleared);
+
+        // Strict: the wipe is not even attempted, and no warning (it is what was asked for).
+        let step = clear_step(ClearMethod::Reinstall, BUNDLE, || panic!("strict compat must not wipe"));
+        assert_eq!(step, ClearStep::Reinstall { warning: None });
+
+        // A failed wipe reinstalls and says why.
+        let ClearStep::Reinstall { warning: Some(warning) } =
+            clear_step(ClearMethod::Wipe, BUNDLE, || Err(anyhow!("removing /x: Permission denied")))
+        else {
+            panic!("a failed wipe must fall back to the reinstall");
+        };
+        assert!(warning.starts_with("warning: clearState dev.example.app: "), "{warning}");
+        assert!(warning.contains("Permission denied") && warning.contains("reinstalling the app instead"), "{warning}");
+    }
+
+    #[test]
+    fn strict_compat_is_off_by_default_and_follows_the_setter() {
+        let mut sim = IosSim::new(SimInfo { udid: SIM.into(), name: "iPhone".into() });
+        assert_eq!(clear_method(sim.strict_clear_state), ClearMethod::Wipe);
+        sim.set_strict_clear_state(true);
+        assert_eq!(clear_method(sim.strict_clear_state), ClearMethod::Reinstall);
     }
 }

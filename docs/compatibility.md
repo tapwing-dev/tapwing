@@ -59,7 +59,7 @@ Tapwing mirrors Maestro 2.12.1's global and `test` flags so existing CI invocati
 | `--input <auto\|flutter\|native>` | Control UI routing lane (default `auto`) |
 | `--settle-policy <v2\|legacy>`, `--check-settle` | Driver idle detection policy and post-action settle check |
 | `--strict-input` | Fail `inputText`/`eraseText` when no text field is focused |
-| `--maestro-compat <default\|strict>` | Emulate Maestro bugs (e.g. iOS `hideKeyboard` failure) in `strict` mode |
+| `--maestro-compat <default\|strict>` | Emulate Maestro behavior Tapwing changes on purpose in `strict` mode (iOS `hideKeyboard` failure, iOS Simulator `clearState` by reinstalling the app) |
 | `--app-errors`, `--app-errors-ignore`, `--app-errors-screenshot` | Capture/fail on Flutter overflows, exceptions, and crashes |
 | `--trace`, `--trace-screenshots <failures\|steps>` | Write offline `trace.html` + `trace.json` diagnostics |
 | `--native-driver <DRIVER>` | Deprecated no-op (warns for non-`tapwing` values) |
@@ -70,6 +70,12 @@ A few places where Tapwing goes slightly beyond Maestro by default:
 
 - **App health reporting.** Tapwing observes layout overflows, uncaught exceptions, and crashes during runs (`--app-errors report` by default). It never fails a flow unless you opt in with `--app-errors fail`, and `--app-errors off` disables it completely. See [App health](app-health.md).
 - **iOS `hideKeyboard`.** Tapwing dismisses the keyboard with a warning even if a Flutter text field remains focused. Pass `--maestro-compat strict` to reproduce Maestro's iOS failure behavior.
+- **iOS Simulator `clearState`.** Maestro terminates the app, uninstalls it and installs it again, and the new data container has to be looked up again before the launch. Tapwing terminates the app and empties its data container on the host instead, and the container keeps its path. On an iPhone 17 simulator (iOS 27.2) with the 139 MB debug sample app this cut the `launchApp` clear phase from a median of about 720 ms to about 490 ms and the launch phase from about 270 ms to about 140 ms. A wipe deletes everything in the container except the container manager's metadata file, recreates `Documents`, `Library/Caches`, `Library/Preferences`, `SystemData` and `tmp`, drops the app's `NSUserDefaults` from the simulator's preferences daemon (which would otherwise serve a value written just before the app stopped from memory, even with the plist file gone), and runs `simctl privacy reset all` unless the flow's `permissions` have an `all` entry (the launch then sets every service anyway). It only deletes a path of the form `<simulator>/data/Containers/Data/Application/<UUID>` that holds the metadata file and names the app. For any other path, or when a step fails, it prints a warning on stderr and reinstalls the app like Maestro. On an iOS 27.2 simulator, preferences, files, caches and `simctl privacy` services (location checked) are cleared as with a reinstall; these differ:
+  - The **notification permission** (`UNUserNotificationCenter` authorization) survives a wipe, while a reinstall resets it. `simctl privacy` cannot reset it either.
+  - **Keychain items** and **app group containers** are not in the data container, so they survive in both modes (`clearKeychain: true` clears the keychain).
+  - Not checked: preference domains other than the app's own bundle id (a `UserDefaults(suiteName:)` suite) and app extension containers.
+
+  Pass `--maestro-compat strict` to reinstall exactly like Maestro. Android is unchanged. `examples/sample_app/.maestro/ios/f9_clear_state.yaml` shows a preference and a file gone after `clearState`.
 - **AI commands.** `assertWithAI`, `assertNoDefectsWithAI`, and `extractTextWithAI` parse cleanly but fail at runtime with a clear message, since they rely on Maestro Cloud.
 - **Workspace `tapwing:` config.** `config.yaml` supports an optional `tapwing:` block for defaults like `appErrors`. Maestro warns about the unknown key and ignores it.
 

@@ -221,6 +221,9 @@ pub type AndroidFlutterBackend<'a> = DeviceFlutterBackend<'a>;
 
 impl<'a> DeviceFlutterBackend<'a> {
     pub fn new(session: &'a mut Session<'_>, flow_app: String) -> Self {
+        if let Some(sim) = session.dev.as_ios() {
+            sim.set_strict_clear_state(session.opts.maestro_compat_strict);
+        }
         Self {
             dev: session.dev,
             drv: session.drv,

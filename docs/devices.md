@@ -35,9 +35,9 @@ tapwing hierarchy --device "iPhone 16 Pro" --app-id com.example.myapp
 A few simulator details worth knowing:
 
 - **No port forwarding needed.** The simulator shares your Mac's loopback interface, so the CLI passes the session port through the app's temporary container directory and only accepts connections from the launched PID.
-- **State and permissions.** `clearState` reinstalls the app (just like Maestro), and permissions go through `simctl privacy`.
+- **State and permissions.** `clearState` empties the app's data container (a reinstall like Maestro's under `--maestro-compat strict`; what differs is in [Intentional differences](compatibility.md#intentional-differences)), and permissions go through `simctl privacy`.
 - **Hardware keyboard.** Tapwing reads the simulator's hardware-keyboard setting so it never stalls waiting for a soft keyboard that won't appear.
-- **Strict Maestro mode.** By default, `hideKeyboard` dismisses the keyboard with a warning even if a Flutter text field stays focused. Pass `--maestro-compat strict` if you want to reproduce Maestro's iOS failure there.
+- **Strict Maestro mode.** By default, `hideKeyboard` dismisses the keyboard with a warning even if a Flutter text field stays focused. Pass `--maestro-compat strict` if you want to reproduce Maestro's iOS failure there, and to make `clearState` reinstall the app like Maestro.
 
 ## What Tapwing does during a run
 
