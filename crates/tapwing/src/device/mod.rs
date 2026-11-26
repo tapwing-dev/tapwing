@@ -193,6 +193,24 @@ pub fn choose_many(
     Ok(candidates)
 }
 
+/// Whether `simctl list` must run to resolve `--device`.
+///
+/// It is skipped when `--platform android` rules simulators out, and when the
+/// id is not shaped like a simulator UDID and `adb_ready` (asked only then)
+/// lists it as a connected adb serial. Everything else, simulator names and
+/// ids adb does not know included, still asks `simctl`.
+fn needs_simulator_probe(
+    device: Option<&str>,
+    platform: Option<Platform>,
+    adb_ready: impl FnOnce() -> Vec<String>,
+) -> bool {
+    match (device, platform) {
+        (_, Some(Platform::Android)) => false,
+        (Some(id), None) if !ios::is_simulator_udid(id) => !adb_ready().iter().any(|serial| serial == id),
+        _ => true,
+    }
+}
+
 impl Device {
     /// Resolves and connects to the target device (see [`choose`]).
     pub fn select(device: Option<&str>, platform: Option<Platform>) -> Result<Self> {
@@ -200,7 +218,15 @@ impl Device {
         // is either a booted simulator or taken as an adb serial as-is.
         let adb =
             if platform == Some(Platform::Ios) || device.is_some() { Vec::new() } else { android::list_devices() };
-        let sims = if platform == Some(Platform::Android) { Vec::new() } else { ios::list_booted() };
+        let sims = if needs_simulator_probe(device, platform, || {
+            // Only asks a server that already runs; never starts one.
+            adb_client::AdbClient::new().ready_devices().unwrap_or_default()
+        }) {
+            // A UDID that CoreSimulator's own `device.plist` shows as booted needs no `simctl list`.
+            device.and_then(ios::booted_from_device_plist).map(|sim| vec![sim]).unwrap_or_else(ios::list_booted)
+        } else {
+            Vec::new()
+        };
         Ok(match choose(device, platform, &adb, &sims)? {
             Choice::Android(serial) => Device::Android(Android::new(serial)),
             Choice::Ios(info) => Device::Ios(IosSim::new(info)),
@@ -371,6 +397,49 @@ mod tests {
         assert_eq!(
             choose(Some("47862A4D"), Some(Platform::Android), &adb, &sims).unwrap(),
             Choice::Android("47862A4D".into())
+        );
+    }
+
+    #[test]
+    fn a_connected_adb_serial_skips_simctl_and_everything_else_still_asks_it() {
+        let adb = || vec!["emulator-5554".to_string(), "R5CX".to_string()];
+        let udid = "EF1A4367-A3EE-4002-9879-331B46C027B2";
+        // `--device emulator-5554` without `--platform`: adb knows it, no `simctl list`.
+        assert!(!needs_simulator_probe(Some("emulator-5554"), None, adb));
+        assert!(!needs_simulator_probe(Some("R5CX"), None, adb));
+        // Simulator names and ids adb does not list still go to `simctl` (and then to Android).
+        assert!(needs_simulator_probe(Some("iPhone 18 Pro"), None, adb));
+        assert!(needs_simulator_probe(Some("emulator-9999"), None, adb));
+        // No adb server or no device at all: ask `simctl`.
+        assert!(needs_simulator_probe(Some("emulator-5554"), None, Vec::new));
+        // Platform wins: Android never lists simulators, iOS always does.
+        assert!(!needs_simulator_probe(Some("iPhone 18 Pro"), Some(Platform::Android), adb));
+        assert!(needs_simulator_probe(Some("emulator-5554"), Some(Platform::Ios), adb));
+        // No `--device`: both lists are needed unless Android is forced.
+        assert!(needs_simulator_probe(None, None, adb));
+        assert!(!needs_simulator_probe(None, Some(Platform::Android), adb));
+
+        // adb is only asked when the answer can change the outcome.
+        let asked = std::cell::Cell::new(0);
+        let counting = || {
+            asked.set(asked.get() + 1);
+            Vec::new()
+        };
+        assert!(needs_simulator_probe(Some(udid), None, counting));
+        assert!(needs_simulator_probe(Some("emulator-5554"), Some(Platform::Ios), counting));
+        assert!(needs_simulator_probe(None, None, counting));
+        assert!(!needs_simulator_probe(Some("emulator-5554"), Some(Platform::Android), counting));
+        assert_eq!(asked.get(), 0);
+        assert!(needs_simulator_probe(Some("emulator-5554"), None, counting));
+        assert_eq!(asked.get(), 1);
+
+        // With simulators not probed, `choose` and `choose_many` resolve the serial as before.
+        assert_eq!(choose(Some("emulator-5554"), None, &[], &[]).unwrap(), Choice::Android("emulator-5554".into()));
+        let multi = vec!["emulator-5554".to_string(), "R5CX".to_string()];
+        let adb_list = adb();
+        assert_eq!(
+            choose_many(&multi, 2, 2, None, &adb_list, &[]).unwrap(),
+            vec![Choice::Android("emulator-5554".into()), Choice::Android("R5CX".into())]
         );
     }
 

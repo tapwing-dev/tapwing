@@ -76,6 +76,78 @@ pub fn list_booted() -> Vec<SimInfo> {
     }
 }
 
+/// Whether `id` has the shape of a simulator UDID (`8-4-4-4-12` hex digits).
+pub fn is_simulator_udid(id: &str) -> bool {
+    let groups: Vec<&str> = id.split('-').collect();
+    groups.len() == 5
+        && groups.iter().zip([8, 4, 4, 4, 12]).all(|(g, n)| g.len() == n && g.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// `SimDeviceState` of a booted simulator in CoreSimulator's `device.plist`.
+const SIM_STATE_BOOTED: i64 = 3;
+
+/// The simulator `udid`, when CoreSimulator's own `device.plist` says it is
+/// booted: the answer of `simctl list devices booted` for one UDID without
+/// spawning `simctl` (about 70-100 ms). `None` on anything unexpected (not a
+/// UDID, file missing, other state, other UDID inside, not an XML plist), and
+/// the caller asks `simctl` then.
+pub fn booted_from_device_plist(udid: &str) -> Option<SimInfo> {
+    if !is_simulator_udid(udid) {
+        return None;
+    }
+    let path = Path::new(&std::env::var_os("HOME")?)
+        .join("Library/Developer/CoreSimulator/Devices")
+        .join(udid)
+        .join("device.plist");
+    booted_from_plist_xml(udid, &std::fs::read_to_string(path).ok()?)
+}
+
+fn booted_from_plist_xml(udid: &str, xml: &str) -> Option<SimInfo> {
+    use quick_xml::Reader;
+    use quick_xml::events::Event;
+
+    let mut reader = Reader::from_str(xml);
+    let (mut depth, mut key, mut in_value) = (0usize, None::<String>, false);
+    let (mut plist_udid, mut name, mut state) = (None, None, None);
+    loop {
+        match reader.read_event().ok()? {
+            Event::Start(e) => {
+                // Only the top-level dictionary's `<key>` / `<string>` / `<integer>` pairs count.
+                match (depth, e.name().as_ref()) {
+                    (2, "key") => key = None,
+                    (2, "string" | "integer") => in_value = key.is_some(),
+                    _ => {}
+                }
+                depth += 1;
+            }
+            Event::Text(t) if depth == 3 => {
+                let text = t.xml10_content().to_string();
+                match (key.as_deref(), in_value) {
+                    (_, false) if key.is_none() => key = Some(text),
+                    (Some("UDID"), true) => plist_udid = Some(text),
+                    (Some("name"), true) => name = Some(text),
+                    (Some("state"), true) => state = text.trim().parse::<i64>().ok(),
+                    _ => {}
+                }
+            }
+            // Entities and CDATA split text events: let `simctl` handle those names.
+            Event::GeneralRef(_) | Event::CData(_) if depth == 3 => return None,
+            Event::End(_) => {
+                depth = depth.checked_sub(1)?;
+                if depth == 2 {
+                    in_value = false;
+                }
+            }
+            Event::Empty(_) if depth == 2 => key = None,
+            Event::Eof => break,
+            _ => {}
+        }
+    }
+    (plist_udid.as_deref() == Some(udid) && state == Some(SIM_STATE_BOOTED))
+        .then(|| name.filter(|n| !n.is_empty()).map(|name| SimInfo { udid: udid.to_string(), name }))
+        .flatten()
+}
+
 /// Parses `simctl list devices -j` output, keeping booted devices only.
 pub fn parse_booted_json(json: &str) -> Vec<SimInfo> {
     let Ok(v) = serde_json::from_str::<Value>(json) else { return Vec::new() };
@@ -162,6 +234,14 @@ pub type PrivacyAction = (&'static str, &'static str);
 ///   explicit `allow`/`deny` is rejected: those map to `always`/`never` only
 ///   through `all`.
 pub fn privacy_actions(permissions: &BTreeMap<String, String>) -> Result<(Vec<PrivacyAction>, Vec<String>)> {
+    let (actions, _, unsupported) = privacy_plan(permissions)?;
+    Ok((actions, unsupported))
+}
+
+/// [`privacy_actions`] plus how many of the leading actions come from `all`.
+/// Those never depend on each other, but every explicit entry after them
+/// overrides `all` and must be applied afterwards.
+fn privacy_plan(permissions: &BTreeMap<String, String>) -> Result<(Vec<PrivacyAction>, usize, Vec<String>)> {
     let mut actions: Vec<PrivacyAction> = Vec::new();
     let mut unsupported = Vec::new();
     if let Some(all) = permissions.get("all") {
@@ -172,6 +252,7 @@ pub fn privacy_actions(permissions: &BTreeMap<String, String>) -> Result<(Vec<Pr
             other => bail!("Permission 'all' can be set to 'allow', 'deny' or 'unset', not '{other}'"),
         }
     }
+    let from_all = actions.len();
     for (name, value) in permissions {
         if name == "all" {
             continue;
@@ -215,7 +296,29 @@ pub fn privacy_actions(permissions: &BTreeMap<String, String>) -> Result<(Vec<Pr
             other => bail!("Permission '{name}' can be set to 'allow', 'deny' or 'unset', not '{other}'"),
         });
     }
-    Ok((actions, unsupported))
+    Ok((actions, from_all, unsupported))
+}
+
+/// Runs `actions` through `apply`, concurrently when there is more than one.
+///
+/// A concurrent run that reports any error is repeated once, sequentially and
+/// in order, and that second result is the one returned: a transient lock on
+/// the simulator's privacy database must not fail a launch.
+fn apply_privacy_batch(actions: &[PrivacyAction], apply: &(impl Fn(&str, &str) -> Result<()> + Sync)) -> Result<()> {
+    if let [(action, service)] = actions {
+        return apply(action, service);
+    }
+    let concurrent = std::thread::scope(|scope| {
+        let handles: Vec<_> = actions.iter().map(|(action, service)| scope.spawn(|| apply(action, service))).collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or_else(|_| Err(anyhow!("simctl privacy worker panicked"))))
+            .collect::<Result<Vec<()>>>()
+    });
+    if concurrent.is_ok() {
+        return Ok(());
+    }
+    actions.iter().try_for_each(|(action, service)| apply(action, service))
 }
 
 pub struct IosSim {
@@ -462,17 +565,22 @@ impl IosSim {
         &mut self,
         bundle: &str,
         permissions: &BTreeMap<String, String>,
-        mut apply_privacy: impl FnMut(&str, &str, &str, &str) -> Result<()>,
+        apply_privacy: impl Fn(&str, &str, &str, &str) -> Result<()> + Sync,
     ) -> Result<(usize, Vec<String>)> {
-        let (actions, unsupported) = privacy_actions(permissions)?;
+        let (actions, from_all, unsupported) = privacy_plan(permissions)?;
         if actions.is_empty() {
             return Ok((0, unsupported));
         }
         // Clear any stale cache before applying so a partial failure cannot leave
         // a later `stopApp: false` thinking the new set is already active.
         self.applied_permissions.remove(bundle);
-        for (action, service) in &actions {
-            apply_privacy(&self.udid, action, service, bundle)?;
+        // Entries from `all` first, explicit entries (which override them) after;
+        // inside each batch the services are distinct, so order cannot matter.
+        let udid = self.udid.as_str();
+        let apply = |action: &str, service: &str| apply_privacy(udid, action, service, bundle);
+        let (from_all, explicit) = actions.split_at(from_all);
+        for batch in [from_all, explicit] {
+            apply_privacy_batch(batch, &apply)?;
         }
         self.applied_permissions.insert(bundle.to_string(), permissions.clone());
         Ok((actions.len(), unsupported))
@@ -484,7 +592,7 @@ impl IosSim {
         clear_state: bool,
         stop_app: bool,
         permissions: &BTreeMap<String, String>,
-        apply_privacy: impl FnMut(&str, &str, &str, &str) -> Result<()>,
+        apply_privacy: impl Fn(&str, &str, &str, &str) -> Result<()> + Sync,
     ) -> Result<(usize, Vec<String>)> {
         if should_apply_permissions_on_launch(self.applied_permissions.get(bundle), clear_state, stop_app, permissions)
         {
@@ -495,8 +603,15 @@ impl IosSim {
     }
 
     /// Writes the port file and launches the app with optional `launchArguments`;
-    /// returns the new PID.
-    pub fn launch<'a, I>(&mut self, bundle: &str, launch_arguments: I, port: u16) -> Result<i64>
+    /// returns the new PID. `terminate_running` makes `simctl` stop a running
+    /// instance first (`--terminate-running-process`).
+    pub fn launch<'a, I>(
+        &mut self,
+        bundle: &str,
+        launch_arguments: I,
+        port: u16,
+        terminate_running: bool,
+    ) -> Result<i64>
     where
         I: IntoIterator<Item = (&'a String, &'a Value)>,
     {
@@ -504,7 +619,7 @@ impl IosSim {
         let cli_args = format_launch_arguments(launch_arguments);
         let mut launch = Command::new("xcrun");
         launch
-            .args(["simctl", "launch", &self.udid, bundle])
+            .args(simctl_launch_args(&self.udid, bundle, terminate_running))
             .args(&cli_args)
             // Unused by Flutter today (no environment on iOS), kept for
             // non-Flutter hosts and future engines.
@@ -532,9 +647,10 @@ impl IosSim {
         I: IntoIterator<Item = (&'a String, &'a Value)>,
     {
         let t0 = Instant::now();
+        let terminate_in_launch = terminate_with_launch(clear_state, stop_app, permissions);
         if clear_state {
             self.clear_state(bundle)?;
-        } else if stop_app {
+        } else if stop_app && !terminate_in_launch {
             self.terminate(bundle)?;
         }
         let t1 = Instant::now();
@@ -546,7 +662,7 @@ impl IosSim {
             |udid, action, service, bundle| simctl(&["privacy", udid, action, service, bundle]).map(|_| ()),
         )?;
         let t2 = Instant::now();
-        let pid = self.launch(bundle, launch_arguments, port)?;
+        let pid = self.launch(bundle, launch_arguments, port, terminate_in_launch)?;
         let t3 = Instant::now();
         Ok(LaunchMetrics {
             stop_clear_ms: ms(t1 - t0),
@@ -772,6 +888,29 @@ fn should_apply_permissions_on_launch(
     clear_state || stop_app || applied != Some(permissions)
 }
 
+/// Whether `launchApp` can leave the `stopApp` terminate to `simctl launch
+/// --terminate-running-process` (one `simctl` call fewer).
+///
+/// Only when no `simctl privacy` call follows. `simctl privacy` kills a running
+/// app on its own, a moment after it returns: with the old process still alive
+/// that kill can land after the new launch and take the new process with it, so
+/// whenever privacy runs the terminate stays first. Invalid permissions also
+/// keep the terminate first, so the error is reported after the app was
+/// stopped, as before.
+fn terminate_with_launch(clear_state: bool, stop_app: bool, permissions: &BTreeMap<String, String>) -> bool {
+    stop_app && !clear_state && matches!(privacy_actions(permissions), Ok((actions, _)) if actions.is_empty())
+}
+
+/// Arguments after `xcrun` for `simctl launch`.
+fn simctl_launch_args<'a>(udid: &'a str, bundle: &'a str, terminate_running: bool) -> Vec<&'a str> {
+    let mut args = vec!["simctl", "launch"];
+    if terminate_running {
+        args.push("--terminate-running-process");
+    }
+    args.extend([udid, bundle]);
+    args
+}
+
 fn ms(d: std::time::Duration) -> u64 {
     d.as_millis().min(u128::from(u64::MAX)) as u64
 }
@@ -809,6 +948,7 @@ fn run(bin: &str, args: &[&str], timeout: Duration) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Condvar, Mutex};
 
     fn perms(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
         pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
@@ -861,6 +1001,58 @@ mod tests {
             vec![SimInfo { udid: "47862A4D-744F-4125-8D9E-20D8B51AD7DF".into(), name: "iPhone 18 Pro".into() }]
         );
         assert!(parse_booted_json("not json").is_empty());
+    }
+
+    fn device_plist(udid: &str, name: &str, state: i64) -> String {
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+             <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+             <plist version=\"1.0\">\n<dict>\n\t<key>UDID</key>\n\t<string>{udid}</string>\n\
+             \t<key>deviceType</key>\n\t<string>com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro</string>\n\
+             \t<key>isDeleted</key>\n\t<false/>\n\t<key>lastUsedAt</key>\n\t<date>2026-11-25T16:49:16Z</date>\n\
+             \t<key>name</key>\n\t<string>{name}</string>\n\t<key>state</key>\n\t<integer>{state}</integer>\n\
+             </dict>\n</plist>\n"
+        )
+    }
+
+    #[test]
+    fn a_booted_simulator_is_read_from_its_device_plist_and_anything_else_is_left_to_simctl() {
+        let udid = "EF1A4367-A3EE-4002-9879-331B46C027B2";
+        assert_eq!(
+            booted_from_plist_xml(udid, &device_plist(udid, "iPhone 18 Pro", 3)),
+            Some(SimInfo { udid: udid.into(), name: "iPhone 18 Pro".into() })
+        );
+        // Not booted: shutdown (1), booting (2), shutting down (4).
+        for state in [1, 2, 4] {
+            assert_eq!(booted_from_plist_xml(udid, &device_plist(udid, "iPhone 18 Pro", state)), None, "{state}");
+        }
+        // A different simulator's file, a missing name, entities, binary and broken files.
+        assert_eq!(booted_from_plist_xml(udid, &device_plist("AAAAAAAA-A3EE-4002-9879-331B46C027B2", "x", 3)), None);
+        assert_eq!(booted_from_plist_xml(udid, &device_plist(udid, "", 3)), None);
+        assert_eq!(booted_from_plist_xml(udid, &device_plist(udid, "Steve&apos;s iPhone", 3)), None);
+        for broken in ["", "bplist00\u{1}\u{2}", "<plist><dict><key>state</key><integer>3</integer>", "not xml"] {
+            assert_eq!(booted_from_plist_xml(udid, broken), None, "{broken:?}");
+        }
+        // Keys of nested dictionaries are not the device's own.
+        let nested = "<plist><dict><key>other</key><dict><key>state</key><integer>3</integer>\
+            <key>name</key><string>n</string></dict><key>UDID</key><string>U</string></dict></plist>";
+        assert_eq!(booted_from_plist_xml("U", nested), None);
+
+        // The id names a directory: only UDID-shaped ids are looked up.
+        assert_eq!(booted_from_device_plist("../../etc"), None);
+        assert_eq!(booted_from_device_plist("iPhone 18 Pro"), None);
+        assert_eq!(booted_from_device_plist("00000000-0000-0000-0000-000000000000"), None);
+    }
+
+    #[test]
+    fn simulator_udids_are_recognised_by_shape() {
+        assert!(is_simulator_udid("EF1A4367-A3EE-4002-9879-331B46C027B2"));
+        assert!(is_simulator_udid("ef1a4367-a3ee-4002-9879-331b46c027b2"));
+        for not_udid in ["emulator-5554", "4C101JEKB02816", "iPhone 18 Pro", "192.168.1.5:5555", "", "47862A4D"] {
+            assert!(!is_simulator_udid(not_udid), "{not_udid}");
+        }
+        // Right group lengths, but not hex.
+        assert!(!is_simulator_udid("GF1A4367-A3EE-4002-9879-331B46C027B2"));
     }
 
     #[test]
@@ -1045,6 +1237,169 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Lets `parties` threads wait for each other, so a test can tell whether
+    /// calls really overlapped without sleeping or racing a timer.
+    struct Rendezvous {
+        parties: usize,
+        arrived: Mutex<usize>,
+        all_here: Condvar,
+    }
+
+    impl Rendezvous {
+        fn new(parties: usize) -> Self {
+            Self { parties, arrived: Mutex::new(0), all_here: Condvar::new() }
+        }
+
+        /// True when every party arrived within the (generous) deadline.
+        fn meet(&self) -> bool {
+            let mut arrived = self.arrived.lock().unwrap();
+            *arrived += 1;
+            self.all_here.notify_all();
+            let (arrived, timeout) =
+                self.all_here.wait_timeout_while(arrived, Duration::from_secs(10), |n| *n < self.parties).unwrap();
+            *arrived >= self.parties && !timeout.timed_out()
+        }
+    }
+
+    #[test]
+    fn permissions_from_all_run_together_before_the_explicit_overrides() {
+        let mut sim = IosSim::new(SimInfo { udid: "SIM".into(), name: "iPhone".into() });
+        let both_all_calls_overlapped = Mutex::new(Vec::new());
+        let rendezvous = Rendezvous::new(2);
+        let log: Mutex<Vec<String>> = Mutex::new(Vec::new());
+        let permissions = perms(&[("all", "allow"), ("location", "inuse"), ("photos", "deny")]);
+
+        let (n, _) = sim
+            .set_permissions_with("dev.app", &permissions, |_, action, service, _| {
+                log.lock().unwrap().push(format!("start {action} {service}"));
+                if service == "all" || service == "location-always" {
+                    let met = rendezvous.meet();
+                    both_all_calls_overlapped.lock().unwrap().push(met);
+                }
+                log.lock().unwrap().push(format!("end {action} {service}"));
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(n, 4);
+        // `grant all` and `grant location-always` were in flight at the same time.
+        assert_eq!(*both_all_calls_overlapped.lock().unwrap(), vec![true, true]);
+        // Both finished before the first override (`location: inuse`) started.
+        let log = log.into_inner().unwrap();
+        let pos = |entry: &str| log.iter().position(|e| e == entry).unwrap_or_else(|| panic!("{entry} not in {log:?}"));
+        let last_all_end = pos("end grant all").max(pos("end grant location-always"));
+        let first_override_start = pos("start grant location").min(pos("start revoke photos"));
+        assert!(last_all_end < first_override_start, "{log:?}");
+        assert_eq!(log.len(), 8);
+    }
+
+    #[test]
+    fn a_failed_concurrent_batch_is_repeated_sequentially_and_that_result_wins() {
+        let mut sim = IosSim::new(SimInfo { udid: "SIM".into(), name: "iPhone".into() });
+        let allow_all = perms(&[("all", "allow")]);
+
+        // A transient lock: every service fails once, the sequential repeat succeeds.
+        let attempts: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
+        let in_flight = Mutex::new((0usize, 0usize)); // (now, max seen after the first round)
+        let calls: Mutex<Vec<String>> = Mutex::new(Vec::new());
+        let rendezvous = Rendezvous::new(2);
+        let (n, _) = sim
+            .set_permissions_with("dev.app", &allow_all, |_, action, service, _| {
+                let attempt = {
+                    let mut attempts = attempts.lock().unwrap();
+                    let entry = attempts.entry(service.to_string()).or_default();
+                    *entry += 1;
+                    *entry
+                };
+                calls.lock().unwrap().push(format!("{action} {service} #{attempt}"));
+                if attempt == 1 {
+                    // First round: both wait for each other, then both fail.
+                    assert!(rendezvous.meet(), "first round was not concurrent");
+                    bail!("database is locked");
+                }
+                let mut f = in_flight.lock().unwrap();
+                f.0 += 1;
+                f.1 = f.1.max(f.0);
+                f.0 -= 1;
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(n, 2);
+        let calls = calls.into_inner().unwrap();
+        // Sequential repeat, in the original order, after both concurrent attempts.
+        assert_eq!(&calls[2..], ["grant all #2", "grant location-always #2"], "{calls:?}");
+        assert_eq!(in_flight.into_inner().unwrap().1, 1);
+        // The permissions count as applied: a `stopApp: false` relaunch skips `simctl privacy`.
+        let none = |_: &str, _: &str, _: &str, _: &str| -> Result<()> { bail!("must not be called") };
+        assert_eq!(sim.apply_launch_permissions_with("dev.app", false, false, &allow_all, none).unwrap().0, 0);
+
+        // A failure that persists is reported after exactly one sequential repeat,
+        // and the explicit overrides behind the failed batch never run.
+        let mut sim = IosSim::new(SimInfo { udid: "SIM".into(), name: "iPhone".into() });
+        let calls: Mutex<Vec<String>> = Mutex::new(Vec::new());
+        let err = sim
+            .set_permissions_with(
+                "dev.app",
+                &perms(&[("all", "allow"), ("photos", "allow")]),
+                |_, action, service, _| {
+                    calls.lock().unwrap().push(format!("{action} {service}"));
+                    if service == "location-always" { Err(anyhow!("simctl privacy: no such service")) } else { Ok(()) }
+                },
+            )
+            .unwrap_err();
+        assert_eq!(err.to_string(), "simctl privacy: no such service");
+        let mut calls = calls.into_inner().unwrap();
+        assert_eq!(calls.iter().filter(|c| *c == "grant location-always").count(), 2, "{calls:?}");
+        assert_eq!(calls.iter().filter(|c| *c == "grant all").count(), 2, "{calls:?}");
+        calls.sort();
+        calls.dedup();
+        assert_eq!(calls, ["grant all", "grant location-always"], "photos must wait for the failed batch");
+        // ... and nothing was recorded as applied.
+        let record = |_: &str, _: &str, _: &str, _: &str| -> Result<()> { Ok(()) };
+        assert_eq!(
+            sim.apply_launch_permissions_with("dev.app", false, false, &perms(&[("all", "allow")]), record).unwrap().0,
+            2
+        );
+    }
+
+    #[test]
+    fn a_single_privacy_action_is_not_repeated_on_failure() {
+        let mut sim = IosSim::new(SimInfo { udid: "SIM".into(), name: "iPhone".into() });
+        let calls = Mutex::new(0);
+        let err = sim
+            .set_permissions_with("dev.app", &perms(&[("location", "never")]), |_, _, _, _| {
+                *calls.lock().unwrap() += 1;
+                bail!("simctl failed")
+            })
+            .unwrap_err();
+        assert_eq!(err.to_string(), "simctl failed");
+        assert_eq!(*calls.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn stop_app_folds_the_terminate_into_launch_only_when_no_privacy_call_follows() {
+        let default = perms(&[("all", "allow")]);
+        let unsupported_only = perms(&[("notifications", "allow")]);
+        let none = perms(&[]);
+        // No `simctl privacy` follows: `launch --terminate-running-process` does the stop.
+        assert!(terminate_with_launch(false, true, &unsupported_only));
+        assert!(terminate_with_launch(false, true, &none));
+        // `simctl privacy` runs (and kills a running app a moment later): terminate first.
+        assert!(!terminate_with_launch(false, true, &default));
+        assert!(!terminate_with_launch(false, true, &perms(&[("location", "never")])));
+        // An invalid set still fails after the app was stopped, as before.
+        assert!(!terminate_with_launch(false, true, &perms(&[("all", "maybe")])));
+        // `stopApp: false` never kills anything; `clearState` terminates and reinstalls itself.
+        assert!(!terminate_with_launch(false, false, &unsupported_only));
+        assert!(!terminate_with_launch(true, true, &unsupported_only));
+        assert!(!terminate_with_launch(true, false, &none));
+
+        assert_eq!(
+            simctl_launch_args("UDID", "dev.x", true),
+            ["simctl", "launch", "--terminate-running-process", "UDID", "dev.x"]
+        );
+        assert_eq!(simctl_launch_args("UDID", "dev.x", false), ["simctl", "launch", "UDID", "dev.x"]);
+    }
+
     #[test]
     fn launch_reapplies_permissions_unless_stop_app_false_with_unchanged_set() {
         let mut sim = IosSim::new(SimInfo { udid: "SIM-UDID".into(), name: "iPhone".into() });
@@ -1052,9 +1407,9 @@ mod tests {
         let allow_all = perms(&[("all", "allow")]);
         let deny_loc = perms(&[("location", "never"), ("camera", "allow")]);
 
-        let calls: std::cell::RefCell<Vec<(String, String, String, String)>> = std::cell::RefCell::new(Vec::new());
+        let calls: Mutex<Vec<(String, String, String, String)>> = Mutex::new(Vec::new());
         let record = |u: &str, a: &str, s: &str, b: &str| -> Result<()> {
-            calls.borrow_mut().push((u.into(), a.into(), s.into(), b.into()));
+            calls.lock().unwrap().push((u.into(), a.into(), s.into(), b.into()));
             Ok(())
         };
 
@@ -1064,7 +1419,7 @@ mod tests {
         let (n2, _) = sim.apply_launch_permissions_with("dev.app", false, true, &unset_loc, record).unwrap();
         assert_eq!((n1, n2), (1, 1));
         assert_eq!(
-            *calls.borrow(),
+            *calls.lock().unwrap(),
             vec![
                 ("SIM-UDID".into(), "reset".into(), "location-always".into(), "dev.app".into()),
                 ("SIM-UDID".into(), "reset".into(), "location-always".into(), "dev.app".into()),
@@ -1073,51 +1428,49 @@ mod tests {
 
         // First launch with default `{all: allow}` applies; follow-up `stopApp: false`
         // with the same default skips `simctl privacy` so the running app is not killed.
-        calls.borrow_mut().clear();
+        calls.lock().unwrap().clear();
         let (n_first, _) = sim.apply_launch_permissions_with("dev.app", false, true, &allow_all, record).unwrap();
         assert_eq!(n_first, 2);
         let (n_resume, _) = sim.apply_launch_permissions_with("dev.app", false, false, &allow_all, record).unwrap();
         assert_eq!(n_resume, 0);
-        assert_eq!(calls.borrow().len(), 2, "stopApp: false with unchanged permissions must not call simctl privacy");
+        assert_eq!(
+            calls.lock().unwrap().len(),
+            2,
+            "stopApp: false with unchanged permissions must not call simctl privacy"
+        );
 
         // `stopApp: false` with CHANGED permissions DOES apply `simctl privacy`
         // (and still reports unsupported permissions on both apply and skip).
-        calls.borrow_mut().clear();
+        calls.lock().unwrap().clear();
         let (n_changed, unsup1) =
             sim.apply_launch_permissions_with("dev.app", false, false, &deny_loc, record).unwrap();
         assert_eq!(n_changed, 1);
         assert_eq!(unsup1, vec!["camera"]);
         assert_eq!(
-            *calls.borrow(),
+            *calls.lock().unwrap(),
             vec![("SIM-UDID".into(), "revoke".into(), "location-always".into(), "dev.app".into())]
         );
 
         // Subsequent `stopApp: false` with the same `deny_loc` skips `simctl privacy`
         // while still reporting unsupported permissions.
-        calls.borrow_mut().clear();
+        calls.lock().unwrap().clear();
         let (n_same_again, unsup2) =
             sim.apply_launch_permissions_with("dev.app", false, false, &deny_loc, record).unwrap();
         assert_eq!(n_same_again, 0);
         assert_eq!(unsup2, vec!["camera"]);
-        assert!(calls.borrow().is_empty());
+        assert!(calls.lock().unwrap().is_empty());
 
         // `setPermissions` command always applies even if the same map was applied before.
         let (n_set1, _) = sim.set_permissions_with("dev.app", &unset_loc, record).unwrap();
         let (n_set2, _) = sim.set_permissions_with("dev.app", &unset_loc, record).unwrap();
         assert_eq!((n_set1, n_set2), (1, 1));
-        assert_eq!(calls.borrow().len(), 2);
+        assert_eq!(calls.lock().unwrap().len(), 2);
 
         // Failed `set_permissions_with` clears stale cache so a later `stopApp: false` retries.
-        let mut fail_once = true;
-        let err = sim.set_permissions_with("dev.app", &allow_all, |_, _, _, _| {
-            if fail_once {
-                fail_once = false;
-                bail!("simctl failed");
-            }
-            Ok(())
-        });
+        let err =
+            sim.set_permissions_with("dev.app", &perms(&[("location", "never")]), |_, _, _, _| bail!("simctl failed"));
         assert!(err.is_err());
-        calls.borrow_mut().clear();
+        calls.lock().unwrap().clear();
         let (n_retry, _) = sim.apply_launch_permissions_with("dev.app", false, false, &unset_loc, record).unwrap();
         assert_eq!(n_retry, 1, "stale cache was cleared on failure");
     }
