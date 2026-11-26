@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() => runApp(const SampleApp());
 
@@ -379,6 +381,16 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
               subtitle: const Text('F7: overflow, broken image, build/async errors, crash'),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const AppHealthScreen()),
+              ),
+            ),
+          ),
+          Semantics(
+            identifier: 'nav_app_state',
+            child: ListTile(
+              title: const Text('App State'),
+              subtitle: const Text('a preference and a file that clearState must remove'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const AppStateScreen()),
               ),
             ),
           ),
@@ -1281,6 +1293,105 @@ class _NetworkScreenState extends State<NetworkScreen> {
                 child: const Text('Fetch offline'),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Where [AppStateScreen] keeps its state: one value in the platform
+/// preferences (`NSUserDefaults` on iOS, `SharedPreferences` on Android) and one
+/// file in the app's documents directory. Widget tests replace [appStateStore].
+abstract class AppStateStore {
+  Future<String?> readPreference();
+  Future<void> writePreference(String value);
+  Future<String?> readFile();
+  Future<void> writeFile(String value);
+}
+
+class _PluginAppStateStore implements AppStateStore {
+  static const String _key = 'tapwing_state_pref';
+  static const String _fileName = 'tapwing_state.txt';
+
+  Future<File> _file() async =>
+      File('${(await getApplicationDocumentsDirectory()).path}/$_fileName');
+
+  @override
+  Future<String?> readPreference() async =>
+      (await SharedPreferences.getInstance()).getString(_key);
+
+  @override
+  Future<void> writePreference(String value) async {
+    await (await SharedPreferences.getInstance()).setString(_key, value);
+  }
+
+  @override
+  Future<String?> readFile() async {
+    final File file = await _file();
+    return await file.exists() ? file.readAsString() : null;
+  }
+
+  @override
+  Future<void> writeFile(String value) async {
+    await (await _file()).writeAsString(value, flush: true);
+  }
+}
+
+AppStateStore appStateStore = _PluginAppStateStore();
+
+class AppStateScreen extends StatefulWidget {
+  const AppStateScreen({super.key});
+
+  @override
+  State<AppStateScreen> createState() => _AppStateScreenState();
+}
+
+class _AppStateScreenState extends State<AppStateScreen> {
+  String _preference = 'Preference: loading';
+  String _file = 'File: loading';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final AppStateStore store = appStateStore;
+    final String? preference = await store.readPreference();
+    final String? file = await store.readFile();
+    if (!mounted) return;
+    setState(() {
+      _preference = 'Preference: ${preference ?? 'none'}';
+      _file = 'File: ${file ?? 'none'}';
+    });
+  }
+
+  Future<void> _write() async {
+    final AppStateStore store = appStateStore;
+    await store.writePreference('saved-pref');
+    await store.writeFile('saved-file');
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('App State')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: <Widget>[
+          Semantics(identifier: 'state_preference', child: Text(_preference)),
+          const SizedBox(height: 8),
+          Semantics(identifier: 'state_file', child: Text(_file)),
+          const SizedBox(height: 16),
+          Semantics(
+            identifier: 'state_write',
+            child: FilledButton(
+              onPressed: _write,
+              child: const Text('Write state'),
+            ),
           ),
         ],
       ),

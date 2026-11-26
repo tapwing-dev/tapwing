@@ -277,6 +277,7 @@ void main() {
         'request_location_permission': 'Request Location Permission',
         'nav_network': 'Network.*',
         'nav_app_health': 'App Health.*',
+        'nav_app_state': 'App State.*',
       };
       for (final MapEntry<String, String> e in entries.entries) {
         final KNode byId = _expectFound(Selector(id: e.key));
