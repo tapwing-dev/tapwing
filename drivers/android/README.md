@@ -1,6 +1,6 @@
 # Tapwing Android driver (`dev.tapwing.driver`)
 
-Tapwing's own Android native-lane driver (PLAN.md §8.3, phase F11a). One APK
+Tapwing's own Android native-lane driver (see [docs/architecture.md](../../docs/architecture.md) and [docs/decisions.md](../../docs/decisions.md)). One APK
 replaced Maestro's two (`maestro-app.apk` + `maestro-server.apk`, no longer
 used by Tapwing): its instrumentation targets its own package, runs UiAutomator
 and serves the same gRPC API Maestro's driver did

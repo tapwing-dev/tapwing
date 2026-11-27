@@ -50,15 +50,4 @@ A few simulator details worth knowing:
 
 ## Troubleshooting
 
-### Flows fail with `app closed the connection` or `app did not connect` (adb 37.0.1)
-
-Android platform-tools 37.0.1 has a bug where mDNS auto-discovery crashes the `adb` server (`SIGABRT` in `adbmdns_bridge::zero_config`) when emulators advertise themselves, which drops every `adb reverse` tunnel.
-
-Disable mDNS discovery and restart `adb`:
-
-```sh
-export ADB_MDNS=0
-adb kill-server
-```
-
-Add `export ADB_MDNS=0` to your shell profile (and run `launchctl setenv ADB_MDNS 0` on macOS for GUI apps). USB devices and manual `adb connect` keep working normally.
+See [Troubleshooting](troubleshooting.md) for common fixes (`adb` 37.0.1 mDNS crashes, zone mismatch warnings, driver connection checks, and leftover simulator/emulator processes).

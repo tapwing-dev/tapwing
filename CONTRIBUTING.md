@@ -1,18 +1,18 @@
 # Contributing
 
-Everything you need to build Tapwing from source and run its tests. For what Tapwing does and how to use it, see the [README](README.md). For design decisions, see [PLAN.md](PLAN.md).
+Everything you need to build Tapwing from source and run its tests. For what Tapwing does and how to use it, see the [README](README.md). For design rationale, see [docs/architecture.md](docs/architecture.md) and [docs/decisions.md](docs/decisions.md).
 
 ## Repository layout
 
 | Path | What lives there |
 |---|---|
-| `crates/tapwing` | The Rust CLI and library: `init/`, flow parser (`flow/`), workspace and sharding planners (`workspace/`, `shard.rs`), orchestrator (`orchestra.rs`), QuickJS-ng engine (`js.rs`), driver trait and `FakeDriver` (`backend.rs`, `fake_driver.rs`), device backends (`device/`: adb client, Android host commands, iOS Simulator over `simctl`), native lanes (`native_lane/` for Android, `ios_native_lane/` for iOS), the driver probe that tells before `launchApp` whether the installed build holds the driver (`driver_probe/`), the hybrid and multi-shard runner (`run/`, `driver.rs`), reports (`report/`), app health (`app_health.rs`), failure diagnostics (`failure.rs`) and the trace viewer (`trace/`) |
+| `crates/tapwing` | The Rust CLI and library: `init/`, flow parser (`flow/`), workspace and sharding planners (`workspace/`, `shard.rs`), orchestrator (`orchestra/`), QuickJS-ng engine (`js/`), shared UI tree matching (`ui_tree.rs`), driver trait and `test-support`-gated `FakeDriver` (`backend.rs`, `fake_driver.rs`), device backends (`device/`: adb client, Android host commands, iOS Simulator over `simctl`), native lanes (`native_core/`, `native_lane/` for Android, `ios_native_lane/` for iOS), the driver probe that tells before `launchApp` whether the installed build holds the driver (`driver_probe/`), hybrid and multi-shard runner (`run/`, `driver.rs`), reports (`report/`), app health (`app_health.rs`), failure diagnostics (`failure.rs`), trace viewer (`trace/`), and integration tests (`tests/integration/`) |
 | `packages/tapwing_driver` | The in-app Dart driver: Semantics tree snapshot, Maestro selector engine, idle detector, input injection. See its [README](packages/tapwing_driver/README.md) |
 | `drivers/` | Tapwing's own native drivers: the Android UiAutomator APK ([drivers/android](drivers/android/README.md)) and the iOS Simulator XCUITest runner ([drivers/ios](drivers/ios/README.md)) |
 | `compat/` | Parser compatibility suite: 463 Maestro fixtures and 81 custom probes with their reference Maestro IR. See [compat/README.md](compat/README.md) |
 | `examples/sample_app` | A sample Flutter app (Android and iOS) with Maestro flows in `.maestro/` (iOS variants in `.maestro/ios/`) |
 | `bench/` | Benchmarks against Maestro, differential and hierarchy scripts, and recorded results |
-| `scripts/` | `dist.sh` (release tarball), `install.sh` (installer), `build-android-driver.sh`, `build-ios-driver.sh`, `test-dist.sh` (tests of the release scripts) |
+| `scripts/` | `dist.sh` (release tarball), `install.sh` (installer), `release.sh` (two-step release automation), `build-android-driver.sh`, `build-ios-driver.sh`, `test-dist.sh` (tests of release and dist scripts) |
 | `docs/` | User guides linked from the README |
 | `.agents/skills/` | Workspace agent skills: Rust modularity, systems reliability, Dart driver invariants, Maestro parity, documentation curation |
 
@@ -67,14 +67,14 @@ scripts/test-dist.sh
 | Suite | Where | What it guards |
 |---|---|---|
 | Unit tests | `crates/tapwing/src/**` (`#[cfg(test)]`) | Driver connection and reconnect handling, the `launchApp` / `setPermissions` scripts, the driver-probe scripts and the Android native-lane startup against a fake ADB server (`device/adb_client/fake.rs`; every script is parsed with `sh -n` and run under the host `sh` with stubbed device commands, the probe's over real zip fixtures with the host's `unzip` and `grep`), driver artifact discovery and SHA-256 checks, reports, trace redaction, planners |
-| CLI end-to-end | `crates/tapwing/tests/cli_e2e.rs` | The compiled `tapwing` binary: `--version`/`--help`, `check`, `init`, `test` argument validation, exit codes and messages |
-| Integration | `crates/tapwing/tests/*.rs` | Parser parity with Maestro (`compat`), workspace planner, sharding, reports (`report_edge_cases`), app health, failure reports, trace, `init` |
+| CLI end-to-end | `crates/tapwing/tests/integration/cli_e2e.rs` | The compiled `tapwing` binary: `--version`/`--help`, `check`, `init`, `test` argument validation, exit codes and messages |
+| Integration | `crates/tapwing/tests/integration/` | Parser parity with Maestro (`compat`), workspace planner, sharding, reports (`report_edge_cases`), app health, failure reports, trace, `init` |
 | Dart driver | `packages/tapwing_driver/test` | Selector engine, snapshot semantics, RPC protocol and error wire format, idle detection, input injection |
 | Sample app | `examples/sample_app/test` | Widget tests of the app, `tapwing_driver` selectors resolving against the real UI, and every `id:` in `.maestro/` still existing in the app |
 | Android driver | `drivers/android/driver/src/test` | Pure Kotlin helpers: ASCII key table, Unicode text chunks and splices, the cancellable typing loop, XML character filtering |
 | iOS driver | `drivers/ios/Tests` | `TapwingRunnerCore`: HTTP/1.1 framing, wire models, error classification, orientation math |
 
-Useful single Rust suites: `cargo test --test cli_e2e`, `--test compat` (parser parity with Maestro), `--test workspace` (workspace planner parity), `--test f6_sharding_and_reports`, `--test init` (also keeps the CLI and driver versions in lockstep).
+Useful single Rust suites (inside `crates/tapwing/tests/integration`): `cargo test --test integration cli_e2e::`, `--test integration compat::` (parser parity with Maestro), `--test integration workspace::` (workspace planner parity), `--test integration f6_sharding_and_reports::`, `--test integration init::` (also keeps the CLI and driver versions in lockstep).
 
 Tests never need a device: anything that talks to an emulator, simulator or a real app (`tapwing test` against the sample app, the benchmarks) is run by hand, not in PR CI. Keep new tests deterministic: bind loopback servers once and pass the live listener, never sleep to wait for another thread, and prefer a test seam over timing (see `.agents/skills/rust-systems-reliability`).
 
@@ -84,12 +84,13 @@ Tests never need a device: anything that talks to an emulator, simulator or a re
 
 | Job | Workflow | Runs |
 |---|---|---|
-| `Rust` (`ubuntu-latest`, `macos-latest`) | [`ci-rust.yml`](.github/workflows/ci-rust.yml) | `cargo fmt --check`, `clippy -D warnings`, `cargo test --locked -p tapwing`, `bench/parse` check, `tapwing check` over the sample app and bench flows |
-| `Dart & Sample App` (`Flutter 3.47.5`, `3.50.0`) | [`ci-dart.yml`](.github/workflows/ci-dart.yml) | `flutter analyze` and `flutter test` in `packages/tapwing_driver` and `examples/sample_app` |
-| `Android driver` (`drivers/android`) | [`ci-android-driver.yml`](.github/workflows/ci-android-driver.yml) | `scripts/build-android-driver.sh` (Kotlin unit tests, release APK, SHA-256) |
-| `iOS driver` (`drivers/ios`) | [`ci-ios-driver.yml`](.github/workflows/ci-ios-driver.yml) | `scripts/build-ios-driver.sh` (Swift unit tests, simulator runner build, SHA-256) |
-| `Release scripts` (`ubuntu-latest`, `macos-latest`) | [`ci-scripts.yml`](.github/workflows/ci-scripts.yml) | `scripts/test-dist.sh` |
-| `CI Gate` | [`ci.yml`](.github/workflows/ci.yml) | Succeeds only when every job above succeeded; this is the one check `main` requires |
+| `Rust` (`ubuntu-latest`) | [`ci-rust.yml`](.github/workflows/ci-rust.yml) | `cargo fmt --check`, `clippy -D warnings`, `cargo test --locked -p tapwing`, `bench/parse` check, `tapwing check` over the sample app and bench flows |
+| `Dart & Sample App` (`ubuntu-latest`, `Flutter 3.47.5`, `3.50.0`) | [`ci-dart.yml`](.github/workflows/ci-dart.yml) | `flutter analyze` and `flutter test` in `packages/tapwing_driver` and `examples/sample_app` |
+| `Android driver` (`ubuntu-latest`, `drivers/android`) | [`ci-android-driver.yml`](.github/workflows/ci-android-driver.yml) | `scripts/build-android-driver.sh` (Kotlin unit tests, release APK, SHA-256) |
+| `Release scripts` (`ubuntu-latest`) | [`ci-scripts.yml`](.github/workflows/ci-scripts.yml) | `scripts/test-dist.sh` |
+| `CI Gate` (`ubuntu-latest`) | [`ci.yml`](.github/workflows/ci.yml) | Succeeds only when every job above succeeded; this is the one check `main` requires |
+
+`scripts/build-ios-driver.sh` (Swift unit tests, iOS Simulator XCUITest runner build, and `.sha256` generation) runs on macOS runners during releases ([`.github/workflows/release.yml`](.github/workflows/release.yml)) and can be verified locally with Xcode.
 
 ## Benchmarks
 

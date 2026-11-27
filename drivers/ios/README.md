@@ -1,6 +1,6 @@
 # Tapwing iOS Simulator driver (`dev.tapwing.ios-runner`)
 
-Tapwing's own iOS Simulator native-lane driver (PLAN.md §8.3, phase F11b). It
+Tapwing's own iOS Simulator native-lane driver (see [docs/architecture.md](../../docs/architecture.md) and [docs/decisions.md](../../docs/decisions.md)). It
 replaced Maestro's `maestro-ios-driver.jar` (no longer used by Tapwing) with a small, zero-dependency Swift
 + minimal Objective-C XCUITest HTTP runner that speaks the exact 14-route JSON
 HTTP/1.1 API consumed by `crates/tapwing/src/ios_native_lane/client.rs`.

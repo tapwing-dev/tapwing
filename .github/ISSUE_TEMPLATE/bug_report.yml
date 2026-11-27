@@ -1,0 +1,43 @@
+name: Bug Report
+description: Report a bug, compatibility mismatch, crash, or hang in Tapwing
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: A concise description of the bug and what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: versions
+    attributes:
+      label: Environment
+      description: Paste `tapwing --version` along with your OS, Flutter version, and device/simulator details.
+      placeholder: |
+        - Tapwing (`tapwing --version`):
+        - Host OS:
+        - Flutter (`flutter --version`):
+        - Device / Simulator (Android API or iOS Xcode/runtime):
+        - Build mode (`--profile` / `--debug` / `--input auto|native`):
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal Flow or Steps to Reproduce
+      description: Include the smallest YAML flow (or CLI command) that triggers the issue. Does the same flow pass in Maestro 2.12.1?
+      render: yaml
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Logs & Diagnostics
+      description: Output with `TAPWING_DEBUG=1`, console error/suggestion output, or relevant excerpts from `--trace` / `--report`.
+    validations:
+      required: false

@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The Flutter version PLAN.md records as primary: strict analysis, no infos allowed.
+          # Primary tested Flutter baseline: strict analysis, no infos allowed.
           - flutter: '3.47.5'
             analyze_args: ''
           # The newest Flutter the repo is verified on. 3.50 deprecates `package:flutter/material.dart`

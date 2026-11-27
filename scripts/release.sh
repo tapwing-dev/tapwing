@@ -14,10 +14,11 @@
 #            packages/tapwing_driver/pubspec.yaml  version: <VERSION>
 #            crates/tapwing/Cargo.lock             the tapwing entry only (cargo update -p tapwing --offline)
 #            bench/parse/Cargo.lock                the same entry: CI checks that crate with --locked
+#            CHANGELOG.md                          "## Unreleased" becomes "## <VERSION>"
 #            packages/tapwing_driver/CHANGELOG.md  "## Unreleased" becomes "## <VERSION>"
 #            packages/tapwing_driver/README.md     the `ref: v<VERSION>` of the install snippet
 #          verifies with
-#            (cd crates/tapwing && cargo test --locked -p tapwing --test init)
+#            (cd crates/tapwing && cargo test --locked -p tapwing --test integration init::)
 #            cargo check --manifest-path bench/parse/Cargo.toml --locked
 #            scripts/test-dist.sh
 #          commits "release: v<VERSION>", pushes the branch and opens its pull request
@@ -40,11 +41,12 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CARGO_TOML=crates/tapwing/Cargo.toml
 CARGO_LOCK=crates/tapwing/Cargo.lock
 PUBSPEC=packages/tapwing_driver/pubspec.yaml
+ROOT_CHANGELOG=CHANGELOG.md
 CHANGELOG=packages/tapwing_driver/CHANGELOG.md
 DRIVER_README=packages/tapwing_driver/README.md
 BENCH_TOML=bench/parse/Cargo.toml
 BENCH_LOCK=bench/parse/Cargo.lock
-FILES=("$CARGO_TOML" "$CARGO_LOCK" "$BENCH_LOCK" "$PUBSPEC" "$CHANGELOG" "$DRIVER_README")
+FILES=("$CARGO_TOML" "$CARGO_LOCK" "$BENCH_LOCK" "$PUBSPEC" "$ROOT_CHANGELOG" "$CHANGELOG" "$DRIVER_README")
 CI_CHECK="CI Gate"
 USAGE="usage: scripts/release.sh prepare|tag <VERSION> [--dry-run] [--no-push]"
 
@@ -165,6 +167,7 @@ bump_toml "$CARGO_TOML" "$version" >"$WORK/Cargo.toml"
 bump_pubspec "$PUBSPEC" "$version" >"$WORK/pubspec.yaml"
 bump_lock "$CARGO_LOCK" "$version" >"$WORK/Cargo.lock"
 bump_lock "$BENCH_LOCK" "$version" >"$WORK/bench-Cargo.lock"
+bump_changelog "$ROOT_CHANGELOG" "$version" >"$WORK/ROOT_CHANGELOG.md"
 bump_changelog "$CHANGELOG" "$version" >"$WORK/CHANGELOG.md"
 bump_readme_ref "$DRIVER_README" "$version" >"$WORK/README.md"
 grep -qx "version = \"$version\"" "$WORK/Cargo.toml" || die "could not set the version in $CARGO_TOML"
@@ -174,6 +177,7 @@ needs_bump=false
 if [[ "$current" != "$version" || "$current_driver" != "$version" ]] \
   || ! cmp -s "$WORK/Cargo.lock" "$CARGO_LOCK" \
   || ! cmp -s "$WORK/bench-Cargo.lock" "$BENCH_LOCK" \
+  || ! cmp -s "$WORK/ROOT_CHANGELOG.md" "$ROOT_CHANGELOG" \
   || ! cmp -s "$WORK/CHANGELOG.md" "$CHANGELOG" \
   || ! cmp -s "$WORK/README.md" "$DRIVER_README"; then
   needs_bump=true
@@ -181,8 +185,8 @@ fi
 
 # --- tag -------------------------------------------------------------------------------
 if [[ "$mode" == tag ]]; then
-  if $needs_bump || ! has_changelog_entry "$CHANGELOG" "$version"; then
-    die "main is not prepared for $tag (CLI $current, driver $current_driver, or $CHANGELOG has no \"## $version\"); run: scripts/release.sh prepare $version, merge its pull request and pull main"
+  if $needs_bump || ! has_changelog_entry "$ROOT_CHANGELOG" "$version" || ! has_changelog_entry "$CHANGELOG" "$version"; then
+    die "main is not prepared for $tag (CLI $current, driver $current_driver, or $ROOT_CHANGELOG / $CHANGELOG has no \"## $version\"); run: scripts/release.sh prepare $version, merge its pull request and pull main"
   fi
   sha=$(git rev-parse HEAD)
   note "releasing $tag at $(git rev-parse --short HEAD)"
@@ -227,10 +231,13 @@ fi
 # --- prepare ---------------------------------------------------------------------------
 command -v cargo >/dev/null || die "cargo is required"
 if ! $needs_bump; then
+  has_changelog_entry "$ROOT_CHANGELOG" "$version" || die "$ROOT_CHANGELOG has no \"## Unreleased\" or \"## $version\" section; describe the release there first"
   has_changelog_entry "$CHANGELOG" "$version" || die "$CHANGELOG has no \"## Unreleased\" or \"## $version\" section; describe the release there first"
   note "main already says $version; nothing to prepare. Next: scripts/release.sh tag $version"
   exit 0
 fi
+has_changelog_entry "$WORK/ROOT_CHANGELOG.md" "$version" \
+  || die "$ROOT_CHANGELOG has no \"## Unreleased\" or \"## $version\" section; describe the release there first"
 has_changelog_entry "$WORK/CHANGELOG.md" "$version" \
   || die "$CHANGELOG has no \"## Unreleased\" or \"## $version\" section; describe the release there first"
 if git rev-parse --quiet --verify "refs/heads/$release_branch" >/dev/null; then
@@ -246,6 +253,7 @@ diff -u --label "a/$CARGO_TOML" --label "b/$CARGO_TOML" "$CARGO_TOML" "$WORK/Car
 diff -u --label "a/$PUBSPEC" --label "b/$PUBSPEC" "$PUBSPEC" "$WORK/pubspec.yaml" || true
 diff -u --label "a/$CARGO_LOCK" --label "b/$CARGO_LOCK" "$CARGO_LOCK" "$WORK/Cargo.lock" || true
 diff -u --label "a/$BENCH_LOCK" --label "b/$BENCH_LOCK" "$BENCH_LOCK" "$WORK/bench-Cargo.lock" || true
+diff -u --label "a/$ROOT_CHANGELOG" --label "b/$ROOT_CHANGELOG" "$ROOT_CHANGELOG" "$WORK/ROOT_CHANGELOG.md" || true
 diff -u --label "a/$CHANGELOG" --label "b/$CHANGELOG" "$CHANGELOG" "$WORK/CHANGELOG.md" || true
 diff -u --label "a/$DRIVER_README" --label "b/$DRIVER_README" "$DRIVER_README" "$WORK/README.md" || true
 
@@ -258,7 +266,7 @@ plan=(
   "git switch -c $release_branch"
   "cargo update --manifest-path $CARGO_TOML -p tapwing --offline"
   "cargo update --manifest-path $BENCH_TOML -p tapwing --offline"
-  "(cd crates/tapwing && cargo test --locked -p tapwing --test init)"
+  "(cd crates/tapwing && cargo test --locked -p tapwing --test integration init::)"
   "cargo check --manifest-path $BENCH_TOML --locked"
   "scripts/test-dist.sh"
   "git commit -m \"release: $tag\" ${FILES[*]}"
@@ -280,13 +288,14 @@ git switch --quiet -c "$release_branch"
 on_release_branch=true
 cp "$WORK/Cargo.toml" "$CARGO_TOML"
 cp "$WORK/pubspec.yaml" "$PUBSPEC"
+cp "$WORK/ROOT_CHANGELOG.md" "$ROOT_CHANGELOG"
 cp "$WORK/CHANGELOG.md" "$CHANGELOG"
 cp "$WORK/README.md" "$DRIVER_README"
 cargo update --manifest-path "$CARGO_TOML" -p tapwing --offline
 cargo update --manifest-path "$BENCH_TOML" -p tapwing --offline
 
-note "verifying: cargo test --locked -p tapwing --test init"
-(cd crates/tapwing && cargo test --locked -p tapwing --test init)
+note "verifying: cargo test --locked -p tapwing --test integration init::"
+(cd crates/tapwing && cargo test --locked -p tapwing --test integration init::)
 note "verifying: cargo check --manifest-path $BENCH_TOML --locked"
 cargo check --manifest-path "$BENCH_TOML" --locked
 note "verifying: scripts/test-dist.sh"
@@ -294,7 +303,7 @@ scripts/test-dist.sh
 
 # Only the version files may have changed.
 unexpected=$(git status --porcelain --untracked-files=all | awk '{ print $NF }' \
-  | grep -vxF -e "$CARGO_TOML" -e "$CARGO_LOCK" -e "$BENCH_LOCK" -e "$PUBSPEC" -e "$CHANGELOG" -e "$DRIVER_README" || true)
+  | grep -vxF -e "$CARGO_TOML" -e "$CARGO_LOCK" -e "$BENCH_LOCK" -e "$PUBSPEC" -e "$ROOT_CHANGELOG" -e "$CHANGELOG" -e "$DRIVER_README" || true)
 [[ -z "$unexpected" ]] || die "verification left unexpected changes: $unexpected"
 
 git add -- "${FILES[@]}"
