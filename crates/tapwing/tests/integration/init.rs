@@ -1,49 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tapwing::init::{
     DEFAULT_DRIVER_SUBDIR, DEFAULT_DRIVER_URL, DriverSource, FilePlan, InitArgs, ZoneWrapper, apply_plan, plan_init,
 };
 use yaml_rust2::{Yaml, YamlLoader};
 
-static TMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-struct TempDir {
-    path: PathBuf,
-}
-
-impl TempDir {
-    fn new(label: &str) -> Self {
-        let id = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("tapwing_init_test_{}_{}_{}", std::process::id(), id, label));
-        let _ = std::fs::remove_dir_all(&path);
-        std::fs::create_dir_all(&path).expect("create temp test dir");
-        Self { path }
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-
-    fn write(&self, rel: &str, content: &str) {
-        let full = self.path.join(rel);
-        if let Some(parent) = full.parent() {
-            std::fs::create_dir_all(parent).expect("create parent dirs");
-        }
-        std::fs::write(&full, content).expect("write fixture file");
-    }
-
-    fn read(&self, rel: &str) -> String {
-        std::fs::read_to_string(self.path.join(rel)).expect("read fixture file")
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.path);
-    }
-}
+use crate::common::{TempDir, minimal_flutter_pubspec};
 
 fn default_args(project_dir: &Path) -> InitArgs {
     InitArgs {
@@ -58,30 +21,6 @@ fn default_args(project_dir: &Path) -> InitArgs {
         force: false,
         pub_get: false,
     }
-}
-
-fn minimal_flutter_pubspec(name: &str) -> String {
-    format!(
-        "\
-name: {name}
-description: Fixture app.
-publish_to: 'none'
-
-environment:
-  sdk: ^3.11.0
-
-dependencies:
-  flutter:
-    sdk: flutter
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-
-flutter:
-  uses-material-design: true
-"
-    )
 }
 
 #[test]

@@ -4,67 +4,18 @@
 
 use std::cell::Cell;
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::json;
-use tapwing::backend::{AssertionError, FlowDriver, MaestroError, MaestroErrorKind};
+use tapwing::backend::{MaestroError, MaestroErrorKind};
 use tapwing::fake_driver::{Bounds, FakeDriver, FakeEvent, FakeLayoutElement};
 use tapwing::flow::ir::{Direction, KeyCode, ValueMap};
-use tapwing::flow::{self, ParsedFlow};
-use tapwing::orchestra::{ErrorResolution, FlowResult, Orchestra, OrchestraCallbacks, OrchestraOpts};
+use tapwing::orchestra::{ErrorResolution, FlowResult, Orchestra, OrchestraCallbacks};
 
-static TMP_COUNTER: AtomicU64 = AtomicU64::new(1);
-
-struct TempOut(PathBuf);
-
-impl TempOut {
-    fn new(tag: &str) -> Self {
-        let id = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("tapwing_it_{tag}_{}_{id}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        Self(dir)
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TempOut {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn fixture_path(case_name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../compat/maestro-fixtures/maestro-test")
-        .join(format!("{case_name}.yaml"))
-}
-
-fn load_case(case_name: &str) -> ParsedFlow {
-    let p = fixture_path(case_name);
-    flow::parse_file(&p).unwrap_or_else(|e| panic!("failed to parse {case_name}: {}", e.render()))
-}
-
-fn default_opts(flow: &ParsedFlow) -> OrchestraOpts {
-    OrchestraOpts {
-        lookup_timeout_ms: 0,
-        optional_lookup_timeout_ms: 0,
-        flow_path: flow.path.clone(),
-        ..Default::default()
-    }
-}
-
-fn run_case(case_name: &str, driver: &mut FakeDriver) -> FlowResult {
-    let flow = load_case(case_name);
-    let opts = default_opts(&flow);
-    let mut orch = Orchestra::new(driver, opts);
-    orch.run_parsed_flow(&flow)
-}
+use crate::common::{
+    TempDir as TempOut, assert_events_in_order, default_opts, is_assertion_failure, load_case, run_case,
+};
 
 fn run_case_env(case_name: &str, driver: &mut FakeDriver, env: &[(&str, &str)]) -> FlowResult {
     let flow = load_case(case_name);
@@ -81,23 +32,6 @@ fn run_case_with_out(case_name: &str, driver: &mut FakeDriver, out: &Path, env: 
     opts.cli_env = env.iter().map(|(k, v)| ((*k).to_string(), (*v).to_string())).collect();
     let mut orch = Orchestra::new(driver, opts);
     orch.run_parsed_flow(&flow)
-}
-
-/// Mirrors Truth's `containsAtLeastElementsIn(expected).inOrder()`.
-fn assert_events_in_order(actual: &[FakeEvent], expected: &[FakeEvent]) {
-    let mut pos = 0usize;
-    for exp in expected {
-        if let Some(found) = actual[pos..].iter().position(|a| a == exp) {
-            pos += found + 1;
-        } else {
-            panic!("Expected event {exp:?} in order after index {pos}.\nActual events: {actual:#?}");
-        }
-    }
-}
-
-fn is_assertion_failure(err: &anyhow::Error) -> bool {
-    err.is::<AssertionError>()
-        || err.downcast_ref::<MaestroError>().is_some_and(|m| m.kind == MaestroErrorKind::AssertionFailure)
 }
 
 fn is_element_not_found(err: &anyhow::Error) -> bool {

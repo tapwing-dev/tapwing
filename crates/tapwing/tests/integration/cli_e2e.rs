@@ -4,48 +4,10 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::atomic::{AtomicUsize, Ordering};
+
+use crate::common::{TempDir, minimal_flutter_pubspec};
 
 const VALID_FLOW: &str = "appId: com.example.app\n---\n- launchApp\n- tapOn: Login\n- assertVisible: Welcome\n";
-
-static TMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-struct TempDir {
-    path: PathBuf,
-}
-
-impl TempDir {
-    fn new(label: &str) -> Self {
-        let id = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("tapwing_cli_e2e_{}_{}_{}", std::process::id(), id, label));
-        let _ = std::fs::remove_dir_all(&path);
-        std::fs::create_dir_all(&path).expect("create temp dir");
-        Self { path }
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-
-    fn write(&self, rel: &str, content: &str) -> PathBuf {
-        let full = self.path.join(rel);
-        if let Some(parent) = full.parent() {
-            std::fs::create_dir_all(parent).expect("create parent dirs");
-        }
-        std::fs::write(&full, content).expect("write file");
-        full
-    }
-
-    fn read(&self, rel: &str) -> String {
-        std::fs::read_to_string(self.path.join(rel)).unwrap_or_else(|e| panic!("read {rel}: {e}"))
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.path);
-    }
-}
 
 /// The compiled CLI, run in an isolated environment so a developer's own `TAPWING_*` settings
 /// never change what the tests see.
@@ -75,13 +37,6 @@ fn code(o: &Output) -> i32 {
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().expect("repo root")
-}
-
-fn minimal_flutter_pubspec(name: &str) -> String {
-    format!(
-        "name: {name}\npublish_to: 'none'\n\nenvironment:\n  sdk: ^3.11.0\n\ndependencies:\n  flutter:\n    sdk: flutter\n\n\
-         dev_dependencies:\n  flutter_test:\n    sdk: flutter\n\nflutter:\n  uses-material-design: true\n"
-    )
 }
 
 // ---------------------------------------------------------------- --version / --help

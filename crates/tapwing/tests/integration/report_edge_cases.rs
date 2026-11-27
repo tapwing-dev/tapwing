@@ -112,11 +112,10 @@ fn xml_elements(xml: &str) -> Vec<String> {
     names
 }
 
-fn temp_dir(label: &str) -> PathBuf {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("tapwing_report_{label}_{}_{nanos}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+use crate::common::TempDir;
+
+fn temp_dir(label: &str) -> TempDir {
+    TempDir::new(label)
 }
 
 // ---------------------------------------------------------------- JUnit

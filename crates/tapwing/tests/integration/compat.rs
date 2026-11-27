@@ -14,9 +14,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
-fn compat_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../compat").canonicalize().expect("compat dir")
-}
+use crate::common::compat_dir;
 
 fn yaml_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().flatten().map(|e| e.path()).collect();

@@ -33,11 +33,10 @@ fn make_driver() -> FakeDriver {
     driver
 }
 
-fn temp_dir(label: &str) -> PathBuf {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("tapwing_f8b_{label}_{}_{nanos}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+use crate::common::TempDir;
+
+fn temp_dir(label: &str) -> TempDir {
+    TempDir::new(label)
 }
 
 fn opts(trace: Option<TraceOpts>, out: Option<&Path>) -> OrchestraOpts {
@@ -274,7 +273,7 @@ fn shard_traces_write_json_and_offline_html_without_collisions() {
         suites.push(execute_shard_on_fake_driver(&mut driver, &plan, &base, Some("fake-1")));
     }
     // `--flatten-debug-output`: both shards share one directory.
-    write_traces(&suites, &[out.clone(), out.clone()], &trace_opts);
+    write_traces(&suites, &[out.to_path_buf(), out.to_path_buf()], &trace_opts);
     for n in [1, 2] {
         let json_path = out.join(format!("trace-shard-{n}.json"));
         let html_path = out.join(format!("trace-shard-{n}.html"));

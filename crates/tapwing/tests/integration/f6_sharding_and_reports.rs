@@ -13,7 +13,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::Value;
 use tapwing::fake_driver::{Bounds, FakeDriver};
@@ -23,14 +22,10 @@ use tapwing::run::suite::execute_shard_on_fake_driver;
 use tapwing::shard::{self, ShardMode};
 use tapwing::workspace;
 
-static TEST_SEQ: AtomicU64 = AtomicU64::new(0);
+use crate::common::TempDir;
 
-fn temp_test_dir(tag: &str) -> PathBuf {
-    let seq = TEST_SEQ.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("tapwing-f6-test-{tag}-{}-{seq}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).expect("create temp test dir");
-    dir
+fn temp_test_dir(tag: &str) -> TempDir {
+    TempDir::new(tag)
 }
 
 fn write_flow(dir: &Path, filename: &str, body: &str) -> PathBuf {
@@ -61,7 +56,7 @@ fn multi_shard_split_executes_in_parallel_isolates_artifacts_and_writes_all_repo
         );
     }
 
-    let plan = workspace::plan(std::slice::from_ref(&ws), &[], &[], None).expect("workspace plan");
+    let plan = workspace::plan(&[ws.to_path_buf()], &[], &[], None).expect("workspace plan");
     let req = shard::resolve_shard_request(Some(2), None, None, Some("emulator-5554,emulator-5556"), 0, 0, 3)
         .expect("shard request");
     assert_eq!(req.effective_shards, 2);
@@ -158,7 +153,7 @@ fn multi_shard_all_runs_all_flows_on_every_shard_and_prefixes_junit_failure() {
          - assertVisible: \"Ready\"\n",
     );
 
-    let plan = workspace::plan(std::slice::from_ref(&ws), &[], &[], None).expect("workspace plan");
+    let plan = workspace::plan(&[ws.to_path_buf()], &[], &[], None).expect("workspace plan");
     let shard_plans = shard::partition_plan(plan, ShardMode::All(2), 2);
     assert_eq!(shard_plans.len(), 2);
 
@@ -221,7 +216,7 @@ fn single_shard_execution_order_aborts_sequence_on_failure_and_runs_remaining_fl
     write_flow(&ws, "seq3.yaml", "appId: com.example.app\nname: seq3\n---\n- launchApp\n");
     write_flow(&ws, "after.yaml", "appId: com.example.app\nname: after\n---\n- launchApp\n");
 
-    let plan = workspace::plan(std::slice::from_ref(&ws), &[], &[], None).expect("plan");
+    let plan = workspace::plan(&[ws.to_path_buf()], &[], &[], None).expect("plan");
     assert_eq!(plan.sequence.len(), 3);
     assert_eq!(plan.flows.len(), 1);
     assert!(!plan.continue_on_failure);

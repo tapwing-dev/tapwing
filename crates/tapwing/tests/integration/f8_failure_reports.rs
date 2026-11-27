@@ -30,11 +30,10 @@ fn make_driver() -> FakeDriver {
     driver
 }
 
-fn temp_dir(label: &str) -> std::path::PathBuf {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("tapwing_f8_{label}_{}_{nanos}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+use crate::common::TempDir;
+
+fn temp_dir(label: &str) -> TempDir {
+    TempDir::new(label)
 }
 
 fn run_flow(driver: &mut FakeDriver, name: &str, source: &str, out_dir: Option<&Path>) -> FlowResult {
@@ -176,7 +175,7 @@ appId: dev.tapwing.sample_app
     let opts = OrchestraOpts {
         lookup_timeout_ms: 0,
         optional_lookup_timeout_ms: 0,
-        test_output_dir: Some(out.clone()),
+        test_output_dir: Some(out.to_path_buf()),
         ..Default::default()
     };
     let suite = execute_shard_on_fake_driver(&mut driver, &shard_plan, &opts, Some("fake-1"));

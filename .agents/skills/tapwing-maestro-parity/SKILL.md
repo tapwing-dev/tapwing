@@ -43,6 +43,6 @@ Use this checklist whenever touching command execution, selectors, hierarchy map
 
 ## 4. Verification
 
-- Run parser parity: `cd crates/tapwing && cargo test --test compat` (463/463 Maestro fixtures + 81/81 probes).
-- Run orchestrator parity: `cd crates/tapwing && cargo test --test integration_orchestrator --test integration_flow_core`.
+- Run parser parity: `cd crates/tapwing && cargo test --test integration compat::` (463/463 Maestro fixtures + 81/81 probes).
+- Run orchestrator parity: `cd crates/tapwing && cargo test --test integration -- integration_orchestrator:: integration_core::`.
 - Run live differential verification against real `maestro test` whenever modifying selectors, hierarchy mapping, or native-lane actions.

@@ -16,9 +16,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use tapwing::workspace::{self, PlanError};
 
-fn compat_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../compat").canonicalize().expect("compat dir")
-}
+use crate::common::compat_dir;
 
 fn strings(v: &Value) -> Vec<String> {
     v.as_array().map(|a| a.iter().filter_map(|s| s.as_str().map(String::from)).collect()).unwrap_or_default()
