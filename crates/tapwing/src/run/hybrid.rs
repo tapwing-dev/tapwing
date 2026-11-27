@@ -1295,6 +1295,10 @@ fn wait_on_flutter_while_warming<C, T>(
 }
 
 #[cfg(test)]
+#[path = "hybrid_hid_tests.rs"]
+mod hid_tests;
+
+#[cfg(test)]
 pub(in crate::run) mod tests {
     use std::collections::HashMap;
     use std::path::PathBuf;

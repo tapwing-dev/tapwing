@@ -23,6 +23,10 @@ mod session;
 pub mod surface;
 pub mod tree;
 
+#[cfg(test)]
+pub(crate) mod fake;
+#[cfg(test)]
+mod tests;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
