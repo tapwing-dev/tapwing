@@ -1,0 +1,7 @@
+appId: com.apple.Preferences
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "__never_shows_up__"
+    timeout: 60000
+    optional: true

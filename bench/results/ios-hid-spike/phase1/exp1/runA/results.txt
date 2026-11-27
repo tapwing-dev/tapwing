@@ -1,0 +1,6 @@
+cycle 1 tapwing_rc=0 runners_alive=0 buttons=3 texts=2 tap=(220.0,570.0) granted_in_app=0 alert_still_there=0
+cycle 2 tapwing_rc=0 runners_alive=0 buttons=3 texts=2 tap=(220.0,570.0) granted_in_app=1 alert_still_there=0
+cycle 3 tapwing_rc=0 runners_alive=0 buttons=3 texts=2 tap=(220.0,570.0) granted_in_app=1 alert_still_there=0
+cycle 4 tapwing_rc=0 runners_alive=0 buttons=3 texts=2 tap=(220.0,570.0) granted_in_app=1 alert_still_there=0
+cycle 5 tapwing_rc=0 runners_alive=0 buttons=3 texts=2 tap=(220.0,570.0) granted_in_app=1 alert_still_there=0
+cycle 6 tapwing_rc=0 runners_alive=0 buttons=3 texts=2 tap=(220.0,570.0) granted_in_app=1 alert_still_there=0

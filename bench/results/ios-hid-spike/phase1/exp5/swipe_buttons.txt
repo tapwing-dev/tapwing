@@ -1,0 +1,182 @@
+## Flutter list
+before
+  Selectors y= 134
+  App State y= 838
+swipe (220,800)->(220,300) 300 ms: 499.4 ms
+after swipe up
+  Selectors y= 134
+  App State y= 838
+swipe (220,300)->(220,800) 300 ms: 502.0 ms
+after swipe down
+  Selectors y= 134
+## UIKit list (Settings)
+before
+  Obecné y= 311
+  Soukromí y= 953
+swipe (220,800)->(220,300) 300 ms: 481.1 ms
+after swipe up
+  Obecné not in tree; elements: 18
+  Soukromí y= 485
+swipe (220,300)->(220,800) 300 ms: 514.1 ms
+after swipe down
+  Obecné y= 311
+## Flutter list (Swipe & Scroll screen, VRow list)
+before
+  VRow 1 frame= [0, 274, 440, 56]
+  VRow 14 frame= [0, 0, 0, 0]
+swipe (220,800)->(220,400) 300 ms: 472.9 ms
+after swipe up 400 pt
+  VRow 1 not in tree
+  VRow 14 frame= [0, 0, 0, 0]
+swipe (220,400)->(220,800) 300 ms: 478.5 ms
+after swipe down 400 pt
+  VRow 1 frame= [0, 274, 440, 56]
+## tiny and slow swipe variants
+swipe (220,800)->(220,400) 100 ms: 233.2 ms
+  VRow 1 not in tree
+swipe (220,400)->(220,800) 800 ms: 1159.3 ms
+  VRow 1 not in tree
+## buttons
+before (app in front)
+  pid 9083 root 'Sample App' elements 30 sample ['Sample App', 'Back', 'Swipe & Scroll', 'Horizontal mode', 'PageView mode', 'Swipe left to dismiss A']
+button home: 152.7 ms
+after home
+  pid 9083 root 'Sample App' elements 30 sample ['Sample App', 'Back', 'Swipe & Scroll', 'Horizontal mode', 'PageView mode', 'Swipe left to dismiss A']
+button lock: 152.2 ms
+after lock
+  pid 9083 root 'Sample App' elements 30 sample ['Sample App', 'Back', 'Swipe & Scroll', 'Horizontal mode', 'PageView mode', 'Swipe left to dismiss A']
+button lock: 150.7 ms
+after lock again (wake)
+  pid 9083 root 'Sample App' elements 30 sample ['Sample App', 'Back', 'Swipe & Scroll', 'Horizontal mode', 'PageView mode', 'Swipe left to dismiss A']
+## home with target 0x32 (3 tries, app re-opened before each)
+try 1 before:
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+button home: 171.3 ms
+after:
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+try 2 before:
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+button home: 154.2 ms
+after:
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+try 3 before:
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+button home: 145.8 ms
+after:
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+## home and lock with button target 0x32 (the target 0x33 from idb did nothing on this Xcode)
+home try 1 before:
+  frontmost pid 13677 'Nastavení' elements 18 ['Nastavení', 'Nastavení', 'Účet Apple, Po přihlášení získáte přístup k\xa0datům na iCloudu, k\xa0App\xa0Storu, službám Apple a\xa0dalšímu obsahu.', 'Obecné']
+button home: 148.4 ms
+after home:
+  frontmost pid 9776 ' ' elements 14 [' ', 'Mapy', 'Kalendář', 'Kalendář']
+home try 2 before:
+  frontmost pid 13677 'Nastavení' elements 18 ['Nastavení', 'Nastavení', 'Účet Apple, Po přihlášení získáte přístup k\xa0datům na iCloudu, k\xa0App\xa0Storu, službám Apple a\xa0dalšímu obsahu.', 'Obecné']
+button home: 150.7 ms
+after home:
+  frontmost pid 9776 ' ' elements 14 [' ', 'Mapy', 'Kalendář', 'Kalendář']
+home try 3 before:
+  frontmost pid 13677 'Nastavení' elements 18 ['Nastavení', 'Nastavení', 'Účet Apple, Po přihlášení získáte přístup k\xa0datům na iCloudu, k\xa0App\xa0Storu, službám Apple a\xa0dalšímu obsahu.', 'Obecné']
+button home: 154.0 ms
+after home:
+  frontmost pid 9776 ' ' elements 14 [' ', 'Mapy', 'Kalendář', 'Kalendář']
+lock:
+button lock: 155.6 ms
+  frontmost pid 9776 ' ' elements 14 [' ', 'Mapy', 'Kalendář', 'Kalendář']
+frame bytes: 4696841
+lock again:
+button lock: 168.4 ms
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+frame bytes: 5746436
+## landscape (LANDSCAPE_LEFT) tap mapping; Back button centre in landscape points is (90,28); portrait size 440x956
+before:
+['Back', 'F2 Playground', 'Selectors & Taps\ntraits, css, point, doubleTap, longPress, retry']
+A: no transform, tap(90,28)
+tap call 1 (first): 118.6 ms
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+B: rotate cw, tap(28,866)
+tap call 1 (first): 120.4 ms
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/Applications/Xcode-27.2.0.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+C: rotate ccw, tap(412,90)
+tap call 1 (first): 121.3 ms
+['Back', 'F2 Playground', 'Selectors & Taps\ntraits, css, point, doubleTap, longPress, retry']

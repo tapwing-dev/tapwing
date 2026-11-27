@@ -1,0 +1,72 @@
+== alert
+ only runner 7 ('Chcete aplikaci Sample App povolit přístup k\xa0polohovým údajům?', '', '', '', (60, 318, 380, 666)) 
+ only runner 1 ('Svislý posuvník, 1\xa0stránka', '0\xa0%', '', '', (347, 318, 377, 474)) 0 %
+ only runner 1 ('Horizontální posuvník, 1\xa0stránka', '0\xa0%', '', '', (60, 441, 380, 471)) 0 %
+ only runner 1 ('Svislý posuvník, 1\xa0stránka', '0\xa0%', '', '', (347, 318, 377, 474)) 0 %
+ only runner 1 ('Horizontální posuvník, 1\xa0stránka', '0\xa0%', '', '', (60, 441, 380, 471)) 0 %
+ only runner 1 ('Svislý posuvník, 1\xa0stránka', '0\xa0%', '', '', (347, 474, 377, 666)) 0 %
+ only runner 1 ('Horizontální posuvník, 1\xa0stránka', '0\xa0%', '', '', (60, 633, 380, 663)) 0 %
+ only runner 1 ('Svislý posuvník, 1\xa0stránka', '0\xa0%', '', '', (347, 474, 377, 666)) 0 %
+ only runner 1 ('Horizontální posuvník, 1\xa0stránka', '0\xa0%', '', '', (60, 633, 380, 663)) 0 %
+== playground
+ only runner 43 ('Wi‑Fi', '', '', 'wifi', (330, 23, 355, 41)) 
+ only probe  AXApplication (' ', '', '', '', (0, 0, 440, 956)) 
+== login_keyboard
+ only runner 1 ('', '', '', 'login_button', (24, 342, 416, 390)) 
+ only runner 1 ('', '', '', 'playground_button', (24, 402, 416, 450)) 
+ only runner 1 ('', '', '', 'inputView', (0, 609, 440, 956)) 
+ only runner 1 ('', '', '', 'SystemInputAssistantView', (0, 609, 440, 653)) 
+ only runner 1 ('', '', '', 'CenterPageView', (0, 609, 440, 653)) 
+ only runner 1 ('Typing Predictions', '', '', '', (0, 609, 440, 653)) 
+ only runner 1 ('', '', '', 'UIKeyboardLayoutStar Preview', (0, 653, 440, 898)) 
+ only runner 20 ('Padding-Left', '', '', '', (0, 653, 0, 653)) 
+ only runner 20 ('Padding-Right', '', '', '', (0, 653, 0, 653)) 
+ only runner 20 ('Padding-Left', '', '', '', (0, 653, 0, 653)) 
+ only runner 20 ('Padding-Right', '', '', '', (0, 653, 0, 653)) 
+ only runner 9 ('Dictate', '', '', 'dictation', (357, 887, 437, 956)) 
+ only runner 9 ('Dictate', '', '', 'dictation', (357, 887, 437, 956)) 
+ only runner 43 ('Wi‑Fi', '', '', 'wifi', (330, 23, 355, 41)) 
+ only probe  AXApplication (' ', '', '', '', (0, 0, 440, 956)) 
+== settings
+ only runner 21 ('', '', '', 'Nastavení', (0, 62, 440, 168)) 
+ only runner 32 ('', '', '', 'com.apple.settings.sidebar.collectionView', (0, 0, 440, 956)) 
+ only runner 48 ('Účet Apple', '', '', '', (108, 183, 212, 207)) 
+ only runner 43 ('apple.id', '', '', 'apple.id', (40, 192, 100, 252)) 
+ only runner 48 ('Po přihlášení získáte přístup k\xa0datům na iCloudu, k\xa0App\xa0Storu, službám Apple a\xa0dalšímu obsahu.', '', '', '', (108, 209, 352, 261)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 216, 397, 228)) 
+ only runner 48 ('Obecné', '', '', '', (38, 323, 140, 351)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 331, 397, 343)) 
+ only runner 48 ('Zpřístupnění', '', '', '', (38, 375, 176, 403)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 383, 397, 395)) 
+ only runner 48 ('Akční tlačítko', '', '', '', (38, 427, 181, 455)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 435, 397, 447)) 
+ only runner 48 ('Fotoaparát', '', '', '', (38, 479, 163, 507)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 487, 397, 499)) 
+ only runner 48 ('Hledání', '', '', '', (38, 531, 137, 559)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 539, 397, 551)) 
+ only runner 48 ('Klidový režim', '', '', '', (38, 583, 181, 611)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 591, 397, 603)) 
+ only runner 48 ('Plocha a\xa0knihovna aplikací', '', '', '', (38, 635, 278, 663)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 643, 397, 655)) 
+ only runner 48 ('Siri', '', '', '', (38, 687, 104, 715)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 695, 397, 707)) 
+ only runner 48 ('Vzhled', '', '', '', (38, 739, 132, 767)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 747, 397, 759)) 
+ only runner 48 ('Čas u\xa0obrazovky', '', '', '', (38, 826, 206, 854)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 834, 397, 846)) 
+ only runner 48 ('Kód', '', '', '', (38, 913, 110, 941)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 921, 397, 933)) 
+ only runner 48 ('Soukromí a\xa0zabezpečení', '', '', '', (38, 965, 266, 993)) 
+ only runner 43 ('', '', '', 'chevron.forward', (390, 973, 397, 985)) 
+ only runner 1 ('Svislý posuvník, 2\xa0stránky', '0\xa0%', '', '', (407, 116, 437, 894)) 0 %
+ only runner 1 ('Svislý posuvník, 2\xa0stránky', '0\xa0%', '', '', (407, 116, 437, 894)) 0 %
+ only runner 24 ('Panel nástrojů', '', '', 'Toolbar', (0, 0, 440, 956)) 
+ only runner 45 ('Hledat', '', 'Hledat', '', (28, 890, 412, 918)) 
+ only runner 9 ('Diktování', '', '', 'Dictate', (379, 893, 397, 915)) 
+ only runner 43 ('Hledat', '', '', 'magnifyingglass', (40, 894, 60, 913)) 
+ only runner 9 ('Diktování', '', '', 'Dictate', (379, 893, 397, 915)) 
+ only runner 24 ('Panel nástrojů', '', '', 'Toolbar', (0, 0, 440, 956)) 
+ only runner 43 ('Wi‑Fi', '', '', 'wifi', (330, 23, 355, 41)) 
+ only probe  AXTextField ('Hledat', 'Hledat', 'Hledat', '', (28, 890, 412, 918)) Hledat
+ only probe  AXApplication (' ', '', '', '', (0, 0, 440, 956)) 
+== landscape

@@ -1,0 +1,15 @@
+snapshot: first call, process start to JSON: 196.9 ms
+snapshot call 1 (first): 143.3 ms
+snapshot call 2: 34.7 ms
+snapshot call 3: 32.8 ms
+snapshot call 4: 33.0 ms
+snapshot call 5: 32.5 ms
+snapshot call 6: 32.6 ms
+snapshot call 7: 32.4 ms
+snapshot call 8: 32.2 ms
+snapshot call 9: 32.2 ms
+snapshot call 10: 32.3 ms
+snapshot call 11: 32.9 ms
+snapshot call 12: 32.8 ms
+snapshot call 13: 32.4 ms
+snapshot bytes: 3798

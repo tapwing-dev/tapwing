@@ -1,0 +1,8 @@
+device iPhone 18 Pro Max (32E8A0E5-D41A-4CC4-BCD4-39E9809FAA7D, iOS simulator) · setup 30 ms
+
+▶ parity_login_keyboard
+  ✓  5229.2 ms  launchApp
+  ✓   767.5 ms  tapOn "Email"
+
+interrupted; cleaning up (press Ctrl-C again to exit immediately)
+FAILED parity_login_keyboard in 8505 ms

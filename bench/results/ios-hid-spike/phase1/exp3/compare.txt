@@ -1,0 +1,48 @@
+== alert: runner nodes 45 (with a selector attribute 15), probe nodes 6 (with 6)
+  exact (all selector attributes + bounds + states): matched 6, only runner 9, only probe 0
+  attributes only: matched 6, only runner 9, only probe 0
+  accessibilityText only in runner: ['Horizontální posuvník, 1\xa0stránka', 'Svislý posuvník, 1\xa0stránka']
+  accessibilityText only in probe : []
+   count differs for 'Chcete aplikaci Sample App povolit přístup k\xa0polohovým údajům?': runner 2, probe 1
+   'Chcete aplikaci Sample App povolit přístup k\xa0polohovým údajům?': bounds: runner=(60, 318, 380, 666) probe=(90, 340, 350, 404)
+  attribute difference counts on shared labels: {'count differs': 1, 'bounds': 1}
+== playground: runner nodes 64 (with a selector attribute 19), probe nodes 19 (with 19)
+  exact (all selector attributes + bounds + states): matched 18, only runner 1, only probe 1
+  attributes only: matched 18, only runner 1, only probe 1
+  accessibilityText only in runner: ['Wi‑Fi']
+  accessibilityText only in probe : [' ']
+  attribute difference counts on shared labels: {}
+== login_keyboard: runner nodes 107 (with a selector attribute 64), probe nodes 53 (with 52)
+  exact (all selector attributes + bounds + states): matched 51, only runner 13, only probe 1
+  attributes only: matched 51, only runner 13, only probe 1
+  accessibilityText only in runner: ['Padding-Left', 'Padding-Right', 'Typing Predictions', 'Wi‑Fi']
+  accessibilityText only in probe : [' ']
+   count differs for 'Dictate': runner 2, probe 1
+  attribute difference counts on shared labels: {'count differs': 1}
+== settings: runner nodes 201 (with a selector attribute 59), probe nodes 23 (with 23)
+  exact (all selector attributes + bounds + states): matched 21, only runner 38, only probe 2
+  attributes only: matched 21, only runner 38, only probe 2
+  accessibilityText only in runner: ['Panel nástrojů', 'Po přihlášení získáte přístup k\xa0datům na iCloudu, k\xa0App\xa0Storu, službám Apple a\xa0dalšímu obsahu.', 'Svislý posuvník, 2\xa0stránky', 'Wi‑Fi', 'apple.id', 'Účet Apple']
+  accessibilityText only in probe : [' ']
+   count differs for 'Akční tlačítko': runner 2, probe 1
+   count differs for 'Diktování': runner 2, probe 1
+   count differs for 'Fotoaparát': runner 2, probe 1
+   count differs for 'Hledat': runner 2, probe 1
+   'Hledat': text: runner='' probe='Hledat'
+   count differs for 'Hledání': runner 2, probe 1
+   count differs for 'Klidový režim': runner 2, probe 1
+   count differs for 'Kód': runner 2, probe 1
+   count differs for 'Obecné': runner 2, probe 1
+   count differs for 'Plocha a\xa0knihovna aplikací': runner 2, probe 1
+   count differs for 'Siri': runner 2, probe 1
+   count differs for 'Soukromí a\xa0zabezpečení': runner 2, probe 1
+   count differs for 'Vzhled': runner 2, probe 1
+   count differs for 'Zpřístupnění': runner 2, probe 1
+   count differs for 'Čas u\xa0obrazovky': runner 2, probe 1
+  attribute difference counts on shared labels: {'count differs': 14, 'text': 1}
+== landscape: runner nodes 50 (with a selector attribute 12), probe nodes 13 (with 12)
+  exact (all selector attributes + bounds + states): matched 12, only runner 0, only probe 0
+  attributes only: matched 12, only runner 0, only probe 0
+  accessibilityText only in runner: []
+  accessibilityText only in probe : []
+  attribute difference counts on shared labels: {}

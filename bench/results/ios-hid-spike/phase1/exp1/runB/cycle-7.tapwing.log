@@ -1,0 +1,8 @@
+device iPhone 18 Pro Max (32E8A0E5-D41A-4CC4-BCD4-39E9809FAA7D, iOS simulator) · setup 13 ms
+
+▶ F5 iOS Permission Dialog
+  ✓  2262.7 ms  launchApp (clearState)
+  ✓   558.1 ms  tapOn id: playground_button
+  ✓     1.8 ms  assertVisible "Permission: unknown.*" is visible
+  ✓  3015.3 ms  tapOn "Request Location Permission"
+PASSED F5 iOS Permission Dialog in 5840 ms

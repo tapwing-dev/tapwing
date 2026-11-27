@@ -1,0 +1,12 @@
+frame: first call, process start to PNG: 96.4 ms
+frame: first call, process start to PNG: 86.2 ms
+frame: first call, process start to PNG: 85.1 ms
+frame: first call, process start to PNG: 86.8 ms
+frame: first call, process start to PNG: 92.8 ms
+frame: first call, process start to PNG: 87.9 ms
+frame: first call, process start to PNG: 86.4 ms
+frame: first call, process start to PNG: 87.1 ms
+frame: first call, process start to PNG: 85.7 ms
+frame: first call, process start to PNG: 86.4 ms
+frame: first call, process start to PNG: 86.5 ms
+frame: first call, process start to PNG: 87.4 ms

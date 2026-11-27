@@ -1,0 +1,6 @@
+ratio=(ux,uy) tap args (41.4,60.8) -> CHANGED None
+Result of the manual runs (the script above stopped at its first candidate because the tap landed on the
+Endless Animation tile and the screen never went quiet, so the accessibility read returned no frontmost app):
+- tap args (41.4, 60.8), meaning portrait-buffer point (41, 61): opened the "Endless Animation" tile, which sits at buffer point (52, 79) in the unrotated frame. HID touches use the unrotated portrait space.
+- tap args (412, 90), the buffer position of the Back arrow in LANDSCAPE_LEFT (landscape point (90, 28) maps to portrait x = 440 - 28, y = 90): popped back to the playground screen.
+So for LANDSCAPE_LEFT a landscape point (lx, ly) is tapped at portrait (440 - ly, lx). The shim does not do this transform yet. The PNG from `frame` is also the unrotated 1320x2868 buffer with the UI turned 90 degrees.

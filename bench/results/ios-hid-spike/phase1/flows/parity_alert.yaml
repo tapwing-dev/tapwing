@@ -1,0 +1,17 @@
+# Phase 1: bring the Czech location alert up and stop. Run with --input flutter so no runner starts.
+appId: dev.tapwing.sampleApp
+name: F5 iOS Permission Dialog
+---
+- launchApp:
+    clearState: true
+    permissions:
+      # `unset` resets every privacy service, so iOS asks again.
+      all: unset
+- tapOn:
+    id: "playground_button"
+- assertVisible: "Permission: unknown.*"
+- tapOn: "Request Location Permission"
+- extendedWaitUntil:
+    visible: "__never_shows_up__"
+    timeout: 60000
+    optional: true

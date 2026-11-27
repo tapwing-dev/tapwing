@@ -1,0 +1,17 @@
+## com.apple.Accessibility
+{
+    AXSDidResetD22Preferences = 1;
+    AXSScrollActionDomainMigrationCompleted = 1;
+    AXSSystemUIProcessAppSmartInvertEnabledPreference = 0;
+    GrayscaleDisplay = 0;
+    HearingAidCompliance = 0;
+    InvertColorsEnabled = 0;
+    PointerAllowAppCustomizationEnabled = 1;
+    PointerEffectScalingEnabled = 1;
+    ReduceMotionEnabled = 0;
+}
+## com.apple.accessibility.AccessibilityUIServer
+Error: Domain 'com.apple.accessibility.AccessibilityUIServer' not found.
+## com.apple.UIKit
+{
+}

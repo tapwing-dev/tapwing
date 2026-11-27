@@ -1,0 +1,3 @@
+appId: dev.tapwing.sampleApp
+---
+- setOrientation: PORTRAIT

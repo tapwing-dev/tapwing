@@ -1,0 +1,2 @@
+## clean sim: write the accessibility defaults, relaunch Settings
+after defaults write + relaunch: children 4

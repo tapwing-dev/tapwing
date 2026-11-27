@@ -1,0 +1,16 @@
+## runner session on the clean simulator
+▶ settings_only
+  ✓ 10025.9 ms  launchApp
+  ✓   132.3 ms  assertVisible "Nastavení" is visible
+PASSED settings_only in 10159 ms
+    AccessibilityEnabled = 0;
+    ApplicationAccessibilityEnabled = 0;
+    AutomationEnabled = 0;
+    InvertColorsEnabled = 0;
+    LocalizedStringLookupInfoEnabled = 0;
+    PointerAllowAppCustomizationEnabled = 1;
+    PointerEffectScalingEnabled = 1;
+    ReduceMotionEnabled = 0;
+clean sim after runner exit +1 s: Settings children 4
+clean sim after runner exit +3 s: Settings children 4
+clean sim after runner exit + relaunch: Settings children 0

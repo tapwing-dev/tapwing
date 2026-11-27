@@ -1,0 +1,10 @@
+device iPhone 18 Pro Max (32E8A0E5-D41A-4CC4-BCD4-39E9809FAA7D, iOS simulator) · setup 28 ms
+
+▶ parity_landscape
+  ✓  5221.6 ms  launchApp
+  ✓  1093.7 ms  tapOn "F2 Playground"
+  ✓    21.3 ms  assertVisible id: nav_selectors_taps is visible
+  ✓   839.4 ms  setOrientation
+
+interrupted; cleaning up (press Ctrl-C again to exit immediately)
+FAILED parity_landscape in 8901 ms

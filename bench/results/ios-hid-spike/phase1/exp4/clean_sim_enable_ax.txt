@@ -1,0 +1,6 @@
+## clean sim, Settings launched while flags are 0 (after a runner session)
+snapshot : Settings children 0
+snapshot --enable-ax: Settings children 0
+enable-ax then relaunch: children 0
+    AccessibilityEnabled = 0;
+    ApplicationAccessibilityEnabled = 0;

@@ -1,0 +1,9 @@
+device iPhone 18 Pro Max (32E8A0E5-D41A-4CC4-BCD4-39E9809FAA7D, iOS simulator) · setup 31 ms
+
+▶ parity_playground
+  ✓  5217.5 ms  launchApp
+  ✓  1092.0 ms  tapOn "F2 Playground"
+  ✓    23.4 ms  assertVisible id: nav_selectors_taps is visible
+
+interrupted; cleaning up (press Ctrl-C again to exit immediately)
+FAILED parity_playground in 9029 ms

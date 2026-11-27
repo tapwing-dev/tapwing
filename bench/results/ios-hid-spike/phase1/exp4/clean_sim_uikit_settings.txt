@@ -1,0 +1,18 @@
+settings children 0
+settings children 0
+snapshot: first call, process start to JSON: 699.3 ms
+settings children 4
+    AccessibilityEnabled = 1;
+    ApplicationAccessibilityEnabled = 1;
+    InvertColorsEnabled = 0;
+    PointerAllowAppCustomizationEnabled = 1;
+    PointerEffectScalingEnabled = 1;
+    ReduceMotionEnabled = 0;
+running Settings children 4
+running Settings children 4
+running Settings children 4
+after relaunch +0.3 s children 4
+after relaunch +0.5 s children 4
+after relaunch +1 s children 4
+after relaunch +1 s children 4
+after relaunch +2 s children 4

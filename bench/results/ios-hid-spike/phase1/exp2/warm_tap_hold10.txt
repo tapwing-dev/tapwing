@@ -1,0 +1,13 @@
+tap: first call, process start to done: 79.0 ms
+tap call 1 (first): 73.6 ms
+tap call 2: 14.8 ms
+tap call 3: 14.6 ms
+tap call 4: 14.6 ms
+tap call 5: 11.6 ms
+tap call 6: 13.6 ms
+tap call 7: 10.5 ms
+tap call 8: 15.1 ms
+tap call 9: 15.0 ms
+tap call 10: 11.0 ms
+tap call 11: 10.7 ms
+tap call 12: 12.0 ms

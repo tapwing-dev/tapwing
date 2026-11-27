@@ -1,0 +1,12 @@
+run 1 wall_ms=87 snapshot: first call, process start to JSON: 82.1 ms
+run 2 wall_ms=92 snapshot: first call, process start to JSON: 86.8 ms
+run 3 wall_ms=91 snapshot: first call, process start to JSON: 85.7 ms
+run 4 wall_ms=91 snapshot: first call, process start to JSON: 85.9 ms
+run 5 wall_ms=84 snapshot: first call, process start to JSON: 78.2 ms
+run 6 wall_ms=86 snapshot: first call, process start to JSON: 80.5 ms
+run 7 wall_ms=81 snapshot: first call, process start to JSON: 76.1 ms
+run 8 wall_ms=78 snapshot: first call, process start to JSON: 72.9 ms
+run 9 wall_ms=93 snapshot: first call, process start to JSON: 87.3 ms
+run 10 wall_ms=92 snapshot: first call, process start to JSON: 86.8 ms
+run 11 wall_ms=94 snapshot: first call, process start to JSON: 88.9 ms
+run 12 wall_ms=94 snapshot: first call, process start to JSON: 88.4 ms
