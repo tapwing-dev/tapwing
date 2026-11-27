@@ -131,9 +131,12 @@ internal class UnicodeTextInput(
 
     /** `null` when the text was set, else why not. */
     private fun setTextAtCursor(node: AccessibilityNodeInfo, inserted: String): String? {
-        if (!node.isEditable) return "focused node ${node.className} is not editable"
-        if (node.isPassword) return "password field"
-        if (AccessibilityAction.ACTION_SET_TEXT !in node.actionList) return "no ACTION_SET_TEXT on ${node.className}"
+        ImeRestore.setTextSkipReason(
+            editable = node.isEditable,
+            password = node.isPassword,
+            supportsSetText = AccessibilityAction.ACTION_SET_TEXT in node.actionList,
+            className = node.className,
+        )?.let { return it }
         val showingHint = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && node.isShowingHintText
         val current = if (showingHint) "" else node.text?.toString().orEmpty()
         val splice = TextSplice.insert(current, node.textSelectionStart, node.textSelectionEnd, inserted)
@@ -160,8 +163,10 @@ internal class UnicodeTextInput(
     private fun inputThroughIme(text: String, isCancelled: () -> Boolean) = synchronized(imeLock) {
         // Read as the shell user: apps targeting API 34+ may not read
         // `enabled_input_methods` through Settings.Secure.
-        val originalIme = shell.run("settings get secure ${Settings.Secure.DEFAULT_INPUT_METHOD}").trim()
-            .takeUnless { it.isBlank() || it == "null" || it == TapwingInputMethodService.IME_ID }
+        val originalIme = ImeRestore.normalizePreviousIme(
+            shell.run("settings get secure ${Settings.Secure.DEFAULT_INPUT_METHOD}"),
+            TapwingInputMethodService.IME_ID,
+        )
         val wasEnabled = ImeRestore.isEnabled(
             shell.run("settings get secure ${Settings.Secure.ENABLED_INPUT_METHODS}"),
             TapwingInputMethodService.IME_ID,
@@ -182,9 +187,9 @@ internal class UnicodeTextInput(
             if (committed < chunks.size) throw TypingCancelledException(committed, chunks.size, "text chunks")
             Thread.sleep(COMMIT_SETTLE_DELAY_MS)
         } finally {
-            originalIme?.let { runCatching { shell.run("ime set $it") } }
-            if (!wasEnabled) runCatching { shell.run("ime disable ${TapwingInputMethodService.IME_ID}") }
-            runCatching { shell.run("settings delete global ${ImeRestore.SETTING_KEY}") }
+            for (cmd in ImeRestore.restoreCommands(originalIme, wasEnabled, TapwingInputMethodService.IME_ID)) {
+                runCatching { shell.run(cmd) }
+            }
         }
     }
 

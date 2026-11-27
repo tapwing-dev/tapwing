@@ -122,10 +122,7 @@ private final class ClientConnection: @unchecked Sendable {
     private let requestGate: RequestGate
     private let session: String?
     private let onClose: (ObjectIdentifier) -> Void
-    private var buffer = Data()
-    private var closed = false
-    private var receiving = false
-    private var sawEOF = false
+    private var machine = HttpConnectionMachine()
     /// The request this connection waits on (at most one: no pipelining ahead of a reply).
     private var inFlight: RequestTicket?
 
@@ -160,61 +157,38 @@ private final class ClientConnection: @unchecked Sendable {
     }
 
     private func receiveNext() {
-        guard !closed, !receiving, !sawEOF else { return }
-        receiving = true
+        guard machine.beginReceive() else { return }
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
-            guard let self, !self.closed else { return }
-            self.receiving = false
-            if let data, !data.isEmpty {
-                self.buffer.append(data)
-            }
-            if error != nil {
-                self.close()
-                return
-            }
-            if isComplete {
-                self.sawEOF = true
-            }
-            if self.inFlight != nil {
-                // A handler is running for this connection. The read only watches
-                // for the peer hanging up (the host timed out and reconnected), so
-                // a queued request of a gone client is never started. Tapwing's
-                // client never half-closes, so EOF means nobody reads the reply.
-                if self.sawEOF {
-                    self.close()
-                } else if self.buffer.count <= HttpFraming.maxHeaderBytes + HttpFraming.maxBodyBytes {
-                    self.receiveNext()
-                }
-                return
-            }
-            self.processBuffer()
+            guard let self else { return }
+            let action = self.machine.onReceive(data: data, isComplete: isComplete, hadError: error != nil)
+            self.handleReadAction(action)
         }
     }
 
     private func processBuffer() {
-        guard !closed, inFlight == nil else { return }
-        switch HttpFraming.tryParseRequest(from: &buffer) {
-        case .incomplete:
-            if sawEOF {
-                close()
-            } else {
-                receiveNext()
-            }
-        case .malformed(let reason):
-            let resp = AppError(type: .precondition, message: reason).httpResponse
-            let wire = HttpFraming.serialize(resp, keepAlive: false)
+        handleReadAction(machine.pollNextRequest())
+    }
+
+    private func handleReadAction(_ action: HttpConnectionMachine.ReadAction) {
+        switch action {
+        case .needMoreData:
+            receiveNext()
+        case .close:
+            close()
+        case .malformed(_, let wire):
             connection.send(content: wire, completion: .contentProcessed { [weak self] _ in
                 self?.close()
             })
-        case .complete(let request):
-            let keepAlive = request.shouldKeepAlive && !sawEOF
-            if request.method == "GET" && request.path == "/status" {
-                // Answered here, off the main thread and outside the gate, so a
-                // wedged handler can never make the runner look dead.
-                send(HttpResponse.json(GateReply.status(requestGate.snapshot(), session: session)), keepAlive: keepAlive)
-                return
-            }
+        case .statusFastPath(_, let keepAlive):
+            // Answered here, off the main thread and outside the gate, so a
+            // wedged handler can never make the runner look dead.
+            send(HttpResponse.json(GateReply.status(requestGate.snapshot(), session: session)), keepAlive: keepAlive)
+        case .dispatch(let request, let keepAlive):
             dispatch(request, keepAlive: keepAlive)
+        case .ignoreWhileInFlight(let continueReading):
+            if continueReading {
+                receiveNext()
+            }
         }
     }
 
@@ -233,6 +207,7 @@ private final class ClientConnection: @unchecked Sendable {
         }
         switch admission {
         case .refused(let gate):
+            machine.completeInFlight()
             send(GateReply.refused(label: label, blockedBy: gate).httpResponse, keepAlive: keepAlive)
         case .admitted(let ticket):
             inFlight = ticket
@@ -255,26 +230,27 @@ private final class ClientConnection: @unchecked Sendable {
     }
 
     private func complete(_ ticket: RequestTicket, with response: HttpResponse, keepAlive: Bool) {
-        guard !closed, inFlight === ticket else { return }
+        guard !machine.isClosed, inFlight === ticket else { return }
         inFlight = nil
+        machine.completeInFlight()
         send(response, keepAlive: keepAlive)
     }
 
     private func send(_ response: HttpResponse, keepAlive: Bool) {
         let wire = HttpFraming.serialize(response, keepAlive: keepAlive)
         connection.send(content: wire, completion: .contentProcessed { [weak self] sendError in
-            guard let self, !self.closed else { return }
-            if sendError != nil || !keepAlive {
+            guard let self, !self.machine.isClosed else { return }
+            switch self.machine.onSendFinished(hadError: sendError != nil, keepAlive: keepAlive) {
+            case .close:
                 self.close()
-            } else {
+            case .processNext:
                 self.processBuffer()
             }
         })
     }
 
     private func close() {
-        guard !closed else { return }
-        closed = true
+        guard machine.markClosed() else { return }
         if let ticket = inFlight {
             inFlight = nil
             requestGate.clientGone(ticket)

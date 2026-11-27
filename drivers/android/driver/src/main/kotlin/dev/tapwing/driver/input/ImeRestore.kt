@@ -28,4 +28,37 @@ internal object ImeRestore {
      */
     fun isEnabled(enabledInputMethods: String, imeId: String): Boolean =
         enabledInputMethods.trim().split(':').any { it.substringBefore(';') == imeId }
+
+    /**
+     * Normalizes `settings get secure default_input_method` output into the
+     * previous third-party IME id, or `null` when unset / already Tapwing's IME.
+     */
+    fun normalizePreviousIme(raw: String, tapwingImeId: String): String? =
+        raw.trim().takeUnless { it.isBlank() || it == "null" || it == tapwingImeId }
+
+    /**
+     * Ordered shell commands executed in `finally` to restore the original IME,
+     * disable Tapwing's IME if we enabled it, and delete the crash-recovery marker.
+     */
+    fun restoreCommands(originalIme: String?, wasEnabled: Boolean, tapwingImeId: String): List<String> = buildList {
+        if (originalIme != null) add("ime set $originalIme")
+        if (!wasEnabled) add("ime disable $tapwingImeId")
+        add("settings delete global $SETTING_KEY")
+    }
+
+    /**
+     * Returns a diagnostic reason why `ACTION_SET_TEXT` cannot be used directly on
+     * a focused node (falling back to the IME), or `null` when direct set-text is allowed.
+     */
+    fun setTextSkipReason(
+        editable: Boolean,
+        password: Boolean,
+        supportsSetText: Boolean,
+        className: CharSequence?,
+    ): String? = when {
+        !editable -> "focused node $className is not editable"
+        password -> "password field"
+        !supportsSetText -> "no ACTION_SET_TEXT on $className"
+        else -> null
+    }
 }
