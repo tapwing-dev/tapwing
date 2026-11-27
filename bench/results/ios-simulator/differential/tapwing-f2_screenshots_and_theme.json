@@ -4,7 +4,7 @@
   "flows": [
     {
       "flow": "F2 Screenshots and Light Mode (iOS)",
-      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/f2_screenshots_and_theme.yaml",
+      "path": "examples/sample_app/.maestro/ios/f2_screenshots_and_theme.yaml",
       "status": "passed",
       "totalMs": 6246.8855,
       "settlePolicy": "v2",
@@ -180,7 +180,7 @@
           "status": "passed",
           "ms": 471.33825,
           "driver": {
-            "expected": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/ref_visual_badge_ios.png",
+            "expected": "examples/sample_app/.maestro/ios/ref_visual_badge_ios.png",
             "matchPercent": 100.0
           }
         },

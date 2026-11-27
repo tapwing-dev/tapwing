@@ -51,8 +51,7 @@ class CommandDispatcher {
   }
 
   /// Warning emitted when iOS `hideKeyboard` succeeds although an editable
-  /// field keeps focus (stock Maestro iOS would fail here; see
-  /// `spikes/ios/hide-keyboard/REPORT.md`).
+  /// field keeps focus (stock Maestro iOS fails in that state).
   static const String iosHideKeyboardFocusWarning =
       InputNavigationHandlers.iosHideKeyboardFocusWarning;
 

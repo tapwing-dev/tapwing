@@ -3,7 +3,7 @@
   "flows": [
     {
       "flow": "Negative Assert Not Visible",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/negative/fail_assert_not_visible.yaml",
+      "path": "examples/sample_app/.maestro/negative/fail_assert_not_visible.yaml",
       "status": "failed",
       "totalMs": 3050.550875,
       "settlePolicy": "v2",

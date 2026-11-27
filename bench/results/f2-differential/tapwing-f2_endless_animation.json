@@ -3,7 +3,7 @@
   "flows": [
     {
       "flow": "F2 Endless Animation",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_endless_animation.yaml",
+      "path": "examples/sample_app/.maestro/f2_endless_animation.yaml",
       "status": "passed",
       "totalMs": 4323.402040999999,
       "settlePolicy": "v2",

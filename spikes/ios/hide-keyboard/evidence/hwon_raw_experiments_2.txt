@@ -1,4 +1,0 @@
-== HW ON: pressKey escape
-{"isKeyboardVisible":true}
-== HW ON: pressKey return
-{"isKeyboardVisible":false}

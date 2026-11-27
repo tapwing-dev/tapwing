@@ -3,7 +3,7 @@
   "flows": [
     {
       "flow": "F2 Dark Mode",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_dark_mode.yaml",
+      "path": "examples/sample_app/.maestro/f2_dark_mode.yaml",
       "status": "passed",
       "totalMs": 2750.211208,
       "settlePolicy": "v2",

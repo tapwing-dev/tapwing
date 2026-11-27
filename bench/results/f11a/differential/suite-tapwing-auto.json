@@ -5,7 +5,7 @@
   "flows": [
     {
       "flow": "F11 Native Unicode Input",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f11_native_unicode_input.yaml",
+      "path": "examples/sample_app/.maestro/f11_native_unicode_input.yaml",
       "status": "passed",
       "totalMs": 2880.4906250000004,
       "settlePolicy": "v2",
@@ -484,7 +484,7 @@
     },
     {
       "flow": "F2 Dark Mode",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_dark_mode.yaml",
+      "path": "examples/sample_app/.maestro/f2_dark_mode.yaml",
       "status": "failed",
       "totalMs": 19453.78275,
       "settlePolicy": "v2",
@@ -620,7 +620,7 @@
     },
     {
       "flow": "F2 Endless Animation",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_endless_animation.yaml",
+      "path": "examples/sample_app/.maestro/f2_endless_animation.yaml",
       "status": "passed",
       "totalMs": 3083.438375,
       "settlePolicy": "v2",
@@ -838,7 +838,7 @@
     },
     {
       "flow": "F2 Screenshots and Light Mode",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_screenshots_and_theme.yaml",
+      "path": "examples/sample_app/.maestro/f2_screenshots_and_theme.yaml",
       "status": "failed",
       "totalMs": 1420.0873330000002,
       "settlePolicy": "v2",
@@ -993,7 +993,7 @@
     },
     {
       "flow": "F2 Selectors and Taps",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_selectors_and_taps.yaml",
+      "path": "examples/sample_app/.maestro/f2_selectors_and_taps.yaml",
       "status": "passed",
       "totalMs": 24124.22225,
       "settlePolicy": "v2",
@@ -1530,7 +1530,7 @@
     },
     {
       "flow": "F2 Swipe and Scroll",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_swipe_and_scroll.yaml",
+      "path": "examples/sample_app/.maestro/f2_swipe_and_scroll.yaml",
       "status": "passed",
       "totalMs": 10500.582208000002,
       "settlePolicy": "v2",
@@ -1966,7 +1966,7 @@
     },
     {
       "flow": "F2 Text Clipboard and Keys",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_text_clipboard_keys.yaml",
+      "path": "examples/sample_app/.maestro/f2_text_clipboard_keys.yaml",
       "status": "passed",
       "totalMs": 7078.731458,
       "settlePolicy": "v2",
@@ -2939,7 +2939,7 @@
     },
     {
       "flow": "F4 Android device commands",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f4_device_commands.yaml",
+      "path": "examples/sample_app/.maestro/f4_device_commands.yaml",
       "status": "passed",
       "totalMs": 8535.341666,
       "settlePolicy": "v2",
@@ -3328,7 +3328,7 @@
     },
     {
       "flow": "F5 Permission Dialog",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f5_permission_dialog.yaml",
+      "path": "examples/sample_app/.maestro/f5_permission_dialog.yaml",
       "status": "passed",
       "totalMs": 2711.891084,
       "settlePolicy": "v2",
@@ -3492,7 +3492,7 @@
     },
     {
       "flow": "F7 App Health",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f7_app_health.yaml",
+      "path": "examples/sample_app/.maestro/f7_app_health.yaml",
       "status": "passed",
       "totalMs": 1840.0814169999999,
       "settlePolicy": "v2",
@@ -3944,7 +3944,7 @@
     },
     {
       "flow": "Login and browse",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/login_and_browse.yaml",
+      "path": "examples/sample_app/.maestro/login_and_browse.yaml",
       "status": "passed",
       "totalMs": 6274.272790999999,
       "settlePolicy": "v2",

@@ -20,8 +20,7 @@ class InputNavigationHandlers {
       '(Maestro Android quirk)';
 
   /// Warning emitted when iOS `hideKeyboard` succeeds although an editable
-  /// field keeps focus (stock Maestro iOS would fail here; see
-  /// `spikes/ios/hide-keyboard/REPORT.md`).
+  /// field keeps focus (stock Maestro iOS fails in that state).
   static const String iosHideKeyboardFocusWarning =
       'hideKeyboard: soft keyboard hidden, the text field keeps focus (like '
       'Maestro Android). Maestro iOS passes this step only if the app '

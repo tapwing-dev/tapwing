@@ -4,7 +4,7 @@
   "flows": [
     {
       "flow": "Login and browse (iOS)",
-      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/login_and_browse.yaml",
+      "path": "examples/sample_app/.maestro/ios/login_and_browse.yaml",
       "status": "passed",
       "totalMs": 15377.392833,
       "settlePolicy": "v2",

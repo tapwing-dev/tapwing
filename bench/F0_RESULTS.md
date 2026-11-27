@@ -110,9 +110,9 @@ A control run of Maestro on the driver-instrumented APK passed.
 
 The driver also logs `flutter/textinput` traffic and taps into `tapOn` / `inputText` responses (`ime.log`) for post-mortem debugging.
 
-## Review (Gemini 4 Neon) and Adopted Changes
+## Review and Adopted Changes
 
-Review notes: [reviews/neon-review.md](../reviews/neon-review.md). Adopted improvements:
+Adopted review improvements:
 - Cheaper hash and snapshot (no second `getSemanticsData`, allocation-free hashing)
 - Regex caching in selectors and O(N) `deepestMatchingElement`
 - Shared post-frame waiter (no callback or timer leaks)
@@ -203,7 +203,7 @@ Two cases where the initial draft flow failed in Tapwing also failed in Maestro 
 
 ## F2.1
 
-After addressing all findings from [reviews/f2-review.md](../reviews/f2-review.md) and applying speed optimizations while preserving exact Maestro 2.12.1 semantics (including Maestro-equivalent fling velocity in `scrollUntilVisible`, default permission grants in `launchApp`, PID verification, and coasting-scroll settle detection). Measured on `emulator-5554` (`TAPWING_ONLY=1 bench/run_bench.sh 3 emulator-5554`, 3/3 passes, 0 settle violations):
+After addressing the F2 review findings and applying speed optimizations while preserving exact Maestro 2.12.1 semantics (including Maestro-equivalent fling velocity in `scrollUntilVisible`, default permission grants in `launchApp`, PID verification, and coasting-scroll settle detection). Measured on `emulator-5554` (`TAPWING_ONLY=1 bench/run_bench.sh 3 emulator-5554`, 3/3 passes, 0 settle violations):
 
 ### Benchmark `login_and_browse.yaml` (Medians of 3 Runs)
 
@@ -242,4 +242,4 @@ The full differential suite (7/7 positive + 2/2 negative flows against Maestro 2
   - Root cause: `pidof` immediately after `am start` can return empty or include the dying process's PID.
   - Fix: the CLI captures existing PIDs before stopping (`TAPWING_OLDPIDS`), waits for a new PID after launch, and never accepts any old PID. Reported under `launchApp.driver.oldPids`.
   - Stress test of 15 consecutive sessions: 15/15 passed, `launchApp` remained ~1.7 s.
-- **iOS Simulator** (main-branch driver): iOS variant of the flow 3/3, ~13.1 s excluding `launchApp`, 0 settle violations. Raw data in `spikes/ios/data/f21-main-driver/`.
+- **iOS Simulator** (main-branch driver): iOS variant of the flow 3/3, ~13.1 s excluding `launchApp`, 0 settle violations.

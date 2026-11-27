@@ -3,7 +3,7 @@
   "flows": [
     {
       "flow": "F2 Text Clipboard and Keys",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_text_clipboard_keys.yaml",
+      "path": "examples/sample_app/.maestro/f2_text_clipboard_keys.yaml",
       "status": "passed",
       "totalMs": 6667.174083,
       "settlePolicy": "v2",

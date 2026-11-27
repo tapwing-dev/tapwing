@@ -4,7 +4,7 @@
   "flows": [
     {
       "flow": "Negative Missing Element",
-      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/negative/fail_missing_element.yaml",
+      "path": "examples/sample_app/.maestro/ios/negative/fail_missing_element.yaml",
       "status": "failed",
       "totalMs": 3904.403458,
       "settlePolicy": "v2",
