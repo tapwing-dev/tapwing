@@ -1,6 +1,7 @@
 //! Hybrid routing between the in-app Flutter driver and the platform native
 //! lanes (Android UiAutomator gRPC and iOS Simulator XCTest HTTP).
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
@@ -11,6 +12,7 @@ use crate::device::Platform;
 use crate::driver::DriverError;
 use crate::flow::ParsedFlow;
 use crate::flow::ir::{ElementSelector, KeyCode, MaestroCommand};
+use crate::ios_native_lane::hid::{self, FrontApp, HidOps, HidSession};
 use crate::ios_native_lane::{IosNativeClient, IosNativeLaneHandle, IosNativeOps, SPRINGBOARD_BUNDLE_ID};
 use crate::native_lane::{
     BlackboxDemotion, BlackboxTracker, ColdStart, FOCUS_PROBE, InputMode, Lane, NativeLaneHandle, NativeOps, RouteCtx,
@@ -194,6 +196,8 @@ pub fn flows_need_ios_native(flows: &[ParsedFlow]) -> bool {
 pub(super) enum PlatformNativeOps<'a> {
     Android(NativeOps<'a>),
     Ios(IosNativeOps<'a>),
+    /// A SpringBoard alert served in-process by the HID backend, with no runner (`TAPWING_IOS_HID=1`).
+    IosHid(HidOps<'a>),
 }
 
 impl PlatformNativeOps<'_> {
@@ -201,6 +205,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.tap_on_element(req),
             Self::Ios(ops) => ops.tap_on_element(req),
+            Self::IosHid(ops) => ops.tap_on_element(req),
         }
     }
 
@@ -208,6 +213,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.tap_on_point(req),
             Self::Ios(ops) => ops.tap_on_point(req),
+            Self::IosHid(ops) => ops.tap_on_point(req),
         }
     }
 
@@ -215,6 +221,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.assert_visible(sel, timeout_ms),
             Self::Ios(ops) => ops.assert_visible(sel, timeout_ms),
+            Self::IosHid(ops) => ops.assert_visible(sel, timeout_ms),
         }
     }
 
@@ -222,6 +229,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.assert_not_visible(sel, timeout_ms),
             Self::Ios(ops) => ops.assert_not_visible(sel, timeout_ms),
+            Self::IosHid(ops) => ops.assert_not_visible(sel, timeout_ms),
         }
     }
 
@@ -229,6 +237,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.find_element_bounds(sel, timeout_ms),
             Self::Ios(ops) => ops.find_element_bounds(sel, timeout_ms),
+            Self::IosHid(ops) => ops.find_element_bounds(sel, timeout_ms),
         }
     }
 
@@ -236,6 +245,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.copy_text_from(sel, timeout_ms),
             Self::Ios(ops) => ops.copy_text_from(sel, timeout_ms),
+            Self::IosHid(ops) => ops.copy_text_from(sel, timeout_ms),
         }
     }
 
@@ -243,6 +253,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.input_text(text),
             Self::Ios(ops) => ops.input_text(text),
+            Self::IosHid(ops) => ops.unsupported("typing"),
         }
     }
 
@@ -250,13 +261,16 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.erase_text(characters),
             Self::Ios(ops) => ops.erase_text(characters),
+            Self::IosHid(ops) => ops.unsupported("typing"),
         }
     }
 
     pub(super) fn back_press(&mut self) -> Result<Value> {
         match self {
             Self::Android(ops) => ops.back_press(),
-            Self::Ios(_) => Ok(json!({ "noop": true, "lane": "native", "note": "IOSDriver.backPress() is a no-op" })),
+            Self::Ios(_) | Self::IosHid(_) => {
+                Ok(json!({ "noop": true, "lane": "native", "note": "IOSDriver.backPress() is a no-op" }))
+            }
         }
     }
 
@@ -264,6 +278,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.hide_keyboard(),
             Self::Ios(ops) => ops.hide_keyboard_with(strict),
+            Self::IosHid(ops) => ops.unsupported("hideKeyboard"),
         }
     }
 
@@ -271,6 +286,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.scroll(),
             Self::Ios(ops) => ops.scroll(),
+            Self::IosHid(ops) => ops.scroll(),
         }
     }
 
@@ -278,6 +294,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.swipe(req),
             Self::Ios(ops) => ops.swipe(req),
+            Self::IosHid(ops) => ops.swipe(req),
         }
     }
 
@@ -285,6 +302,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.scroll_until_visible(req),
             Self::Ios(ops) => ops.scroll_until_visible(req),
+            Self::IosHid(ops) => ops.scroll_until_visible(req),
         }
     }
 
@@ -292,6 +310,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.wait_for_animation_to_end(timeout_ms),
             Self::Ios(ops) => ops.wait_for_animation_to_end(timeout_ms),
+            Self::IosHid(ops) => ops.wait_for_animation_to_end(timeout_ms),
         }
     }
 
@@ -301,6 +320,7 @@ impl PlatformNativeOps<'_> {
         match self {
             Self::Android(ops) => ops.settle(None, Some(3000)).map(|h| h.shows_package(app_id)),
             Self::Ios(ops) => ops.settle(None, Some(3000)).map(|_| true),
+            Self::IosHid(ops) => ops.unsupported("settling after a launch"),
         }
     }
 }
@@ -522,6 +542,12 @@ impl DeviceFlutterBackend<'_> {
     /// runner, waiting up to `max_wait` (or polling non-blockingly via
     /// `try_get()` when `max_wait.is_zero()`).
     fn ios_focus_probe(&mut self, max_wait: Duration, allow_lazy_spawn: bool) -> FocusProbe {
+        // With `TAPWING_IOS_HID=1` the accessibility backend answers first, with no runner. It only
+        // ever says "SpringBoard is in front"; every other answer means "unknown here" and the
+        // runner logic below runs unchanged.
+        if let Some(probe) = self.hid_focus() {
+            return probe;
+        }
         let app_ids = self.ios_app_ids();
         let flow_app = self.flow_app.clone();
         let Some(slot) = self.ios_native.as_deref_mut() else {
@@ -551,6 +577,26 @@ impl DeviceFlutterBackend<'_> {
         };
         self.report_native_restarts();
         probe
+    }
+
+    /// The HID session, while the flag is on and the backend has not been found unavailable.
+    fn active_hid(&self) -> Option<Arc<HidSession>> {
+        if self.platform() != Platform::Ios {
+            return None;
+        }
+        self.ios_hid.as_ref().filter(|h| h.is_active()).map(Arc::clone)
+    }
+
+    /// `Some(External(SpringBoard))` when the accessibility backend finds SpringBoard in front (in
+    /// portrait). A nil or failed read, or any other process in front, is `None`: phase 1 showed
+    /// that app trees and the frontmost read are unreliable while the simulator's accessibility
+    /// flags are 0, whereas SpringBoard answered in every state. Never starts the runner.
+    fn hid_focus(&mut self) -> Option<FocusProbe> {
+        let hid = self.active_hid()?;
+        match hid.front_app() {
+            Ok(FrontApp::SpringBoard) => Some(FocusProbe::External(SPRINGBOARD_BUNDLE_ID.to_string())),
+            Ok(FrontApp::Other | FrontApp::Unknown) | Err(_) => None,
+        }
     }
 
     fn ios_external_focus(&mut self, max_wait: Duration, allow_lazy_spawn: bool) -> Option<String> {
@@ -710,6 +756,55 @@ impl DeviceFlutterBackend<'_> {
                 let res = f(&mut PlatformNativeOps::Ios(IosNativeOps::new(client, &app_ids)));
                 self.report_native_restarts();
                 res
+            }
+        }
+    }
+
+    /// [`Self::run_native`] for an element command that follows a "SpringBoard is in front" answer.
+    /// While the runner is not started and the HID backend is usable, the command runs on the
+    /// runner-less HID surface first. A failure that sent no input falls through to `run_native`,
+    /// which starts the runner as before. An input that may have been delivered is never repeated.
+    fn run_native_selector<T>(
+        &mut self,
+        budget: u64,
+        native: &impl Fn(&mut PlatformNativeOps<'_>, u64) -> Result<T>,
+    ) -> Result<T> {
+        if let Some(res) = self.try_hid_surface(budget, native) {
+            return res;
+        }
+        self.run_native(|ops| native(ops, budget))
+    }
+
+    fn try_hid_surface<T>(
+        &mut self,
+        budget: u64,
+        native: &impl Fn(&mut PlatformNativeOps<'_>, u64) -> Result<T>,
+    ) -> Option<Result<T>> {
+        if self.ios_native.as_deref().is_none_or(IosNativeSlot::is_started) {
+            return None;
+        }
+        let hid = self.active_hid()?;
+        let mut ops = PlatformNativeOps::IosHid(HidOps::new(&hid));
+        let res = native(&mut ops, budget);
+        let PlatformNativeOps::IosHid(hid_ops) = &ops else { return None };
+        let sent = hid_ops.input_sent();
+        match res {
+            Ok(v) => {
+                self.lanes.native += 1;
+                Some(Ok(v))
+            }
+            Err(e) if hid::surface::is_final(&e, sent) => {
+                self.lanes.native += 1;
+                Some(Err(if sent { hid::surface::not_repeated(e) } else { e }))
+            }
+            // Nothing was sent: say so once on the timing channel and let the runner do the work.
+            Err(e) => {
+                crate::ios_native_lane::timing::emit(
+                    "hid_fallback",
+                    Duration::ZERO,
+                    &format!("reason={:?}", e.to_string()),
+                );
+                None
             }
         }
     }
@@ -886,22 +981,32 @@ impl DeviceFlutterBackend<'_> {
             && !self.ios_overlay_active()
             && self.decide(true) == Lane::Native
         {
-            return self.run_native(|ops| native(ops, timeout_ms));
+            return self.run_native_selector(timeout_ms, &native);
         }
 
         let ios_lazy = self.platform() == Platform::Ios && self.ios_native.as_deref().is_some_and(|s| !s.is_started());
-        let probe = timeout_ms.min(if ios_lazy { IOS_LAZY_PROBE_MS } else { FLUTTER_PROBE_MS });
+        // With the HID backend a lazy positive lookup first waits only `FLUTTER_PROBE_MS`, asks who
+        // is in front, and only then keeps waiting on Flutter up to `IOS_LAZY_PROBE_MS`.
+        let hid_split = ios_lazy && !negative && self.active_hid().is_some();
+        let lazy_probe = timeout_ms.min(IOS_LAZY_PROBE_MS);
+        let mut probe = if hid_split {
+            timeout_ms.min(FLUTTER_PROBE_MS)
+        } else if ios_lazy {
+            lazy_probe
+        } else {
+            timeout_ms.min(FLUTTER_PROBE_MS)
+        };
         let started = Instant::now();
         let left = |started: Instant| timeout_ms.saturating_sub(started.elapsed().as_millis() as u64);
         self.lanes.flutter += 1;
         let first = flutter(self, probe);
-        let Err(miss) = first else {
+        let Err(mut miss) = first else {
             if negative && !self.ios_overlay_active() {
                 let remaining = left(started);
                 if self.external_focus_within(Duration::ZERO).is_some() {
                     self.lanes.flutter = self.lanes.flutter.saturating_sub(1);
                     self.native_hint = true;
-                    return self.run_native(|ops| native(ops, remaining));
+                    return self.run_native_selector(remaining, &native);
                 }
             }
             // Flutter owns the screen again.
@@ -916,6 +1021,26 @@ impl DeviceFlutterBackend<'_> {
         }
         if !is_lookup_miss(&miss) {
             return Err(miss);
+        }
+        if hid_split {
+            if self.hid_focus().is_some() {
+                // A SpringBoard alert: no runner start, no 2 s wait.
+                self.native_hint = true;
+                return self.run_native_selector(left(started), &native);
+            }
+            // Not SpringBoard: the lazy probe goes on, so pure-Flutter flows are as patient as before.
+            probe = lazy_probe;
+            let rest = lazy_probe.saturating_sub(started.elapsed().as_millis() as u64);
+            if rest > 0 {
+                match flutter(self, rest) {
+                    Ok(v) => {
+                        self.overlay_hint = false;
+                        return Ok(v);
+                    }
+                    Err(e) if is_lookup_miss(&e) => miss = e,
+                    Err(e) => return Err(e),
+                }
+            }
         }
         // iOS: the element was last found natively and no system app is in
         // front (XCTest reports the app itself, e.g. under a web-auth sheet), so
@@ -969,7 +1094,7 @@ impl DeviceFlutterBackend<'_> {
             self.native_hint = true;
             let budget =
                 if prewarmed { remaining_before_focus.max(NATIVE_FALLBACK_MS) } else { remaining_before_focus };
-            return self.run_native(|ops| native(ops, budget));
+            return self.run_native_selector(budget, &native);
         }
         if probe >= timeout_ms || (prewarmed && remaining_before_focus == 0) {
             // Tight timeout (`timeout_ms <= probe`, e.g. `when: visible`), or
@@ -1014,7 +1139,7 @@ impl DeviceFlutterBackend<'_> {
                 self.invalidate_focus_cache();
                 if self.external_focus_within(Duration::from_millis(remaining_after_second)).is_some() {
                     self.native_hint = true;
-                    return self.run_native(|ops| native(ops, remaining_after_second));
+                    return self.run_native_selector(remaining_after_second, &native);
                 }
                 if !negative && is_flutter_not_found(&e) {
                     match self.try_native(|ops| native(ops, NATIVE_FALLBACK_MS)) {

@@ -168,6 +168,8 @@ pub struct DeviceFlutterBackend<'a> {
     pub native: Option<&'a mut NativeLaneHandle>,
     /// iOS Simulator XCTest native lane for system alerts, rotation, Home/Lock and uninstrumented apps.
     pub ios_native: Option<&'a mut IosNativeSlot>,
+    /// The in-process HID backend of this simulator when `TAPWING_IOS_HID=1`, else `None`.
+    pub(super) ios_hid: Option<std::sync::Arc<crate::ios_native_lane::hid::HidSession>>,
     pub(super) lanes: LaneStats,
     /// A system / foreign window was last in front: look at the focus again
     /// before trusting the Flutter lane.
@@ -218,6 +220,7 @@ impl<'a> DeviceFlutterBackend<'a> {
         if let Some(sim) = session.dev.as_ios() {
             sim.set_strict_clear_state(session.opts.maestro_compat_strict);
         }
+        let ios_hid = session.dev.as_ios().and_then(|sim| crate::ios_native_lane::hid::session_for(&sim.udid));
         Self {
             dev: session.dev,
             drv: session.drv,
@@ -226,6 +229,7 @@ impl<'a> DeviceFlutterBackend<'a> {
             flow_app,
             native: session.native.as_deref_mut(),
             ios_native: session.ios_native.as_deref_mut(),
+            ios_hid,
             lanes: LaneStats::default(),
             native_hint: false,
             focus_cache: None,
