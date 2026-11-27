@@ -1,0 +1,38 @@
+device iPhone 18 Pro Max (32E8A0E5-D41A-4CC4-BCD4-39E9809FAA7D, iOS simulator) · setup 19 ms
+
+▶ F5 iOS Permission Dialog
+  ✓  1398.6 ms  launchApp (clearState)
+  ✓   571.5 ms  tapOn id: playground_button
+  ✓     2.4 ms  assertVisible "Permission: unknown.*" is visible
+  ✓  3012.4 ms  tapOn "Request Location Permission"
+ios-native-timing event=hid_open t_ms=5492 ms=76 ok=1
+ios-native-timing event=hid t_ms=5525 ms=32 route=snapshot ok=1
+ios-native-timing event=hid t_ms=5541 ms=15 route=snapshot ok=1
+ios-native-timing event=hid t_ms=5541 ms=0 route=screen ok=1
+  ✓   537.3 ms  assertVisible "Povolit jen při používání aplikace" is visible
+ios-native-timing event=hid t_ms=5557 ms=15 route=snapshot ok=1
+ios-native-timing event=hid t_ms=5571 ms=14 route=snapshot ok=1
+ios-native-timing event=hid t_ms=5571 ms=0 route=screen ok=1
+ios-native-timing event=hid t_ms=5602 ms=30 route=frame ok=1
+ios-native-timing event=hid t_ms=5629 ms=27 route=frame ok=1
+ios-native-timing event=hid t_ms=5643 ms=14 route=snapshot ok=1
+ios-native-timing event=hid t_ms=5644 ms=0 route=screen ok=1
+ios-native-timing event=hid t_ms=5662 ms=18 route=touch ok=1
+ios-native-timing event=hid t_ms=5693 ms=31 route=frame ok=1
+ios-native-timing event=hid t_ms=5726 ms=33 route=frame ok=1
+ios-native-timing event=hid t_ms=5819 ms=38 route=frame ok=1
+ios-native-timing event=hid t_ms=5852 ms=33 route=frame ok=1
+ios-native-timing event=hid t_ms=5938 ms=28 route=frame ok=1
+ios-native-timing event=hid t_ms=5966 ms=28 route=frame ok=1
+ios-native-timing event=hid t_ms=6052 ms=28 route=frame ok=1
+ios-native-timing event=hid t_ms=6080 ms=27 route=frame ok=1
+ios-native-timing event=hid t_ms=6159 ms=24 route=frame ok=1
+ios-native-timing event=hid t_ms=6183 ms=24 route=frame ok=1
+ios-native-timing event=hid t_ms=6189 ms=5 route=snapshot ok=0 err="iOS HID call failed: no frontmost application; is the simulator still starting up?"
+ios-native-timing event=hid t_ms=6189 ms=0 route=screen ok=1
+  ✓   647.9 ms  tapOn "Povolit jen při používání aplikace"
+ios-native-timing event=hid t_ms=6194 ms=4 route=snapshot ok=0 err="iOS HID call failed: no frontmost application; is the simulator still starting up?"
+  ✓     7.7 ms  assertVisible "Permission: granted.*" is visible
+ios-native-timing event=hid t_ms=6203 ms=4 route=snapshot ok=0 err="iOS HID call failed: no frontmost application; is the simulator still starting up?"
+  ✓     6.1 ms  assertNotVisible "Povolit jen při používání aplikace" is not visible
+PASSED F5 iOS Permission Dialog in 6185 ms

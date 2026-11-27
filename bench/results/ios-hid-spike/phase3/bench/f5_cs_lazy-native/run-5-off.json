@@ -1,0 +1,42 @@
+{
+  "platform": "ios",
+  "inputMode": "native",
+  "setupMs": 18.64175,
+  "flows": [
+    {
+      "flow": "F5 iOS Permission Dialog",
+      "path": "/Users/me/Development/Flutter/tapwing/bench/results/ios-hid-spike/flows/f5_cs_lazy.yaml",
+      "status": "failed",
+      "totalMs": 3511.393333,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "js": {
+        "runtimeInitialized": false,
+        "evalCount": 0,
+        "fastPathHits": 0,
+        "cacheHits": 0,
+        "evalMs": 0.0,
+        "httpRequests": 0,
+        "httpMs": 0.0
+      },
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "failed",
+          "ms": 3106.173792,
+          "error": "--input native: Flutter driver not used, and the native lane could not take over: iOS driver `viewHierarchy` failed: HTTP 500: Error getting main window kAXErrorServerNotFound (internal)",
+          "failure": {
+            "screenshot": ".tapwing/run-1795788892285-85441/failures/f5_cs_lazy_e4040971_step001_failure.png"
+          }
+        }
+      ],
+      "lane": "native",
+      "laneStats": {
+        "flutter": 0,
+        "native": 1
+      }
+    }
+  ]
+}

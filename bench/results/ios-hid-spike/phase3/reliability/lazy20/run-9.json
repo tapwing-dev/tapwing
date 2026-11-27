@@ -1,0 +1,177 @@
+{
+  "platform": "ios",
+  "inputMode": "auto",
+  "setupMs": 30.587542,
+  "flows": [
+    {
+      "flow": "F5 iOS Permission Dialog",
+      "path": "/Users/me/Development/Flutter/tapwing/bench/results/ios-hid-spike/flows/f5_cs_lazy.yaml",
+      "status": "passed",
+      "totalMs": 6422.088833,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "js": {
+        "runtimeInitialized": false,
+        "evalCount": 0,
+        "fastPathHits": 0,
+        "cacheHits": 0,
+        "evalMs": 0.0,
+        "httpRequests": 0,
+        "httpMs": 0.0
+      },
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 1516.0275840000002,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 18456,
+              "dart": "3.14.0 (stable) (Wed Nov 4 16:28:39 2026 -0800) on \"ios_arm64\"",
+              "screen": [
+                1320.0,
+                2868.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios",
+              "driver": "tapwing_driver_hello_v1"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 18456,
+            "oldPids": [],
+            "grantedPermissions": 1,
+            "phases": {
+              "stopClearMs": 534,
+              "permissionsMs": 123,
+              "simctlLaunchMs": 139,
+              "acceptMs": 494.987167,
+              "rejectedConnections": 0,
+              "configureMs": 8.64075,
+              "waitIdleMs": 34.165625
+            }
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 529.844333,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                24,
+                402,
+                416,
+                450
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 4179,
+              "actUs": 97685,
+              "settleUs": 424855
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "0 tap 220,426"
+              ]
+            }
+          }
+        },
+        {
+          "index": 2,
+          "command": "assertVisible",
+          "description": "assertVisible \"Permission: unknown.*\" is visible",
+          "status": "passed",
+          "ms": 2.967209,
+          "driver": null
+        },
+        {
+          "index": 3,
+          "command": "tapOn",
+          "description": "tapOn \"Request Location Permission\"",
+          "status": "passed",
+          "ms": 3008.821209,
+          "driver": {
+            "element": {
+              "id": 27,
+              "accessibilityText": "Request Location Permission",
+              "resource-id": "request_location_permission",
+              "bounds": [
+                16,
+                566,
+                424,
+                622
+              ]
+            },
+            "settle": "timeout",
+            "t": {
+              "findUs": 761,
+              "actUs": 5099,
+              "settleUs": 3002513
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "528 tap 220,594"
+              ]
+            }
+          }
+        },
+        {
+          "index": 4,
+          "command": "assertVisible",
+          "description": "assertVisible \"Povolit jen při používání aplikace\" is visible",
+          "status": "passed",
+          "ms": 617.1023749999999,
+          "driver": null
+        },
+        {
+          "index": 5,
+          "command": "tapOn",
+          "description": "tapOn \"Povolit jen při používání aplikace\"",
+          "status": "passed",
+          "ms": 730.094083,
+          "driver": {
+            "x": 220,
+            "y": 570,
+            "lane": "native"
+          }
+        },
+        {
+          "index": 6,
+          "command": "assertVisible",
+          "description": "assertVisible \"Permission: granted.*\" is visible",
+          "status": "passed",
+          "ms": 9.305000000000001,
+          "driver": null
+        },
+        {
+          "index": 7,
+          "command": "assertNotVisible",
+          "description": "assertNotVisible \"Povolit jen při používání aplikace\" is not visible",
+          "status": "passed",
+          "ms": 6.747000000000001,
+          "driver": null
+        }
+      ],
+      "lane": "hybrid",
+      "laneStats": {
+        "flutter": 6,
+        "native": 2
+      }
+    }
+  ]
+}

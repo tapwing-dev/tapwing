@@ -1,0 +1,450 @@
+{
+  "platform": "ios",
+  "inputMode": "auto",
+  "setupMs": 27.370209,
+  "flows": [
+    {
+      "flow": "F7 App Health",
+      "path": "/Users/me/Development/Flutter/tapwing/examples/sample_app/.maestro/ios/f7_app_health.yaml",
+      "status": "passed",
+      "totalMs": 3100.401417,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "js": {
+        "runtimeInitialized": false,
+        "evalCount": 0,
+        "fastPathHits": 0,
+        "cacheHits": 0,
+        "evalMs": 0.0,
+        "httpRequests": 0,
+        "httpMs": 0.0
+      },
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 1446.7831250000002,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 25363,
+              "dart": "3.14.0 (stable) (Wed Nov 4 16:28:39 2026 -0800) on \"ios_arm64\"",
+              "screen": [
+                1320.0,
+                2868.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios",
+              "driver": "tapwing_driver_hello_v1"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 25363,
+            "oldPids": [],
+            "grantedPermissions": 2,
+            "phases": {
+              "stopClearMs": 518,
+              "permissionsMs": 136,
+              "simctlLaunchMs": 133,
+              "acceptMs": 482.6095,
+              "rejectedConnections": 0,
+              "configureMs": 6.6475420000000005,
+              "waitIdleMs": 32.492292
+            }
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 567.172,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                24,
+                402,
+                416,
+                450
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 3172,
+              "actUs": 28134,
+              "settleUs": 533314
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "0 tap 220,426"
+              ]
+            }
+          }
+        },
+        {
+          "index": 2,
+          "command": "scrollUntilVisible",
+          "description": "scrollUntilVisible id: nav_app_health",
+          "status": "passed",
+          "ms": 75.489583,
+          "driver": {
+            "element": {
+              "id": 33,
+              "accessibilityText": "App Health\nF7: overflow, broken image, build/async errors, crash",
+              "resource-id": "nav_app_health",
+              "bounds": [
+                16,
+                766,
+                424,
+                838
+              ]
+            },
+            "swipes": 0
+          }
+        },
+        {
+          "index": 3,
+          "command": "tapOn",
+          "description": "tapOn id: nav_app_health",
+          "status": "passed",
+          "ms": 527.53125,
+          "driver": {
+            "element": {
+              "id": 33,
+              "accessibilityText": "App Health\nF7: overflow, broken image, build/async errors, crash",
+              "resource-id": "nav_app_health",
+              "bounds": [
+                16,
+                766,
+                424,
+                838
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 525,
+              "actUs": 27303,
+              "settleUs": 499367
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "639 tap 220,802"
+              ]
+            }
+          }
+        },
+        {
+          "index": 4,
+          "command": "tapOn",
+          "description": "tapOn \"Show overflow\"",
+          "status": "passed",
+          "ms": 51.561875,
+          "driver": {
+            "element": {
+              "id": 47,
+              "accessibilityText": "Show overflow",
+              "bounds": [
+                16,
+                162,
+                164,
+                210
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 541,
+              "actUs": 1848,
+              "settleUs": 48256
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1166 tap 90,186"
+              ]
+            }
+          },
+          "appIssues": [
+            {
+              "id": 1,
+              "seq": 1,
+              "kind": "layoutOverflow",
+              "message": "A RenderFlex overflowed by 77 pixels on the right.",
+              "library": "rendering library",
+              "summary": "══╡ EXCEPTION CAUGHT BY RENDERING LIBRARY ╞══════════════════════\nThe following assertion was thrown during layout:\nA RenderFlex overflowed by 77 pixels on the right.\n\nWidget creation tracking is currently disabled. Enabling it\nenables improved error messages. It can be enabled by passing\n`--track-widget-creation` to `flutter run` or `flutter test`.\n\nThe overflowing RenderFlex has an orientation of Axis.horizontal.\nThe edge of the RenderFlex that is overflowing has been marked in\nthe rendering with a yellow and black striped pattern. This is\nusually caused by the contents being too big for the RenderFlex.\nConsider applying a flex factor (e.g. using an Expanded widget)\nto force the children of the RenderFlex to fit within the\navailable space instead of being sized to their natural size.\nThis is considered an error condition because it indicates that\nthere is content that cannot be seen. If the content is\nlegitimately bigger than the available space, consider clipping\nit with a ClipRect widget before putting it in the flex, or using\na scrollable container rather than a Flex, like a ListView.\nThe specific RenderFlex in question is: RenderFlex#4e6d9 relayoutBoundary=up7 OVERFLOWING:\n  parentData: <none> (can use size)\n  constraints: BoxConstraints(w=220.0, 0.0<=h<=Infinity)\n  size: Size(220.0, 24.0)\n  direction: horizontal\n  mainAxisAlignment: start\n  mainAxisSize: max\n  crossAxisAlignment: center\n  textDirection: ltr\n  verticalDirection: down\n  spacing: 0.0\n◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤\n═════════════════════════════════════════════════════════════════",
+              "request": 6,
+              "count": 1,
+              "firstSeenMs": 0,
+              "lastSeenMs": 0
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "command": "assertVisible",
+          "description": "assertVisible \"Health: overflow shown\" is visible",
+          "status": "passed",
+          "ms": 0.813542,
+          "driver": null
+        },
+        {
+          "index": 6,
+          "command": "tapOn",
+          "description": "tapOn \"setState after dispose\"",
+          "status": "passed",
+          "ms": 112.98750000000001,
+          "driver": {
+            "element": {
+              "id": 51,
+              "accessibilityText": "setState after dispose",
+              "bounds": [
+                16,
+                274,
+                215,
+                322
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 46053,
+              "actUs": 1168,
+              "settleUs": 65444
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1264 tap 116,298"
+              ]
+            }
+          }
+        },
+        {
+          "index": 7,
+          "command": "assertVisible",
+          "description": "assertVisible \"Health: late setState scheduled\" is visible",
+          "status": "passed",
+          "ms": 0.5575000000000001,
+          "driver": null
+        },
+        {
+          "index": 8,
+          "command": "tapOn",
+          "description": "tapOn \"Load broken image\"",
+          "status": "passed",
+          "ms": 116.129584,
+          "driver": {
+            "element": {
+              "id": 48,
+              "accessibilityText": "Load broken image",
+              "bounds": [
+                172,
+                162,
+                349,
+                210
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 49143,
+              "actUs": 1170,
+              "settleUs": 65313
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1381 tap 261,186"
+              ]
+            }
+          },
+          "appIssues": [
+            {
+              "id": 2,
+              "seq": 2,
+              "kind": "frameworkAssertion",
+              "message": "setState() called after dispose(): _SetsStateLateState#b96a9(lifecycle state: defunct, not mounted)",
+              "summary": "setState() called after dispose(): _SetsStateLateState#b96a9(lifecycle state: defunct, not mounted)\nThis error happens if you call setState() on a State object for a widget that no longer appears in the widget tree (e.g., whose parent widget no longer includes the widget in its build). This error can occur when code calls setState() from a timer, from an animation callback, or after an asynchronous operation (such as an awaited network request or other Future) completes after the widget has been removed from the tree.\nThe preferred solution is to cancel the timer or stop listening to the animation in the dispose() callback. Another solution is to check the \"mounted\" property of this object before calling setState() to ensure the object is still in the tree.\nThis error might indicate a memory leak if setState() is being called because another object is retaining a reference to this State object after it has been removed from the tree. To avoid memory leaks, consider breaking the reference to this object during dispose().",
+              "stack": [
+                "#2      _SetsStateLateState.initState.<anonymous closure> (package:sample_app/main.dart:1131:7)"
+              ],
+              "request": 10,
+              "count": 1,
+              "firstSeenMs": 141,
+              "lastSeenMs": 141
+            },
+            {
+              "id": 3,
+              "seq": 3,
+              "kind": "imageLoadError",
+              "message": "SocketException: Connection refused (OS Error: Connection refused, errno = 61), address = 127.0.0.1, port = 57344",
+              "library": "image resource service",
+              "summary": "══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞═════════════════\nThe following SocketException was thrown resolving an image\ncodec:\nConnection refused (OS Error: Connection refused, errno = 61),\naddress = 127.0.0.1, port = 57344",
+              "stack": [
+                "#0      _NativeSocket.startConnect (dart:io-patch/socket_patch.dart:849:35)",
+                "#1      _RawSocket.startConnect (dart:io-patch/socket_patch.dart:2313:26)",
+                "#2      RawSocket.startConnect (dart:io-patch/socket_patch.dart:41:23)",
+                "#3      Socket._startConnect (dart:io-patch/socket_patch.dart:2574:22)",
+                "#4      Socket.startConnect (dart:io/socket.dart:918:21)",
+                "#5      _ConnectionTarget.connect (dart:_http/http_impl.dart:2701:20)",
+                "#6      _HttpClient._getConnection.connect (dart:_http/http_impl.dart:3200:12)",
+                "#7      _HttpClient._getConnection (dart:_http/http_impl.dart:3205:12)"
+              ],
+              "request": 10,
+              "count": 1,
+              "firstSeenMs": 225,
+              "lastSeenMs": 225
+            }
+          ]
+        },
+        {
+          "index": 9,
+          "command": "assertVisible",
+          "description": "assertVisible \"Health: image requested\" is visible",
+          "status": "passed",
+          "ms": 0.651625,
+          "driver": null
+        },
+        {
+          "index": 10,
+          "command": "tapOn",
+          "description": "tapOn \"Throw in build\"",
+          "status": "passed",
+          "ms": 99.34775,
+          "driver": {
+            "element": {
+              "id": 49,
+              "accessibilityText": "Throw in build",
+              "bounds": [
+                16,
+                218,
+                160,
+                266
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 48933,
+              "actUs": 1384,
+              "settleUs": 48697
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1497 tap 88,242"
+              ]
+            }
+          },
+          "appIssues": [
+            {
+              "id": 4,
+              "seq": 4,
+              "kind": "buildError",
+              "message": "Bad state: Tapwing F7 build error",
+              "library": "widgets library",
+              "summary": "══╡ EXCEPTION CAUGHT BY WIDGETS LIBRARY ╞════════════════════════\nThe following StateError was thrown building\n_ThrowsInBuild(dirty):\nBad state: Tapwing F7 build error\n\nWidget creation tracking is currently disabled. Enabling it\nenables improved error messages. It can be enabled by passing\n`--track-widget-creation` to `flutter run` or `flutter test`.",
+              "stack": [
+                "#0      _ThrowsInBuild.build (package:sample_app/main.dart:1114:41)"
+              ],
+              "request": 12,
+              "count": 1,
+              "firstSeenMs": 328,
+              "lastSeenMs": 328
+            }
+          ]
+        },
+        {
+          "index": 11,
+          "command": "assertVisible",
+          "description": "assertVisible \"Health: build error shown\" is visible",
+          "status": "passed",
+          "ms": 0.549917,
+          "driver": null
+        },
+        {
+          "index": 12,
+          "command": "tapOn",
+          "description": "tapOn \"Throw async\"",
+          "status": "passed",
+          "ms": 99.16620800000001,
+          "driver": {
+            "element": {
+              "id": 50,
+              "accessibilityText": "Throw async",
+              "bounds": [
+                168,
+                218,
+                302,
+                266
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 49053,
+              "actUs": 1239,
+              "settleUs": 48566
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "1598 tap 235,242"
+              ]
+            }
+          },
+          "appIssues": [
+            {
+              "id": 5,
+              "seq": 5,
+              "kind": "uncaughtError",
+              "message": "StateError: Bad state: Tapwing F7 async error",
+              "summary": "Bad state: Tapwing F7 async error",
+              "stack": [
+                "#0      _AppHealthScreenState.build.<anonymous closure>.<anonymous closure> (package:sample_app/main.dart:1050:61)"
+              ],
+              "request": 14,
+              "count": 1,
+              "firstSeenMs": 404,
+              "lastSeenMs": 404
+            }
+          ]
+        },
+        {
+          "index": 13,
+          "command": "assertVisible",
+          "description": "assertVisible \"Health: async error thrown\" is visible",
+          "status": "passed",
+          "ms": 0.8866670000000001,
+          "driver": null
+        }
+      ],
+      "appIssueSummary": {
+        "total": 5,
+        "ignored": 0,
+        "byKind": {
+          "buildError": 1,
+          "frameworkAssertion": 1,
+          "imageLoadError": 1,
+          "layoutOverflow": 1,
+          "uncaughtError": 1
+        }
+      },
+      "lane": "flutter",
+      "laneStats": {
+        "flutter": 13,
+        "native": 0
+      }
+    }
+  ]
+}

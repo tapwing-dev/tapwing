@@ -1,0 +1,221 @@
+{
+  "platform": "ios",
+  "inputMode": "auto",
+  "setupMs": 28.963417000000003,
+  "flows": [
+    {
+      "flow": "F2 Endless Animation",
+      "path": "/Users/me/Development/Flutter/tapwing/examples/sample_app/.maestro/ios/f2_endless_animation.yaml",
+      "status": "passed",
+      "totalMs": 4245.657625,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "js": {
+        "runtimeInitialized": false,
+        "evalCount": 0,
+        "fastPathHits": 0,
+        "cacheHits": 0,
+        "evalMs": 0.0,
+        "httpRequests": 0,
+        "httpMs": 0.0
+      },
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 1405.1308330000002,
+          "driver": {
+            "hello": {
+              "protocol": 1,
+              "mode": "debug",
+              "pid": 28242,
+              "dart": "3.14.0 (stable) (Wed Nov 4 16:28:39 2026 -0800) on \"ios_arm64\"",
+              "screen": [
+                1320.0,
+                2868.0
+              ],
+              "dpr": 3.0,
+              "platform": "ios",
+              "driver": "tapwing_driver_hello_v1"
+            },
+            "idle": {
+              "state": "idle"
+            },
+            "pid": 28242,
+            "oldPids": [],
+            "grantedPermissions": 2,
+            "phases": {
+              "stopClearMs": 526,
+              "permissionsMs": 140,
+              "simctlLaunchMs": 127,
+              "acceptMs": 433.66737500000005,
+              "rejectedConnections": 0,
+              "configureMs": 5.2715000000000005,
+              "waitIdleMs": 35.531292
+            }
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 567.3184580000001,
+          "driver": {
+            "element": {
+              "id": 9,
+              "resource-id": "playground_button",
+              "bounds": [
+                24,
+                402,
+                416,
+                450
+              ]
+            },
+            "settle": "idle",
+            "t": {
+              "findUs": 2887,
+              "actUs": 23759,
+              "settleUs": 538140
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "0 tap 220,426"
+              ]
+            }
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: nav_endless_animation",
+          "status": "passed",
+          "ms": 2071.02075,
+          "driver": {
+            "element": {
+              "id": 23,
+              "accessibilityText": "Endless Animation\nlarge repeating animation (> 2% screen) settle test",
+              "resource-id": "nav_endless_animation",
+              "bounds": [
+                16,
+                422,
+                424,
+                494
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 2083,
+              "actUs": 8291,
+              "settleUs": 2059449
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "565 tap 220,458"
+              ]
+            }
+          }
+        },
+        {
+          "index": 3,
+          "command": "assertVisible",
+          "description": "assertVisible \"Pulsing Banner\" is visible",
+          "status": "passed",
+          "ms": 3.9003750000000004,
+          "driver": null
+        },
+        {
+          "index": 4,
+          "command": "tapOn",
+          "description": "tapOn \"Pulse action\"",
+          "status": "passed",
+          "ms": 94.870625,
+          "driver": {
+            "element": {
+              "id": 44,
+              "accessibilityText": "Pulse action",
+              "bounds": [
+                154,
+                611,
+                285,
+                659
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 45749,
+              "actUs": 5747,
+              "settleUs": 42431
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "2684 tap 220,635"
+              ]
+            }
+          }
+        },
+        {
+          "index": 5,
+          "command": "assertVisible",
+          "description": "assertVisible \"Pulse clicks: 1\" is visible",
+          "status": "passed",
+          "ms": 1.086334,
+          "driver": null
+        },
+        {
+          "index": 6,
+          "command": "tapOn",
+          "description": "tapOn \"Pulse action\"",
+          "status": "passed",
+          "ms": 99.354708,
+          "driver": {
+            "element": {
+              "id": 44,
+              "accessibilityText": "Pulse action",
+              "bounds": [
+                154,
+                611,
+                285,
+                659
+              ]
+            },
+            "settle": "stable",
+            "t": {
+              "findUs": 48555,
+              "actUs": 3575,
+              "settleUs": 46527
+            },
+            "ime": {
+              "clientId": null,
+              "keyboard": false,
+              "log": [
+                "2783 tap 220,635"
+              ]
+            }
+          }
+        },
+        {
+          "index": 7,
+          "command": "assertVisible",
+          "description": "assertVisible \"Pulse clicks: 2\" is visible",
+          "status": "passed",
+          "ms": 1.4301249999999999,
+          "driver": null
+        }
+      ],
+      "lane": "flutter",
+      "laneStats": {
+        "flutter": 7,
+        "native": 0
+      }
+    }
+  ]
+}

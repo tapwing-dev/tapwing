@@ -1,0 +1,4 @@
+fail-open rc=0 wall=11.382 xcb=1
+fail-snapshot rc=0 wall=11.091 xcb=1
+fail-touch rc=0 wall=9.711 xcb=1
+fail-frame rc=0 wall=9.660 xcb=1

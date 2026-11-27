@@ -1,0 +1,18 @@
+# Leaves the sample app on the detail screen of Product 1 (a Favorite switch), for the tap reliability test.
+appId: dev.tapwing.sampleApp
+name: Navigate to the detail screen
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Welcome back"
+- tapOn: "Email"
+- inputText: "jan@example.com"
+- tapOn:
+    id: "password_input"
+- inputText: "secret123"
+- hideKeyboard
+- tapOn:
+    id: "login_button"
+- assertVisible: "Product 1.*"
+- tapOn: "Product 1.*"
+- assertVisible: "Details of Product 1"

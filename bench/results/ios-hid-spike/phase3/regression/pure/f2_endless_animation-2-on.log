@@ -1,0 +1,12 @@
+device iPhone 18 Pro Max (32E8A0E5-D41A-4CC4-BCD4-39E9809FAA7D, iOS simulator) · setup 28 ms
+
+▶ F2 Endless Animation
+  ✓  1423.0 ms  launchApp (clearState)
+  ✓   565.8 ms  tapOn id: playground_button
+  ✓  2071.8 ms  tapOn id: nav_endless_animation
+  ✓     3.8 ms  assertVisible "Pulsing Banner" is visible
+  ✓    94.4 ms  tapOn "Pulse action"
+  ✓     0.4 ms  assertVisible "Pulse clicks: 1" is visible
+  ✓    99.4 ms  tapOn "Pulse action"
+  ✓     0.4 ms  assertVisible "Pulse clicks: 2" is visible
+PASSED F2 Endless Animation in 4260 ms

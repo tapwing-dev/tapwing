@@ -1,0 +1,25 @@
+device iPhone 18 Pro Max (32E8A0E5-D41A-4CC4-BCD4-39E9809FAA7D, iOS simulator) · setup 27 ms
+
+▶ F7 App Health
+  ✓  1446.8 ms  launchApp (clearState)
+  ✓   567.2 ms  tapOn id: playground_button
+ios-native-timing event=hid_open t_ms=2108 ms=66 ok=1
+ios-native-timing event=hid t_ms=2114 ms=6 route=snapshot ok=0 err="iOS HID call failed: no frontmost application; is the simulator still starting up?"
+  ✓    75.5 ms  scrollUntilVisible id: nav_app_health
+  ✓   527.5 ms  tapOn id: nav_app_health
+  ✓    51.6 ms  tapOn "Show overflow"
+      ⚠ layoutOverflow: A RenderFlex overflowed by 77 pixels on the right.
+  ✓     0.8 ms  assertVisible "Health: overflow shown" is visible
+  ✓   113.0 ms  tapOn "setState after dispose"
+  ✓     0.6 ms  assertVisible "Health: late setState scheduled" is visible
+  ✓   116.1 ms  tapOn "Load broken image"
+      ⚠ frameworkAssertion: setState() called after dispose(): _SetsStateLateState#b96a9(lifecycle state: defunct, not mounted)
+      ⚠ imageLoadError: SocketException: Connection refused (OS Error: Connection refused, errno = 61), address = 127.0.0.1, port = 57344
+  ✓     0.7 ms  assertVisible "Health: image requested" is visible
+  ✓    99.3 ms  tapOn "Throw in build"
+      ⚠ buildError: Bad state: Tapwing F7 build error
+  ✓     0.5 ms  assertVisible "Health: build error shown" is visible
+  ✓    99.2 ms  tapOn "Throw async"
+      ⚠ uncaughtError: StateError: Bad state: Tapwing F7 async error
+  ✓     0.9 ms  assertVisible "Health: async error thrown" is visible
+PASSED F7 App Health in 3100 ms

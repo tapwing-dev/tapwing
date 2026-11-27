@@ -1,0 +1,16 @@
+device Tapwing-HID-Spike (8313798C-38E3-4FDE-9C8A-76E70B42F927, iOS simulator) · setup 63 ms
+
+▶ Navigate to the detail screen
+warning: launchApp dev.tapwing.sampleApp: the installed build contains no tapwing_driver (read Frameworks/App.framework/flutter_assets/kernel_blob.bin (51.1 MB) completely: no tapwing_driver marker; verdict remembered from an earlier run of this install); not waiting 15 s for a handshake that cannot come, driving it black-box via the native lane (pass --input flutter to wait for the driver anyway)
+  ✓ 12186.2 ms  launchApp (clearState)
+  ✓    70.2 ms  assertVisible "Welcome back" is visible
+  ✓  3439.9 ms  tapOn "Email"
+  ✓  1484.6 ms  inputText "jan@example.com"
+  ✓  2092.1 ms  tapOn id: password_input
+  ✓  1239.6 ms  inputText "secret123"
+  ✓   587.4 ms  hideKeyboard
+  ✓  2230.7 ms  tapOn id: login_button
+  ✓    59.4 ms  assertVisible "Product 1.*" is visible
+  ✓  1748.3 ms  tapOn "Product 1.*"
+  ✓   113.1 ms  assertVisible "Details of Product 1" is visible
+PASSED Navigate to the detail screen in 25257 ms

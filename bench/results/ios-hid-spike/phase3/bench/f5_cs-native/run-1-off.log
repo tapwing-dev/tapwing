@@ -1,0 +1,79 @@
+device iPhone 18 Pro Max (32E8A0E5-D41A-4CC4-BCD4-39E9809FAA7D, iOS simulator) · setup 31 ms
+
+▶ F5 iOS Permission Dialog
+ios-native-timing event=http t_ms=2879 ms=22 route=status status=200
+ios-native-timing event=runner_start t_ms=2879 ms=2769 total_ms=2878
+ios-native-timing event=warmup_wait t_ms=2879 ms=2036 ok=true
+ios-native-timing event=http t_ms=3004 ms=125 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=3070 ms=65 route=deviceInfo status=200
+ios-native-timing event=http t_ms=3162 ms=92 route=viewHierarchy status=200
+  ✓  3131.5 ms  launchApp (clearState)
+ios-native-timing event=warmup_wait t_ms=3162 ms=0 ok=true
+ios-native-timing event=http t_ms=3192 ms=30 route=setOrientation status=200
+ios-native-timing event=http t_ms=3307 ms=114 route=isScreenStatic status=200
+  ✓   144.7 ms  setOrientation
+ios-native-timing event=warmup_wait t_ms=3307 ms=0 ok=true
+ios-native-timing event=http t_ms=3357 ms=50 route=deviceInfo status=200
+ios-native-timing event=http t_ms=3403 ms=45 route=viewHierarchy status=200
+ios-native-timing event=http t_ms=3523 ms=120 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=3534 ms=10 route=viewHierarchy status=200
+ios-native-timing event=http t_ms=3867 ms=333 route=touch status=200
+ios-native-timing event=http t_ms=3989 ms=121 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=4167 ms=123 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=4341 ms=118 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=4371 ms=29 route=viewHierarchy status=200
+  ✓  1064.2 ms  tapOn id: playground_button
+ios-native-timing event=warmup_wait t_ms=4371 ms=0 ok=true
+ios-native-timing event=http t_ms=4397 ms=26 route=viewHierarchy status=200
+  ✓    26.7 ms  assertVisible "Permission: unknown.*" is visible
+ios-native-timing event=warmup_wait t_ms=4398 ms=0 ok=true
+ios-native-timing event=http t_ms=4423 ms=24 route=viewHierarchy status=200
+ios-native-timing event=http t_ms=4544 ms=120 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=4572 ms=28 route=viewHierarchy status=200
+ios-native-timing event=http t_ms=4908 ms=336 route=touch status=200
+ios-native-timing event=http t_ms=5050 ms=142 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=5244 ms=133 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=5429 ms=129 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=5454 ms=24 route=viewHierarchy status=200
+  ✓  1056.6 ms  tapOn "Request Location Permission"
+ios-native-timing event=warmup_wait t_ms=5454 ms=0 ok=true
+ios-native-timing event=http t_ms=5477 ms=22 route=viewHierarchy status=200
+  ✓    22.9 ms  assertVisible "Povolit jen při používání aplikace" is visible
+ios-native-timing event=warmup_wait t_ms=5477 ms=0 ok=true
+ios-native-timing event=http t_ms=5502 ms=24 route=viewHierarchy status=200
+ios-native-timing event=http t_ms=5632 ms=130 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=5656 ms=23 route=viewHierarchy status=200
+ios-native-timing event=http t_ms=6001 ms=344 route=touch status=200
+ios-native-timing event=http t_ms=6150 ms=149 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=6330 ms=125 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=6352 ms=22 route=viewHierarchy status=200
+  ✓   875.2 ms  tapOn "Povolit jen při používání aplikace"
+ios-native-timing event=warmup_wait t_ms=6353 ms=0 ok=true
+ios-native-timing event=http t_ms=6375 ms=21 route=viewHierarchy status=200
+  ✓    22.2 ms  assertVisible "Permission: granted.*" is visible
+ios-native-timing event=warmup_wait t_ms=6375 ms=0 ok=true
+ios-native-timing event=http t_ms=6420 ms=45 route=viewHierarchy status=200
+  ✓    45.5 ms  assertNotVisible "Povolit jen při používání aplikace" is not visible
+ios-native-timing event=warmup_wait t_ms=6420 ms=0 ok=true
+ios-native-timing event=http t_ms=6449 ms=28 route=setOrientation status=200
+ios-native-timing event=http t_ms=6576 ms=127 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=6760 ms=128 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=6943 ms=125 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=7123 ms=122 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=7303 ms=122 route=isScreenStatic status=200
+  ✓   882.8 ms  setOrientation
+ios-native-timing event=warmup_wait t_ms=7303 ms=0 ok=true
+ios-native-timing event=http t_ms=7314 ms=11 route=deviceInfo status=200
+ios-native-timing event=http t_ms=7350 ms=35 route=viewHierarchy status=200
+  ✓    47.4 ms  assertVisible "Selectors & Taps.*" is visible
+ios-native-timing event=warmup_wait t_ms=7351 ms=0 ok=true
+ios-native-timing event=http t_ms=7697 ms=346 route=setOrientation status=200
+ios-native-timing event=http t_ms=7829 ms=132 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=8008 ms=121 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=8184 ms=123 route=isScreenStatic status=200
+  ✓   833.6 ms  setOrientation
+ios-native-timing event=warmup_wait t_ms=8184 ms=0 ok=true
+ios-native-timing event=http t_ms=8197 ms=12 route=deviceInfo status=200
+ios-native-timing event=http t_ms=8249 ms=52 route=viewHierarchy status=200
+  ✓    65.3 ms  assertVisible "Permission: granted.*" is visible
+PASSED F5 iOS Permission Dialog in 8219 ms
