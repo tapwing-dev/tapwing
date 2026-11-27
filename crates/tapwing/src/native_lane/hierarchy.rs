@@ -3,15 +3,15 @@
 //!
 //! The XML comes from `MaestroDriver.viewHierarchy`. Attribute mapping follows
 //! `AndroidDriver.mapHierarchy` (Maestro 2.12.1); selector evaluation reuses the
-//! `Filters.kt` port in [`crate::fake_driver`] so both lanes answer
+//! `Filters.kt` port in [`crate::ui_tree`] so both lanes answer
 //! `text` / `id` / `below` / `enabled` / `index` / ... identically.
 
 use anyhow::{Context, Result, bail};
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::{Reader, XmlVersion};
 
-use crate::fake_driver::{Bounds, TreeNode, find_in_tree};
-use crate::flow::ir::ElementSelector;
+use crate::native_core::ops::NativeHierarchy;
+use crate::ui_tree::{Bounds, TreeNode};
 
 /// Class of Android toasts; `ViewHierarchy.filterOutOfBounds` never prunes them.
 const TOAST_CLASS_NAME: &str = "android.widget.Toast";
@@ -95,7 +95,7 @@ fn has_content(node: &TreeNode) -> bool {
 }
 
 /// Parses a UiAutomator dump into a tree (document root = `<hierarchy>`).
-/// UIDs are assigned in document order, like [`crate::fake_driver`] snapshots.
+/// UIDs are assigned in document order, matching [`crate::ui_tree::TreeNode`] snapshots.
 pub fn parse_hierarchy(xml: &str) -> Result<TreeNode> {
     parse_with_packages(xml).map(|(root, _)| root)
 }
@@ -176,50 +176,19 @@ impl Hierarchy {
         self.content_packages.iter().any(|p| p == package)
     }
 
-    /// First element matching `selector` (`Filters` + `Orchestra.buildFilter`).
-    pub fn find(&self, selector: &ElementSelector) -> Result<Option<TreeNode>> {
-        find_in_tree(&self.root, selector)
-    }
-
-    /// `ViewHierarchy.isVisible`: nothing is drawn over `node` at its centre.
-    pub fn is_visible(&self, node: &TreeNode) -> bool {
-        self.root.is_topmost(node)
-    }
-
-    /// Whether a node outside `node`'s own subtree is drawn over `node` at its centre
-    /// (distinguishes an external covering overlay from `node`'s own child label).
-    pub fn is_covered_by_other(&self, node: &TreeNode) -> bool {
-        let Some(bounds) = node.bounds else {
-            return false;
-        };
-        let (x, y) = bounds.center();
-        self.root.element_at(x, y).is_none_or(|top| !node.contains_uid(top.uid))
-    }
-
     /// Soft-keyboard check (`AndroidDriver.isKeyboardVisible`): any Gboard element.
     pub fn keyboard_visible(&self) -> bool {
         self.root.aggregate().iter().any(|n| n.id.as_deref().is_some_and(|i| i.starts_with(KEYBOARD_RESOURCE_PREFIX)))
     }
+}
 
-    /// Structural fingerprint used to detect "the screen stopped changing".
-    pub fn signature(&self) -> String {
-        self.root.structure_signature()
+impl NativeHierarchy for Hierarchy {
+    fn root(&self) -> &TreeNode {
+        &self.root
     }
 
-    /// Distinct visible texts (text, then content description), for error messages.
-    pub fn visible_texts(&self, limit: usize) -> Vec<String> {
-        let mut out: Vec<String> = Vec::new();
-        for n in self.root.aggregate() {
-            for t in [n.text.as_deref(), n.accessibility_text.as_deref()].into_iter().flatten() {
-                if !t.is_empty() && !out.iter().any(|o| o == t) {
-                    out.push(t.to_string());
-                }
-            }
-            if out.len() >= limit {
-                break;
-            }
-        }
-        out
+    fn shows_package(&self, package: &str) -> bool {
+        Hierarchy::shows_package(self, package)
     }
 }
 

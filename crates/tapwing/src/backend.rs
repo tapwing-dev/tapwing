@@ -3,8 +3,8 @@
 //! The orchestrator executes every UI/device command through [`FlowDriver`],
 //! allowing the exact same orchestration, JS engine, and condition logic to
 //! run against both:
-//! - the real Android + `tapwing_driver` session ([`crate::run::AndroidFlutterBackend`])
-//! - the in-memory [`crate::fake_driver::FakeDriver`] used by the ported
+//! - the real Android/iOS + `tapwing_driver` session ([`crate::run::DeviceFlutterBackend`])
+//! - the in-memory `FakeDriver` used by the ported
 //!   Maestro integration test suite.
 
 use std::collections::BTreeMap;
@@ -201,6 +201,15 @@ pub fn is_optional_downgradable(e: &anyhow::Error) -> bool {
     is_maestro_error(e)
 }
 
+/// JS-visible platform name (`maestro.platform`) for a flow `Platform`.
+pub fn platform_js_name(platform: Platform) -> &'static str {
+    match platform {
+        Platform::Android => "android",
+        Platform::Ios => "ios",
+        Platform::Web => "web",
+    }
+}
+
 /// Device screen geometry and platform identity (`maestro.DeviceInfo`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeviceInfo {
@@ -212,22 +221,8 @@ pub struct DeviceInfo {
 }
 
 impl DeviceInfo {
-    pub fn android_default() -> Self {
-        Self {
-            platform: Platform::Android,
-            width_pixels: 1080,
-            height_pixels: 1920,
-            width_grid: 1080,
-            height_grid: 1920,
-        }
-    }
-
     pub fn platform_js_name(&self) -> &'static str {
-        match self.platform {
-            Platform::Android => "android",
-            Platform::Ios => "ios",
-            Platform::Web => "web",
-        }
+        platform_js_name(self.platform)
     }
 }
 
@@ -296,9 +291,9 @@ pub struct ScrollUntilVisibleRequest {
     pub wait_to_settle_timeout_ms: Option<i32>,
 }
 
-/// Backend contract implemented by both real device sessions and [`crate::fake_driver::FakeDriver`].
+/// Backend contract implemented by both real device sessions and `FakeDriver`.
 pub trait FlowDriver {
-    fn device_info(&self) -> DeviceInfo;
+    fn platform(&self) -> Platform;
 
     fn launch_app(&mut self, req: &LaunchRequest) -> Result<Value>;
     fn stop_app(&mut self, app_id: &str) -> Result<Value>;
@@ -376,7 +371,7 @@ pub trait FlowDriver {
 
     /// F8: captures the current UI hierarchy for rich failure diagnostics
     /// (`(source_lane, root_node)`). Only called when a non-optional step fails.
-    fn capture_failure_hierarchy(&mut self) -> Option<(String, crate::fake_driver::TreeNode)> {
+    fn capture_failure_hierarchy(&mut self) -> Option<(String, crate::ui_tree::TreeNode)> {
         None
     }
 

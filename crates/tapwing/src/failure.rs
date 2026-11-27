@@ -2,7 +2,7 @@
 //! tree dumps, and failure artifact naming/formatting.
 //!
 //! Pure core module: takes [`TreeNode`] snapshots (produced by the Flutter
-//! driver, Android/iOS native lanes, or [`crate::fake_driver::FakeDriver`])
+//! driver, Android/iOS native lanes, or test doubles)
 //! and failed [`ElementSelector`]s with zero device I/O.
 
 use std::collections::HashSet;
@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::fake_driver::{Bounds, TreeNode};
 use crate::flow::ir::{ElementSelector, MaestroCommand};
+use crate::ui_tree::{Bounds, TreeNode};
 
 /// Maximum hierarchy lines shown inline in console output.
 pub const CONSOLE_HIERARCHY_MAX_LINES: usize = 25;

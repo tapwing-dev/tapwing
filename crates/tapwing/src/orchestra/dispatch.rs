@@ -515,7 +515,7 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
         };
 
         if let Some(expected_platform) = cond.platform
-            && expected_platform != self.driver.device_info().platform
+            && expected_platform != self.driver.platform()
         {
             return Ok(false);
         }

@@ -1,6 +1,5 @@
 //! Real device (Android + iOS Simulator) + `tapwing_driver` backend
-//! implementing [`FlowDriver`] and the CLI entrypoint (`run_flow`) delegating
-//! execution to [`Orchestra`].
+//! implementing [`FlowDriver`] for [`crate::orchestra::Orchestra`].
 
 mod driver_detect;
 mod flutter_ops;
@@ -24,19 +23,17 @@ pub use crate::backend::{
     is_optional_downgradable, scroll_timeout_ms, speed_to_duration,
 };
 use crate::backend::{
-    DeviceInfo, FlowDriver, LaunchRequest, ScrollUntilVisibleRequest, SwipeRequest, TapElementRequest, TapPointRequest,
+    FlowDriver, LaunchRequest, ScrollUntilVisibleRequest, SwipeRequest, TapElementRequest, TapPointRequest,
 };
 use crate::device::{Device, Platform};
 use crate::driver::Driver;
-use crate::flow::ParsedFlow;
 use crate::flow::ir::{ElementSelector, KeyCode, Platform as IrPlatform};
 use crate::native_lane::{InputMode, NativeLaneHandle};
-use crate::orchestra::{Orchestra, OrchestraOpts};
 pub use crate::orchestra::{adjusted_timeout, is_optional, kind};
 
 pub use hybrid::{Blackbox, IosNativeSlot, LaneStats, flows_need_ios_native};
 pub use mapping::{
-    IosHostKey, android_keycode, driver_selector, explain, ios_host_key, is_in_app_key, is_in_app_key_ios, is_mutating,
+    IosHostKey, android_keycode, driver_selector, explain, ios_host_key, is_in_app_key, is_in_app_key_ios,
     scale_crop_bounds, screen_swipe_ratios, scroll_duration_ms,
 };
 
@@ -216,9 +213,6 @@ pub struct DeviceFlutterBackend<'a> {
     trace_http_seen: bool,
 }
 
-/// Compatibility alias for callers referring to the F3 backend by its initial name.
-pub type AndroidFlutterBackend<'a> = DeviceFlutterBackend<'a>;
-
 impl<'a> DeviceFlutterBackend<'a> {
     pub fn new(session: &'a mut Session<'_>, flow_app: String) -> Self {
         if let Some(sim) = session.dev.as_ios() {
@@ -361,16 +355,10 @@ impl<'a> DeviceFlutterBackend<'a> {
 }
 
 impl FlowDriver for DeviceFlutterBackend<'_> {
-    fn device_info(&self) -> DeviceInfo {
+    fn platform(&self) -> IrPlatform {
         match self.platform() {
-            Platform::Android => DeviceInfo::android_default(),
-            Platform::Ios => DeviceInfo {
-                platform: IrPlatform::Ios,
-                width_pixels: 1206,
-                height_pixels: 2622,
-                width_grid: 402,
-                height_grid: 874,
-            },
+            Platform::Android => IrPlatform::Android,
+            Platform::Ios => IrPlatform::Ios,
         }
     }
 
@@ -966,74 +954,9 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
         }
     }
 
-    fn capture_failure_hierarchy(&mut self) -> Option<(String, crate::fake_driver::TreeNode)> {
+    fn capture_failure_hierarchy(&mut self) -> Option<(String, crate::ui_tree::TreeNode)> {
         self.capture_failure_hierarchy_impl()
     }
-}
-
-/// Run one flow on a real Android or iOS Simulator device; returns `(passed, report_entry)`.
-pub fn run_flow(flow: &ParsedFlow, s: &mut Session) -> (bool, Value) {
-    let name = flow
-        .config
-        .name
-        .clone()
-        .unwrap_or_else(|| flow.path.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
-    let prefix = s.opts.log_prefix.clone();
-    if prefix.is_empty() {
-        crate::orchestra::print_prefixed("", &format!("\n▶ {name}"));
-    } else {
-        crate::orchestra::print_prefixed(&prefix, &format!("▶ {name}"));
-    }
-
-    let opts = OrchestraOpts {
-        lookup_timeout_ms: LOOKUP_TIMEOUT_MS,
-        optional_lookup_timeout_ms: OPTIONAL_LOOKUP_TIMEOUT_MS,
-        cli_env: s.opts.cli_env.clone(),
-        test_output_dir: Some(s.opts.test_output_dir.clone()),
-        flow_path: flow.path.clone(),
-        device_id: Some(s.dev.id().to_string()),
-        shard_index: s.opts.shard_index,
-        log_prefix: prefix.clone(),
-        check_settle: s.opts.check_settle,
-        settle_policy: s.opts.settle_policy.clone(),
-        print_progress: true,
-        travel_sleep: true,
-        http_agent: s.opts.http_agent.clone(),
-        app_health: crate::app_health::AppHealthOpts { policy: s.opts.app_errors, ..Default::default() },
-        trace: None,
-    };
-    let settle_policy = s.opts.settle_policy.clone();
-    let check_settle = s.opts.check_settle;
-
-    let mut backend = DeviceFlutterBackend::new(s, flow.app_id().to_string());
-    let mut orchestra = Orchestra::new(&mut backend, opts);
-    let result = orchestra.run_parsed_flow(flow);
-    let lanes = backend.lane_stats();
-    let Blackbox { active: blackbox, reason: blackbox_reason } = backend.blackbox();
-
-    crate::orchestra::print_prefixed(
-        &prefix,
-        &format!("{} {name} in {:.0} ms", if result.success { "PASSED" } else { "FAILED" }, result.total_ms),
-    );
-    if check_settle {
-        crate::orchestra::print_prefixed(
-            &prefix,
-            &format!("settle check ({settle_policy}): {} violation(s)", result.settle_violations),
-        );
-    }
-    let mut report = result.to_report_json(&name, &flow.path, &settle_policy);
-    report["lane"] = json!(lanes.lane_name());
-    report["laneStats"] = json!({ "flutter": lanes.flutter, "native": lanes.native });
-    if lanes.cold_start_retries > 0 {
-        report["coldStartRetries"] = json!(lanes.cold_start_retries);
-    }
-    if blackbox {
-        report["blackbox"] = json!(true);
-    }
-    if let Some(reason) = blackbox_reason {
-        report["blackboxReason"] = json!(reason);
-    }
-    (result.success, report)
 }
 
 /// Session-level driver settings. Always sent on attach because an app

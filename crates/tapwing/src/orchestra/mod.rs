@@ -263,7 +263,7 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
     }
 
     pub fn with_callbacks(driver: &'a mut D, opts: OrchestraOpts, callbacks: OrchestraCallbacks) -> Self {
-        let platform = driver.device_info().platform_js_name().to_string();
+        let platform = crate::backend::platform_js_name(driver.platform()).to_string();
         let agent = opts.http_agent.clone().unwrap_or_else(default_http_agent);
         let js = JsEngine::with_http_agent(platform, agent);
         let cli_env_keys: Vec<String> = opts.cli_env.keys().cloned().collect();
@@ -723,7 +723,7 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                                 entry["warning"] = Value::from(w);
                             }
                             if self.opts.check_settle
-                                && settles_for_platform(cmd, self.driver.device_info().platform)
+                                && settles_for_platform(cmd, self.driver.platform())
                                 && let Some(busy) = self.driver.check_busy_after()
                             {
                                 let blocking: Vec<Value> = busy["animations"]

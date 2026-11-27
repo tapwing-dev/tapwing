@@ -9,6 +9,7 @@
 //! standing in for `adb shell am instrument`.
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
 
 use super::client::ScreenSize;

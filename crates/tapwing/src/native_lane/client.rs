@@ -38,6 +38,11 @@ use tonic::Status;
 use tonic::transport::{Channel, Endpoint};
 
 use super::connect::{ClosedBeforeServerSpoke, SERVER_FIRST_GRACE, ServerFirstConnector};
+use crate::native_core::LaneClient;
+pub use crate::native_core::recovery::MAX_RESTARTS;
+use crate::native_core::recovery::{
+    FailedAttempt, RecoverableClient, RecoveryMessages, RecoveryState, Replay, Trouble, execute_with_recovery,
+};
 
 /// Generated protobuf messages and the tonic client (plus server stubs in tests).
 #[allow(clippy::all, clippy::pedantic, missing_docs)]
@@ -89,9 +94,18 @@ fn input_text_chunks(text: &str) -> Vec<&str> {
 /// Longest teardown waits for the driver to remove its mock-location providers.
 const DISABLE_LOCATION_TIMEOUT: Duration = Duration::from_secs(3);
 
-/// How many times one client restarts its session after a transport failure.
-/// A driver that keeps dying is a real problem, not a blip to hide.
-pub const MAX_RESTARTS: u32 = 3;
+const ANDROID_RECOVERY_MSGS: RecoveryMessages = RecoveryMessages {
+    driver_definite: "native driver",
+    notice_subject: "native driver",
+    replay_blocked_verb: "while sending this request",
+};
+
+const ANDROID_CONN_LOST: Trouble = Trouble {
+    happened: "lost its connection",
+    after: "losing its connection",
+    notice: "connection lost",
+    restart_after: 1,
+};
 
 /// Starts a replacement session (the old one is already torn down) and
 /// returns its client, whose own recovery is left unset.
@@ -102,17 +116,6 @@ pub type RestartFn = Box<dyn FnMut() -> Result<NativeDriverClient> + Send>;
 pub struct ScreenSize {
     pub width: u32,
     pub height: u32,
-}
-
-/// Whether an RPC may be sent again after the transport failed under it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Replay {
-    /// Reads and idempotent writes: always safe to repeat.
-    Always,
-    /// Input (`tap`, `inputText`, `eraseAllText`): repeated only when the
-    /// request provably never left the host ([`Fault::NotSent`]), so a lost
-    /// reply can never turn into a double tap or doubled text.
-    IfNotSent,
 }
 
 /// How a failed RPC relates to the transport.
@@ -189,8 +192,23 @@ pub struct NativeDriverClient {
     screen: Option<ScreenSize>,
     mock_location_enabled: bool,
     recovery: Option<RestartFn>,
-    restarts: u32,
-    restart_notices: Vec<String>,
+    recovery_state: RecoveryState,
+}
+
+impl LaneClient for NativeDriverClient {
+    fn take_restart_notices(&mut self) -> Vec<String> {
+        self.recovery_state.take_notices()
+    }
+}
+
+impl RecoverableClient for NativeDriverClient {
+    fn recovery_state(&mut self) -> &mut RecoveryState {
+        &mut self.recovery_state
+    }
+
+    fn has_recovery(&self) -> bool {
+        self.recovery.is_some()
+    }
 }
 
 impl NativeDriverClient {
@@ -227,8 +245,7 @@ impl NativeDriverClient {
             screen: None,
             mock_location_enabled: false,
             recovery: None,
-            restarts: 0,
-            restart_notices: Vec::new(),
+            recovery_state: RecoveryState::new(),
         })
     }
 
@@ -246,12 +263,12 @@ impl NativeDriverClient {
 
     /// How many times this client restarted its session.
     pub fn restarts(&self) -> u32 {
-        self.restarts
+        self.recovery_state.restarts()
     }
 
     /// One user-facing line per restart since the last call.
     pub fn take_restart_notices(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.restart_notices)
+        self.recovery_state.take_notices()
     }
 
     fn call_once<Req, T, F, Fut>(&mut self, req: Req, f: &F) -> Result<T, Status>
@@ -288,40 +305,32 @@ impl NativeDriverClient {
         Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
         R: FnOnce(&mut Self) -> Result<()>,
     {
-        let status = match self.call_once(req.clone(), &f) {
-            Ok(v) => return Ok(v),
-            Err(s) => s,
-        };
-        crate::interrupt::check()?;
-        let fault = classify(&status);
-        if fault == Fault::None || self.recovery.is_none() {
-            return Err(describe(what, &status));
-        }
-        if self.restarts >= MAX_RESTARTS {
-            return Err(describe(what, &status).context(format!(
-                "the native driver lost its connection again after {MAX_RESTARTS} restarts; giving up"
-            )));
-        }
-        let cause = format!("`{what}`: {}", status.message());
-        self.restart(&cause).map_err(|e| {
-            describe(what, &status)
-                .context(format!("the native driver lost its connection and could not be restarted: {e:#}"))
-        })?;
-        if replay == Replay::IfNotSent && fault != Fault::NotSent {
-            return Err(describe(what, &status).context(
-                "the native driver lost its connection while sending this request and was restarted; the \
-                 request was not repeated because it may already have been applied",
-            ));
-        }
-        before_replay(self)?;
-        self.call_once(req, &f).map_err(|s| {
-            describe(what, &s)
-                .context("the native driver was restarted after losing its connection, but the request failed again")
-        })
+        execute_with_recovery(
+            self,
+            ANDROID_RECOVERY_MSGS,
+            replay,
+            |this| {
+                this.call_once(req.clone(), &f).map_err(|status| {
+                    let fault = classify(&status);
+                    let error = describe(what, &status);
+                    if fault == Fault::None {
+                        return FailedAttempt::Fatal(error);
+                    }
+                    FailedAttempt::Recoverable {
+                        error,
+                        trouble: ANDROID_CONN_LOST,
+                        cause: format!("`{what}`: {}", status.message()),
+                        never_ran: fault == Fault::NotSent,
+                    }
+                })
+            },
+            |this, _| this.replace_session(),
+            before_replay,
+        )
     }
 
     /// Replaces the dead session with a freshly started one.
-    fn restart(&mut self, cause: &str) -> Result<()> {
+    fn replace_session(&mut self) -> Result<()> {
         let mut recovery = self.recovery.take().ok_or_else(|| anyhow!("this client cannot restart"))?;
         // Tear the dead session down first: its `force-stop` would otherwise kill the new instrumentation.
         drop(self.keepalive.take());
@@ -329,12 +338,6 @@ impl NativeDriverClient {
         // fails fast instead of retrying a restart that already failed.
         let mut fresh = recovery()?;
         fresh.recovery = Some(recovery);
-        fresh.restarts = self.restarts + 1;
-        fresh.restart_notices = std::mem::take(&mut self.restart_notices);
-        fresh.restart_notices.push(format!(
-            "native driver connection lost ({cause}); restarted it (restart {}/{MAX_RESTARTS})",
-            fresh.restarts
-        ));
         // The dead session cannot answer a `disableLocationUpdates`: don't wait for it on drop.
         self.mock_location_enabled = false;
         // The new session starts with its screen size uncached and without mock-location providers.
@@ -779,8 +782,7 @@ mod tests {
             screen: None,
             mock_location_enabled: false,
             recovery: None,
-            restarts: 0,
-            restart_notices: Vec::new(),
+            recovery_state: RecoveryState::new(),
         };
 
         // Ensure the server is accepting and the HTTP/2 connection is established.

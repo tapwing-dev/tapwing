@@ -35,6 +35,12 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use ureq::Agent;
 
+use crate::native_core::LaneClient;
+pub use crate::native_core::recovery::MAX_RESTARTS;
+use crate::native_core::recovery::{
+    FailedAttempt, RecoverableClient, RecoveryMessages, RecoveryState, Replay, Trouble, execute_with_recovery,
+};
+
 /// Per-call deadline. A hierarchy dump of a busy screen can take seconds.
 const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 /// Slowest typing rate the deadline of `inputText` / `eraseText` allows for.
@@ -51,13 +57,29 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 /// Largest accepted response body (a hierarchy / @3x PNG screenshot).
 const MAX_BODY: u64 = 64 * 1024 * 1024;
 
-/// How many times one client restarts its runner (after a transport failure
-/// or a stall). A runner that keeps dying is a real problem, not a blip to hide.
-pub const MAX_RESTARTS: u32 = 3;
-
 /// Consecutive stalled calls after which a live runner is restarted. One slow
 /// call (a huge hierarchy) is not proof of a wedged runner; two in a row are.
 pub const STALLS_BEFORE_RESTART: u32 = 2;
+
+const IOS_RECOVERY_MSGS: RecoveryMessages = RecoveryMessages {
+    driver_definite: "iOS driver",
+    notice_subject: "iOS native driver",
+    replay_blocked_verb: "while handling this request",
+};
+
+const TROUBLE_LOST: Trouble = Trouble {
+    happened: "lost its connection",
+    after: "losing its connection",
+    notice: "connection lost",
+    restart_after: 1,
+};
+
+const TROUBLE_STALLED: Trouble = Trouble {
+    happened: "stopped answering",
+    after: "it stopped answering",
+    notice: "stopped answering",
+    restart_after: STALLS_BEFORE_RESTART,
+};
 
 /// Request header with the time this call may still take, in milliseconds. The
 /// runner answers before it runs out, so its timeout is an answer the host can
@@ -123,19 +145,6 @@ fn judge_session(expected: Option<&str>, reported: Option<&str>) -> Readiness {
     }
 }
 
-/// Whether a call may be sent again after the transport failed under it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Replay {
-    /// Reads and idempotent writes (`setOrientation` to an absolute value):
-    /// always safe to repeat.
-    Always,
-    /// Input (`touch`, `swipeV2`, `inputText`, `eraseText`, `pressKey`,
-    /// `pressButton`): repeated only when the request provably never left the
-    /// host (the connection was refused), so a lost reply can never turn into a
-    /// double tap, doubled text or a second `Lock` press.
-    IfNotSent,
-}
-
 /// How a failed call relates to the transport.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Fault {
@@ -167,51 +176,6 @@ fn classify(e: &ureq::Error) -> Fault {
         },
         _ => Fault::None,
     }
-}
-
-/// What a restart is curing; picks the wording of its messages.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Trouble {
-    /// The transport broke: the runner process is gone.
-    Lost,
-    /// [`STALLS_BEFORE_RESTART`] calls in a row timed out against a live runner.
-    Stalled,
-}
-
-impl Trouble {
-    /// "the iOS driver {..}".
-    fn happened(self) -> &'static str {
-        match self {
-            Self::Lost => "lost its connection",
-            Self::Stalled => "stopped answering",
-        }
-    }
-
-    /// "restarted after {..}".
-    fn after(self) -> &'static str {
-        match self {
-            Self::Lost => "losing its connection",
-            Self::Stalled => "it stopped answering",
-        }
-    }
-
-    fn notice(self) -> &'static str {
-        match self {
-            Self::Lost => "connection lost",
-            Self::Stalled => "stopped answering",
-        }
-    }
-}
-
-/// A failed attempt that a restart may cure.
-struct Failed {
-    trouble: Trouble,
-    /// The user-facing error of the attempt.
-    error: anyhow::Error,
-    /// For the restart notice.
-    cause: String,
-    /// The request provably never ran on the runner, so even input may be repeated.
-    never_ran: bool,
 }
 
 /// The runner answered with an HTTP error status (its own, readable message): the
@@ -246,13 +210,26 @@ pub struct IosNativeClient {
     /// connection closes before the runner dies.
     runner: Option<Box<dyn RunnerProcess>>,
     recovery: Option<RestartFn>,
-    restarts: u32,
-    restart_notices: Vec<String>,
+    recovery_state: RecoveryState,
     call_timeout: Duration,
-    /// Stalled calls in a row (see the module docs).
-    stalls: u32,
     /// Session id the runner was started with; `/status` must echo it.
     session: Option<String>,
+}
+
+impl LaneClient for IosNativeClient {
+    fn take_restart_notices(&mut self) -> Vec<String> {
+        self.recovery_state.take_notices()
+    }
+}
+
+impl RecoverableClient for IosNativeClient {
+    fn recovery_state(&mut self) -> &mut RecoveryState {
+        &mut self.recovery_state
+    }
+
+    fn has_recovery(&self) -> bool {
+        self.recovery.is_some()
+    }
 }
 
 impl IosNativeClient {
@@ -276,10 +253,8 @@ impl IosNativeClient {
             device: None,
             runner: None,
             recovery: None,
-            restarts: 0,
-            restart_notices: Vec::new(),
+            recovery_state: RecoveryState::new(),
             call_timeout,
-            stalls: 0,
             session: None,
         }
     }
@@ -291,7 +266,7 @@ impl IosNativeClient {
 
     /// Queues a user-facing line for [`Self::take_restart_notices`].
     pub fn add_notice(&mut self, notice: String) {
-        self.restart_notices.push(notice);
+        self.recovery_state.push_notice(notice);
     }
 
     /// Hands the client ownership of the process serving it: it is stopped
@@ -307,12 +282,12 @@ impl IosNativeClient {
 
     /// How many times this client restarted its runner.
     pub fn restarts(&self) -> u32 {
-        self.restarts
+        self.recovery_state.restarts()
     }
 
     /// One user-facing line per restart since the last call.
     pub fn take_restart_notices(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.restart_notices)
+        self.recovery_state.take_notices()
     }
 
     fn url(&self, path: &str) -> String {
@@ -380,7 +355,7 @@ impl IosNativeClient {
     /// A runner-side timeout answer as a stall: `deadlineExceeded` (the handler
     /// may have applied the request and still runs) or `runnerBusy` (it never
     /// started). Not a [`RunnerAnswerError`]: the runner is hung, not answering.
-    fn stall_answer(what: &str, answer: &Answer) -> Option<Failed> {
+    fn stall_answer(what: &str, answer: &Answer) -> Option<FailedAttempt> {
         if (200..300).contains(&answer.status) {
             return None;
         }
@@ -391,8 +366,8 @@ impl IosNativeClient {
             _ => return None,
         };
         let detail = Self::error_detail(answer);
-        Some(Failed {
-            trouble: Trouble::Stalled,
+        Some(FailedAttempt::Recoverable {
+            trouble: TROUBLE_STALLED,
             error: anyhow!("iOS driver `{what}` timed out in the runner: {detail}"),
             cause: format!("`{what}`: {detail}"),
             never_ran,
@@ -414,23 +389,19 @@ impl IosNativeClient {
         }
     }
 
-    /// One attempt of a call. `Err(Ok(failed))` is a failure a restart may
-    /// cure; `Err(Err(e))` is final (an ordinary error answer, a bad request).
+    /// One attempt of a call.
     fn attempt(
         &mut self,
         what: &str,
         path: &str,
         payload: Option<&[u8]>,
         timeout: Option<Duration>,
-    ) -> Result<Vec<u8>, Result<Failed>> {
+    ) -> Result<Vec<u8>, FailedAttempt> {
         let err = match self.exchange(path, payload, timeout) {
             Ok(answer) => {
                 return match Self::stall_answer(what, &answer) {
-                    Some(stalled) => Err(Ok(stalled)),
-                    None => {
-                        self.stalls = 0;
-                        Self::finish(what, answer).map_err(Err)
-                    }
+                    Some(stalled) => Err(stalled),
+                    None => Self::finish(what, answer).map_err(FailedAttempt::Fatal),
                 };
             }
             Err(e) => e,
@@ -441,12 +412,15 @@ impl IosNativeClient {
         match fault {
             // The runner process is alive and did not answer in time.
             Fault::None if matches!(err, ureq::Error::Timeout(_)) => {
-                Err(Ok(Failed { trouble: Trouble::Stalled, error, cause, never_ran: false }))
+                Err(FailedAttempt::Recoverable { trouble: TROUBLE_STALLED, error, cause, never_ran: false })
             }
-            Fault::None => Err(Err(error)),
-            Fault::Refused | Fault::Broken => {
-                Err(Ok(Failed { trouble: Trouble::Lost, error, cause, never_ran: fault == Fault::Refused }))
-            }
+            Fault::None => Err(FailedAttempt::Fatal(error)),
+            Fault::Refused | Fault::Broken => Err(FailedAttempt::Recoverable {
+                trouble: TROUBLE_LOST,
+                error,
+                cause,
+                never_ran: fault == Fault::Refused,
+            }),
         }
     }
 
@@ -467,53 +441,18 @@ impl IosNativeClient {
         timeout: Option<Duration>,
     ) -> Result<Vec<u8>> {
         let payload = body.map(serde_json::to_vec).transpose().context("encoding the iOS driver request")?;
-        let failed = match self.attempt(what, path, payload.as_deref(), timeout) {
-            Ok(bytes) => return Ok(bytes),
-            Err(failed) => failed,
-        };
-        crate::interrupt::check()?;
-        let Failed { trouble, error, cause, never_ran } = failed?;
-        if trouble == Trouble::Stalled {
-            self.stalls += 1;
-            if self.stalls < STALLS_BEFORE_RESTART {
-                return Err(error);
-            }
-        }
-        if self.recovery.is_none() {
-            return Err(error);
-        }
-        let happened = trouble.happened();
-        if self.restarts >= MAX_RESTARTS {
-            return Err(
-                error.context(format!("the iOS driver {happened} again after {MAX_RESTARTS} restarts; giving up"))
-            );
-        }
-        if let Err(e) = self.restart(trouble, &cause) {
-            return Err(error.context(format!("the iOS driver {happened} and could not be restarted: {e:#}")));
-        }
-        if replay == Replay::IfNotSent && !never_ran {
-            return Err(error.context(format!(
-                "the iOS driver {happened} while handling this request and was restarted; the request was not \
-                 repeated because it may already have been applied"
-            )));
-        }
-        match self.attempt(what, path, payload.as_deref(), timeout) {
-            Ok(bytes) => Ok(bytes),
-            Err(again) => {
-                let again = match again {
-                    Ok(failed) => failed.error,
-                    Err(e) => e,
-                };
-                Err(again.context(format!(
-                    "the iOS driver was restarted after {}, but the request failed again",
-                    trouble.after()
-                )))
-            }
-        }
+        execute_with_recovery(
+            self,
+            IOS_RECOVERY_MSGS,
+            replay,
+            |this| this.attempt(what, path, payload.as_deref(), timeout),
+            |this, _| this.replace_runner(),
+            |_| Ok(()),
+        )
     }
 
     /// Replaces the dead runner with a freshly started one.
-    fn restart(&mut self, trouble: Trouble, cause: &str) -> Result<()> {
+    fn replace_runner(&mut self) -> Result<()> {
         let mut recovery = self.recovery.take().ok_or_else(|| anyhow!("this client cannot restart"))?;
         // Tear the dead runner down first: its `simctl terminate` would otherwise
         // kill the new runner (same bundle id), and a fixed port would stay taken.
@@ -522,15 +461,6 @@ impl IosNativeClient {
         // fails fast instead of retrying a restart that already failed.
         let mut fresh = recovery()?;
         fresh.recovery = Some(recovery);
-        fresh.restarts = self.restarts + 1;
-        let mut notices = std::mem::take(&mut self.restart_notices);
-        notices.extend(fresh.restart_notices);
-        notices.push(format!(
-            "iOS native driver {} ({cause}); restarted it (restart {}/{MAX_RESTARTS})",
-            trouble.notice(),
-            fresh.restarts
-        ));
-        fresh.restart_notices = notices;
         // The new runner starts with its screen size uncached.
         *self = fresh;
         Ok(())

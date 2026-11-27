@@ -38,14 +38,13 @@ use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, TryRecvError};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail};
 use sha2::{Digest, Sha256};
 
+use crate::native_core::{CancelSignal, LaneHandle};
 use crate::native_lane::{BlackboxDemotion, BlackboxTracker};
 pub use client::{IosDeviceInfo, IosNativeClient, MAX_RESTARTS, Readiness, RestartFn, RunnerProcess, is_runner_answer};
 pub use hierarchy::IosHierarchy;
@@ -414,7 +413,7 @@ fn wait_for_runner(
     client: &IosNativeClient,
     driver_label: &str,
     mut exited: impl FnMut() -> Option<String>,
-    cancel: &AtomicBool,
+    cancel: &CancelSignal,
     deadline: Instant,
 ) -> Result<Readiness> {
     let mut foreign: Option<String> = None;
@@ -422,7 +421,7 @@ fn wait_for_runner(
         session::foreign_hint(foreign.as_deref(), PORT_ENV, tapwing_driver::RUNNER_BUNDLE_ID)
     };
     loop {
-        if cancel.load(Ordering::Relaxed) || crate::interrupt::is_interrupted() {
+        if cancel.is_cancelled() {
             bail!("cancelled");
         }
         if let Some(why) = exited() {
@@ -441,19 +440,21 @@ fn wait_for_runner(
             }
             Err(_) => {}
         }
-        std::thread::sleep(POLL_SLEEP.min(deadline.saturating_duration_since(Instant::now())));
+        if cancel.wait_timeout(POLL_SLEEP.min(deadline.saturating_duration_since(Instant::now()))) {
+            bail!("cancelled");
+        }
     }
 }
 
 /// Unpacks (if needed), launches the runner and waits for HTTP readiness. The
 /// returned client owns the runner process (dropping it stops the runner).
-fn start_session(udid: &str, cancel: &AtomicBool) -> Result<IosNativeClient> {
-    let driver = tapwing_driver::locate(cancel)?;
+fn start_session(udid: &str, cancel: &CancelSignal) -> Result<IosNativeClient> {
+    let driver = tapwing_driver::locate(cancel.flag())?;
     // One advisory line per process if the runner was built with another major Xcode.
-    xcode_compat::warn_once(driver.source.path(), cancel);
+    xcode_compat::warn_once(driver.source.path(), cancel.flag());
     let xctestrun = driver.xctestrun;
     let driver_label = "the Tapwing iOS driver";
-    if cancel.load(Ordering::Relaxed) || crate::interrupt::is_interrupted() {
+    if cancel.is_cancelled() {
         bail!("cancelled");
     }
     // Best effort: a leftover runner only wastes resources, so a failed sweep never fails the start.
@@ -507,69 +508,52 @@ fn start_session(udid: &str, cancel: &AtomicBool) -> Result<IosNativeClient> {
     Ok(client)
 }
 
-/// Starts one runner session; the warm-up and every restart call it.
-type Starter = dyn Fn(&AtomicBool) -> Result<IosNativeClient> + Send + Sync;
-
-enum State {
-    Pending(Receiver<Result<IosNativeClient>>),
-    Ready(Box<IosNativeClient>),
-    Unavailable(String),
-}
-
 /// Background-warmed iOS native lane. Created at session start; Flutter-only
 /// flows never touch it, so they pay nothing for it.
 pub struct IosNativeLaneHandle {
-    state: State,
-    udid: Option<String>,
-    cancel: Arc<AtomicBool>,
-    thread: Option<JoinHandle<()>>,
-    /// Consecutive `launchApp` handshake misses per app in this shard.
-    blackbox: BlackboxTracker,
-    failure_reported: bool,
+    inner: LaneHandle<IosNativeClient, String>,
 }
 
 impl IosNativeLaneHandle {
     /// Starts warming up the lane for the simulator `udid` on a new thread.
     pub fn spawn(udid: &str) -> Self {
         let owned = udid.to_string();
-        Self::spawn_with(udid, move |cancel| start_session(&owned, cancel))
+        Self::spawn_with_signal(udid, move |cancel| start_session(&owned, cancel))
     }
 
     /// Warms up with `start` on a new thread. The client it returns restarts a
     /// dead runner with the same `start` and the handle's cancel flag. A restart runs on
     /// the caller's thread while the handle is borrowed, so only the warm-up thread is
     /// cancelled by dropping the handle, never a restart in flight.
+    #[cfg(test)]
     fn spawn_with(udid: &str, start: impl Fn(&AtomicBool) -> Result<IosNativeClient> + Send + Sync + 'static) -> Self {
-        let start: Arc<Starter> = Arc::new(start);
-        let cancel = Arc::new(AtomicBool::new(false));
-        let (tx, rx) = mpsc::channel();
-        let thread = {
-            let cancel = cancel.clone();
-            std::thread::Builder::new().name("tapwing-ios-native-warmup".into()).spawn(move || {
-                let res = start(&cancel).map(|mut client| {
-                    let (start, cancel) = (start.clone(), cancel.clone());
-                    client.set_restart(Box::new(move || {
-                        if cancel.load(Ordering::Relaxed) {
-                            bail!("cancelled");
-                        }
-                        start(&cancel).context("restarting the Tapwing iOS driver")
-                    }));
-                    client
-                });
-                // A failed send means the handle is gone: the session drops here and cleans up.
-                let _ = tx.send(res);
-            })
-        };
-        match thread {
-            Ok(thread) => Self {
-                state: State::Pending(rx),
-                udid: Some(udid.to_string()),
-                cancel,
-                thread: Some(thread),
-                blackbox: BlackboxTracker::default(),
-                failure_reported: false,
-            },
-            Err(e) => Self::unavailable(format!("cannot start the warm-up thread: {e}")),
+        Self::spawn_with_signal(udid, move |cancel| start(cancel.flag()))
+    }
+
+    fn spawn_with_signal(
+        udid: &str,
+        start: impl Fn(&CancelSignal) -> Result<IosNativeClient> + Send + Sync + 'static,
+    ) -> Self {
+        let start = Arc::new(start);
+        Self {
+            inner: LaneHandle::spawn_with(
+                "the iOS native lane",
+                "the iOS native-lane warm-up thread died",
+                "tapwing-ios-native-warmup",
+                udid.to_string(),
+                move |cancel| {
+                    start(cancel).map(|mut client| {
+                        let (start, cancel) = (start.clone(), cancel.clone());
+                        client.set_restart(Box::new(move || {
+                            if cancel.is_cancelled() {
+                                bail!("cancelled");
+                            }
+                            start(&cancel).context("restarting the Tapwing iOS driver")
+                        }));
+                        client
+                    })
+                },
+            ),
         }
     }
 
@@ -577,12 +561,12 @@ impl IosNativeLaneHandle {
     #[cfg(test)]
     pub(crate) fn ready_for_test(client: IosNativeClient) -> Self {
         Self {
-            state: State::Ready(Box::new(client)),
-            udid: Some("SIM-UDID".into()),
-            cancel: Arc::new(AtomicBool::new(false)),
-            thread: None,
-            blackbox: BlackboxTracker::default(),
-            failure_reported: false,
+            inner: LaneHandle::ready(
+                "the iOS native lane",
+                "the iOS native-lane warm-up thread died",
+                client,
+                "SIM-UDID".into(),
+            ),
         }
     }
 
@@ -598,144 +582,62 @@ impl IosNativeLaneHandle {
     /// A lane that is known not to work (no driver, not iOS, ...).
     pub fn unavailable(reason: impl Into<String>) -> Self {
         Self {
-            state: State::Unavailable(reason.into()),
-            udid: None,
-            cancel: Arc::new(AtomicBool::new(false)),
-            thread: None,
-            blackbox: BlackboxTracker::default(),
-            failure_reported: false,
+            inner: LaneHandle::unavailable("the iOS native lane", "the iOS native-lane warm-up thread died", reason),
         }
     }
 
     pub(crate) fn set_blackbox_tracker(&mut self, tracker: BlackboxTracker) {
-        self.blackbox = tracker;
+        self.inner.set_blackbox_tracker(tracker);
     }
 
     /// Records a missed `launchApp` handshake for `app_id`.
     pub fn record_handshake_miss(&mut self, app_id: &str) -> BlackboxDemotion {
-        self.blackbox.record_handshake_miss(app_id)
+        self.inner.record_handshake_miss(app_id)
     }
 
     /// Records a successful Flutter handshake for `app_id`, resetting misses.
     pub fn record_handshake_success(&mut self, app_id: &str) {
-        self.blackbox.record_handshake_success(app_id);
+        self.inner.record_handshake_success(app_id);
     }
 
     /// Whether `app_id` is permanently demoted to black-box for this shard.
     pub fn is_sticky_blackbox(&self, app_id: &str) -> bool {
-        self.blackbox.is_sticky(app_id)
+        self.inner.is_sticky_blackbox(app_id)
     }
 
     /// The warm-up failure reason, once (for a single user-visible warning).
     pub fn take_failure_notice(&mut self) -> Option<String> {
-        self.poll(None);
-        if self.failure_reported {
-            return None;
-        }
-        let why = self.failure()?.to_string();
-        self.failure_reported = true;
-        Some(why)
+        self.inner.take_failure_notice()
     }
 
     /// `false` once warm-up is known to have failed.
     pub fn is_usable(&self) -> bool {
-        !matches!(self.state, State::Unavailable(_))
+        self.inner.is_usable()
     }
 
     /// Why the lane is unusable, if it is.
     pub fn failure(&self) -> Option<&str> {
-        match &self.state {
-            State::Unavailable(why) => Some(why),
-            _ => None,
-        }
+        self.inner.failure()
     }
 
     /// The simulator this lane drives.
     pub fn udid(&self) -> Option<&str> {
-        self.udid.as_deref()
+        self.inner.meta().map(String::as_str)
     }
 
     /// One line per time the runner connection was lost and restarted since the last call.
     pub fn take_restart_notices(&mut self) -> Vec<String> {
-        match &mut self.state {
-            State::Ready(c) => c.take_restart_notices(),
-            _ => Vec::new(),
-        }
-    }
-
-    fn finish(&mut self, res: Result<IosNativeClient>) {
-        self.state = match res {
-            Ok(s) => State::Ready(Box::new(s)),
-            Err(e) => State::Unavailable(format!("{e:#}")),
-        };
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
-        }
-    }
-
-    /// Joins the warm-up for at most `timeout` (`None` = poll once) and
-    /// returns the client when ready.
-    fn poll(&mut self, timeout: Option<Duration>) -> Option<&mut IosNativeClient> {
-        if let State::Pending(rx) = &self.state {
-            let res = match timeout {
-                Some(t) => {
-                    let deadline = Instant::now() + t;
-                    loop {
-                        if crate::interrupt::is_interrupted() {
-                            self.cancel.store(true, Ordering::Relaxed);
-                            break Err(RecvTimeoutError::Timeout);
-                        }
-                        let rem = deadline.saturating_duration_since(Instant::now());
-                        match rx.recv_timeout(rem.min(Duration::from_millis(50))) {
-                            Ok(r) => break Ok(r),
-                            Err(RecvTimeoutError::Timeout) if Instant::now() < deadline => continue,
-                            Err(e) => break Err(e),
-                        }
-                    }
-                }
-                None => rx.try_recv().map_err(|e| match e {
-                    TryRecvError::Empty => RecvTimeoutError::Timeout,
-                    TryRecvError::Disconnected => RecvTimeoutError::Disconnected,
-                }),
-            };
-            match res {
-                Ok(r) => self.finish(r),
-                Err(RecvTimeoutError::Timeout) => {}
-                Err(RecvTimeoutError::Disconnected) => {
-                    self.finish(Err(anyhow!("the iOS native-lane warm-up thread died")));
-                }
-            }
-        }
-        match &mut self.state {
-            State::Ready(c) => Some(c),
-            _ => None,
-        }
+        self.inner.take_restart_notices()
     }
 
     /// Non-blocking: the client only if warm-up already finished.
     pub fn try_get(&mut self) -> Option<&mut IosNativeClient> {
-        self.poll(None)
+        self.inner.try_get()
     }
 
     /// Waits up to `timeout` for the warm-up and returns the client.
     pub fn get_or_wait(&mut self, timeout: Duration) -> Result<&mut IosNativeClient> {
-        crate::interrupt::check()?;
-        self.poll(Some(timeout));
-        crate::interrupt::check()?;
-        match &mut self.state {
-            State::Ready(c) => Ok(c),
-            State::Unavailable(why) => Err(anyhow!("the iOS native lane is unavailable: {why}")),
-            State::Pending(_) => Err(anyhow!("the iOS native lane is still starting after {} ms", timeout.as_millis())),
-        }
-    }
-}
-
-impl Drop for IosNativeLaneHandle {
-    fn drop(&mut self) {
-        self.cancel.store(true, Ordering::Relaxed);
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
-        }
+        self.inner.get_or_wait(timeout)
     }
 }
 
@@ -807,6 +709,10 @@ mod tests {
 
     fn no_cancel() -> AtomicBool {
         AtomicBool::new(false)
+    }
+
+    fn no_signal() -> CancelSignal {
+        CancelSignal::new()
     }
 
     #[test]
@@ -930,7 +836,7 @@ mod tests {
             &client,
             "the Tapwing iOS driver",
             || None,
-            &no_cancel(),
+            &no_signal(),
             Instant::now() + Duration::from_secs(5),
         )
         .unwrap();
@@ -952,24 +858,24 @@ mod tests {
 
         // Without a session to check (the behaviour before session ids) it passes for ready.
         let unchecked = IosNativeClient::connect(stale.port);
-        assert_eq!(wait_for_runner(&unchecked, "the driver", || None, &no_cancel(), soon()).unwrap(), Readiness::Ready);
+        assert_eq!(wait_for_runner(&unchecked, "the driver", || None, &no_signal(), soon()).unwrap(), Readiness::Ready);
 
         // With one, readiness keeps waiting and fails naming the foreign runner.
         let mut client = IosNativeClient::connect(stale.port);
         client.expect_session("this-run".into());
-        let err = format!("{:#}", wait_for_runner(&client, "the driver", || None, &no_cancel(), soon()).unwrap_err());
+        let err = format!("{:#}", wait_for_runner(&client, "the driver", || None, &no_signal(), soon()).unwrap_err());
         assert!(err.contains("did not start in time"), "{err}");
         assert!(err.contains("another Tapwing iOS runner (session `stale-run`)"), "{err}");
         assert!(err.contains(PORT_ENV) && err.contains(tapwing_driver::RUNNER_BUNDLE_ID), "{err}");
         assert!(stale.calls("status").len() > 2, "it kept polling instead of accepting the first answer");
 
         // `xcodebuild` giving up (our runner could not bind the taken port) carries the same hint.
-        let err = wait_for_runner(&client, "the driver", || Some("exit status: 65".into()), &no_cancel(), soon());
+        let err = wait_for_runner(&client, "the driver", || Some("exit status: 65".into()), &no_signal(), soon());
         let err = format!("{:#}", err.unwrap_err());
         assert!(err.contains("exited during startup"), "{err}");
         let mut seen = false;
         let exits_after_a_probe = || std::mem::replace(&mut seen, true).then(|| "exit status: 65".to_string());
-        let err = wait_for_runner(&client, "the driver", exits_after_a_probe, &no_cancel(), soon());
+        let err = wait_for_runner(&client, "the driver", exits_after_a_probe, &no_signal(), soon());
         let err = format!("{:#}", err.unwrap_err());
         assert!(err.contains("exited during startup") && err.contains("session `stale-run`"), "{err}");
     }
@@ -986,7 +892,7 @@ mod tests {
         let mut client = IosNativeClient::connect(r.port);
         client.expect_session("this-run".into());
         let far = Instant::now() + Duration::from_secs(10);
-        assert_eq!(wait_for_runner(&client, "the driver", || None, &no_cancel(), far).unwrap(), Readiness::Ready);
+        assert_eq!(wait_for_runner(&client, "the driver", || None, &no_signal(), far).unwrap(), Readiness::Ready);
         assert_eq!(probes.load(Ordering::Relaxed), 3);
     }
 
@@ -996,7 +902,7 @@ mod tests {
         let mut client = IosNativeClient::connect(old.port);
         client.expect_session("this-run".into());
         let far = Instant::now() + Duration::from_secs(5);
-        assert_eq!(wait_for_runner(&client, "the driver", || None, &no_cancel(), far).unwrap(), Readiness::Unverified);
+        assert_eq!(wait_for_runner(&client, "the driver", || None, &no_signal(), far).unwrap(), Readiness::Unverified);
         assert_eq!(old.calls("status").len(), 1);
         client.add_notice(session::unverified_notice());
         let notices = client.take_restart_notices();
@@ -1022,7 +928,7 @@ mod tests {
             &client,
             "the Tapwing iOS driver",
             || None,
-            &no_cancel(),
+            &no_signal(),
             Instant::now() + Duration::from_secs(10),
         )
         .unwrap();
@@ -1035,11 +941,11 @@ mod tests {
         let client = IosNativeClient::connect(port);
         let far = Instant::now() + Duration::from_secs(60);
 
-        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel = Arc::new(CancelSignal::new());
         let flag = cancel.clone();
         let canceller = std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(100));
-            flag.store(true, Ordering::Relaxed);
+            flag.cancel();
         });
         let t = Instant::now();
         let err = wait_for_runner(&client, "the Tapwing iOS driver", || None, &cancel, far).unwrap_err().to_string();
@@ -1048,7 +954,7 @@ mod tests {
         canceller.join().unwrap();
 
         let err =
-            wait_for_runner(&client, "the Tapwing iOS driver", || Some("exit status: 65".into()), &no_cancel(), far)
+            wait_for_runner(&client, "the Tapwing iOS driver", || Some("exit status: 65".into()), &no_signal(), far)
                 .unwrap_err();
         assert!(
             err.to_string().contains("Tapwing iOS driver")
@@ -1062,7 +968,7 @@ mod tests {
             &client,
             "the Tapwing iOS driver",
             || None,
-            &no_cancel(),
+            &no_signal(),
             Instant::now() + Duration::from_millis(250),
         )
         .unwrap_err();
@@ -1179,7 +1085,7 @@ mod tests {
         let mut h = IosNativeLaneHandle::spawn_with("UDID-6", dead_then(r.port, &starts));
         h.get_or_wait(Duration::from_secs(5)).unwrap();
         // What dropping the handle does; a restart started afterwards must not spawn `xcodebuild`.
-        h.cancel.store(true, Ordering::Relaxed);
+        h.inner.cancel_signal().cancel();
         let err = format!("{:#}", h.get_or_wait(Duration::from_secs(1)).unwrap().device_info().unwrap_err());
         assert!(err.contains("could not be restarted: cancelled"), "{err}");
         assert_eq!(starts.load(Ordering::Relaxed), 1);
@@ -1201,7 +1107,7 @@ mod tests {
         let seen = seen.lock().unwrap().clone();
         assert_eq!(seen.len(), 2);
         assert_eq!(seen[0], seen[1], "warm-up and restart share one cancel flag");
-        assert_eq!(seen[1], Arc::as_ptr(&h.cancel) as usize);
+        assert_eq!(seen[1], std::ptr::from_ref(h.inner.cancel_signal().flag()) as usize);
     }
 
     #[test]

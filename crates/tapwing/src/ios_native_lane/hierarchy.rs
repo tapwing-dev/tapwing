@@ -5,14 +5,14 @@
 //! `label` is the accessibility text, `title` (else `value`) the text,
 //! `placeholderValue` the hint, `identifier` the id, `frame` the bounds in
 //! logical points (floats truncated like Kotlin's `Float.toInt`). Selector
-//! evaluation reuses the `Filters.kt` port in [`crate::fake_driver`].
+//! evaluation reuses the `Filters.kt` port in [`crate::ui_tree`].
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::fake_driver::{Bounds, TreeNode, find_in_tree};
-use crate::flow::ir::ElementSelector;
+use crate::native_core::ops::NativeHierarchy;
+use crate::ui_tree::{Bounds, TreeNode};
 
 /// `XCUIElement.ElementType.alert`: SpringBoard permission dialogs and native alerts.
 const ELEMENT_ALERT: i64 = 7;
@@ -136,11 +136,6 @@ impl IosHierarchy {
         Self::parse(&value, screen_w, screen_h)
     }
 
-    /// First element matching `selector` (`Filters` + `Orchestra.buildFilter`).
-    pub fn find(&self, selector: &ElementSelector) -> Result<Option<TreeNode>> {
-        find_in_tree(&self.root, selector)
-    }
-
     /// Whether the screen shows an `XCUIElementTypeAlert`: the SpringBoard
     /// permission dialogs (location, photos, tracking, ...) and any native
     /// alert. The Flutter driver cannot see these, so they route to this lane.
@@ -152,42 +147,11 @@ impl IosHierarchy {
     pub fn keyboard_visible(&self) -> bool {
         self.keyboard
     }
+}
 
-    /// Fingerprint used to detect "the screen stopped changing". Unlike
-    /// `TreeNode::structure_signature` it covers the accessibility label and
-    /// hint, which carry most of an iOS screen's text.
-    pub fn signature(&self) -> String {
-        fn walk(n: &TreeNode, out: &mut String) {
-            use std::fmt::Write;
-            let _ = write!(
-                out,
-                "({:?},{:?},{:?},{:?},{:?},{:?},{:?},{:?},{:?};",
-                n.id, n.text, n.accessibility_text, n.hint_text, n.bounds, n.enabled, n.selected, n.checked, n.focused
-            );
-            for c in &n.children {
-                walk(c, out);
-            }
-            out.push(')');
-        }
-        let mut s = String::new();
-        walk(&self.root, &mut s);
-        s
-    }
-
-    /// Distinct visible texts (text, then accessibility label), for error messages.
-    pub fn visible_texts(&self, limit: usize) -> Vec<String> {
-        let mut out: Vec<String> = Vec::new();
-        for n in self.root.aggregate() {
-            for t in [n.text.as_deref(), n.accessibility_text.as_deref()].into_iter().flatten() {
-                if !t.is_empty() && !out.iter().any(|o| o == t) {
-                    out.push(t.to_string());
-                }
-            }
-            if out.len() >= limit {
-                break;
-            }
-        }
-        out
+impl NativeHierarchy for IosHierarchy {
+    fn root(&self) -> &TreeNode {
+        &self.root
     }
 }
 
@@ -196,6 +160,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::flow::ir::ElementSelector;
 
     /// iOS 17+ location permission alert as the runner reports it (trimmed),
     /// with the app screen below it.
