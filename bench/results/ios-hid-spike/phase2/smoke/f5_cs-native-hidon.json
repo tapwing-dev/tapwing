@@ -1,0 +1,168 @@
+{
+  "platform": "ios",
+  "inputMode": "native",
+  "setupMs": 30.715083,
+  "flows": [
+    {
+      "flow": "F5 iOS Permission Dialog",
+      "path": "/Users/me/Development/Flutter/tapwing/bench/results/ios-hid-spike/flows/f5_cs.yaml",
+      "status": "passed",
+      "totalMs": 7193.327792,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "js": {
+        "runtimeInitialized": false,
+        "evalCount": 0,
+        "fastPathHits": 0,
+        "cacheHits": 0,
+        "evalMs": 0.0,
+        "httpRequests": 0,
+        "httpMs": 0.0
+      },
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 3086.315958,
+          "driver": {
+            "lane": "native",
+            "blackbox": true,
+            "pid": 51306,
+            "grantedPermissions": 1,
+            "note": "--input native: Flutter driver not used",
+            "phases": {
+              "stopClearMs": 533,
+              "permissionsMs": 135,
+              "simctlLaunchMs": 144,
+              "nativeSettleMs": 2272.975666
+            }
+          }
+        },
+        {
+          "index": 1,
+          "command": "setOrientation",
+          "description": "setOrientation",
+          "status": "passed",
+          "ms": 89.75454099999999,
+          "driver": {
+            "lane": "native",
+            "orientation": "portrait"
+          }
+        },
+        {
+          "index": 2,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 309.034125,
+          "driver": {
+            "x": 220,
+            "y": 426,
+            "lane": "native"
+          }
+        },
+        {
+          "index": 3,
+          "command": "assertVisible",
+          "description": "assertVisible \"Permission: unknown.*\" is visible",
+          "status": "passed",
+          "ms": 33.110542,
+          "driver": null
+        },
+        {
+          "index": 4,
+          "command": "tapOn",
+          "description": "tapOn \"Request Location Permission\"",
+          "status": "passed",
+          "ms": 647.794959,
+          "driver": {
+            "x": 220,
+            "y": 594,
+            "lane": "native"
+          }
+        },
+        {
+          "index": 5,
+          "command": "assertVisible",
+          "description": "assertVisible \"Povolit jen při používání aplikace\" is visible",
+          "status": "passed",
+          "ms": 28.092417,
+          "driver": null
+        },
+        {
+          "index": 6,
+          "command": "tapOn",
+          "description": "tapOn \"Povolit jen při používání aplikace\"",
+          "status": "passed",
+          "ms": 1045.169708,
+          "driver": {
+            "x": 220,
+            "y": 570,
+            "lane": "native"
+          }
+        },
+        {
+          "index": 7,
+          "command": "assertVisible",
+          "description": "assertVisible \"Permission: granted.*\" is visible",
+          "status": "passed",
+          "ms": 29.043,
+          "driver": null
+        },
+        {
+          "index": 8,
+          "command": "assertNotVisible",
+          "description": "assertNotVisible \"Povolit jen při používání aplikace\" is not visible",
+          "status": "passed",
+          "ms": 32.559791999999995,
+          "driver": null
+        },
+        {
+          "index": 9,
+          "command": "setOrientation",
+          "description": "setOrientation",
+          "status": "passed",
+          "ms": 888.0360830000001,
+          "driver": {
+            "lane": "native",
+            "orientation": "landscapeLeft"
+          }
+        },
+        {
+          "index": 10,
+          "command": "assertVisible",
+          "description": "assertVisible \"Selectors & Taps.*\" is visible",
+          "status": "passed",
+          "ms": 164.014708,
+          "driver": null
+        },
+        {
+          "index": 11,
+          "command": "setOrientation",
+          "description": "setOrientation",
+          "status": "passed",
+          "ms": 759.357959,
+          "driver": {
+            "lane": "native",
+            "orientation": "portrait"
+          }
+        },
+        {
+          "index": 12,
+          "command": "assertVisible",
+          "description": "assertVisible \"Permission: granted.*\" is visible",
+          "status": "passed",
+          "ms": 80.889166,
+          "driver": null
+        }
+      ],
+      "lane": "native",
+      "laneStats": {
+        "flutter": 0,
+        "native": 13
+      }
+    }
+  ]
+}
