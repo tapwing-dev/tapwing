@@ -1,0 +1,92 @@
+process arch: arm64e
+developer dir: /Applications/Xcode-27.2.0.app/Contents/Developer
+dlopen   ok   CoreSimulator  path=/Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator
+dlopen   ok   SimulatorKit  path=/Applications/Xcode-27.2.0.app/Contents/SharedFrameworks/SimulatorKit.framework/SimulatorKit
+dlopen   ok   AccessibilityPlatformTranslation  path=/System/Library/PrivateFrameworks/AccessibilityPlatformTranslation.framework/AccessibilityPlatformTranslation
+
+-- CoreSimulator classes
+class    ok   SimServiceContext  image=CoreSimulator
+selector ok   SimServiceContext +sharedServiceContextForDeveloperDir:error:  enc=@32@0:8@16^@24
+selector ok   SimServiceContext -defaultDeviceSetWithError:  enc=@24@0:8^@16
+class    ok   SimDeviceSet  image=CoreSimulator
+selector ok   SimDeviceSet -devices  enc=@16@0:8
+class    ok   SimDevice  image=CoreSimulator
+selector ok   SimDevice -UDID  enc=@16@0:8
+selector ok   SimDevice -state  enc=Q16@0:8
+selector ok   SimDevice -deviceType  enc=@16@0:8
+selector ok   SimDevice -io  enc=@16@0:8
+selector ok   SimDevice -sendAccessibilityRequestAsync:completionQueue:completionHandler:  enc=v40@0:8@16@24@?32
+class    ok   SimDeviceType  image=CoreSimulator
+selector ok   SimDeviceType -mainScreenSize  enc={CGSize=dd}16@0:8
+selector ok   SimDeviceType -mainScreenScale  enc=f16@0:8
+find     ok   io object (-ioPorts)  SimDeviceIO (CoreSimulator), SimDeviceIOClient (CoreSimulator), SimDeviceIOServer (CoreSimulator)
+find          protocols declaring ioPorts: SimDeviceIOClientProtocol, SimDeviceIOProtocol, SimDeviceIOInterface
+find     ok   io port (-descriptor)  SimDeviceIOPort (CoreSimDeviceIO)
+find          protocols declaring descriptor: SimDeviceIOPortInterface, MTLAccelerationStructureSPI, MPSCNNConvolutionDataSource, BMAccessAssertion
+find     MISS port descriptor (-framebufferSurface)  no class in the three frameworks
+find          protocols declaring framebufferSurface: SimDisplayIOSurfaceRenderable
+find     MISS port descriptor (-ioSurface)  no class in the three frameworks; in other loaded images: MTLSharedTextureHandle (Metal), _ANEIOSurfaceObject (AppleNeuralEngine)
+
+-- SimulatorKit class
+class    ok   SimulatorKit.SimDeviceLegacyHIDClient  image=SimulatorKit
+selector ok   SimulatorKit.SimDeviceLegacyHIDClient -initWithDevice:error:  enc=@32@0:8@16^@24
+selector ok   SimulatorKit.SimDeviceLegacyHIDClient -sendWithMessage:freeWhenDone:completionQueue:completion:  enc=v44@0:8^{IndigoHIDMessageStruct={?=IIIIIi}IC[0{?=IQI(_event={_extended=IIQ(?={?=IC[64c]}{?=I}{?=IC})}{_touch_event=IIIdddddIIIIIdddddI}{_pointer_event=dddII}{_velocity_event=IdddI}{_wheel_event=IdddIIII}{_translation_event=dddI}{_rotation_event=dddI}{_scale_event=dddI}{_dock_swipe_event=IIdddI}{_button_event=IIIIII}{_pointer_button_event=IIII}{_accelerometer_event=I[40C]}{_force_event=IdId}{_gamecontroller_event={_dpad=dddd}{_face=dddd}{_shoulder=dddd}{_joystick=dddd}}{_generic_vendor_defined_event=I}{_watch_gesture_event=II}{_paloma_pose_event=II[28C]{_translation=fff}{_orientation=ffff}}{_paloma_collection_event=II[3C]I[3C]CSS{_origin_g=fff}{_orientation_g=ffff}{_translation_l=fff}{_orientation_l=ffff}{_translation_r=fff}{_orientation_r=ffff}})cC[2C]Q}]}16B24@28@?36
+
+-- SimulatorKit C symbols (dlsym RTLD_DEFAULT, as the shim does)
+symbol   ok   IndigoHIDMessageForMouseNSEvent  image=SimulatorKit
+symbol   ok   IndigoHIDMessageForButton  image=SimulatorKit
+symbol   ok   IndigoHIDMessageForKeyboardArbitrary  image=SimulatorKit
+(extra symbols from idb's Indigo.h, not used by the shim)
+extra    found IndigoHIDMessageForHIDArbitrary
+extra    found IndigoHIDMessageForScrollEvent
+extra    none IndigoHIDMessageForMouseEvent
+extra    none IndigoHIDMessageForPressedButton
+extra    found IndigoHIDMessageForKeyboardNSEvent
+
+-- AccessibilityPlatformTranslation classes
+class    ok   AXPTranslator  image=AccessibilityPlatformTranslation
+selector ok   AXPTranslator +sharedInstance  enc=@16@0:8
+selector ok   AXPTranslator -bridgeTokenDelegate  enc=@16@0:8
+selector ok   AXPTranslator -setBridgeTokenDelegate:  enc=v24@0:8@16
+selector ok   AXPTranslator -supportsDelegateTokens  enc=B16@0:8
+selector ok   AXPTranslator -setSupportsDelegateTokens:  enc=v20@0:8B16
+selector ok   AXPTranslator -accessibilityEnabled  enc=B16@0:8
+selector ok   AXPTranslator -setAccessibilityEnabled:  enc=v20@0:8B16
+selector ok   AXPTranslator -frontmostApplicationWithDisplayId:bridgeDelegateToken:  enc=@28@0:8I16@20
+selector ok   AXPTranslator -translationApplicationObjectForPid:  enc=@20@0:8i16
+selector ok   AXPTranslator -objectAtPoint:displayId:bridgeDelegateToken:  enc=@44@0:8{CGPoint=dd}16I32@36
+selector ok   AXPTranslator -macPlatformElementFromTranslation:  enc=@24@0:8@16
+class    ok   AXPTranslationObject  image=AccessibilityPlatformTranslation
+selector ok   AXPTranslationObject -pid  enc=i16@0:8
+selector ok   AXPTranslationObject -bridgeDelegateToken  enc=@16@0:8
+selector ok   AXPTranslationObject -setBridgeDelegateToken:  enc=v24@0:8@16
+class    ok   AXPTranslatorResponse  image=AccessibilityPlatformTranslation
+selector ok   AXPTranslatorResponse +emptyResponse  enc=@16@0:8
+class    ok   AXPMacPlatformElement  image=AccessibilityPlatformTranslation
+selector ok   AXPMacPlatformElement -translation  enc=@16@0:8
+selector ok   AXPMacPlatformElement -accessibilityChildren  enc=@16@0:8
+selector ok   AXPMacPlatformElement -accessibilityRole  enc=@16@0:8
+selector ok   AXPMacPlatformElement -accessibilitySubrole  enc=@16@0:8
+selector ok   AXPMacPlatformElement -accessibilityLabel  enc=@16@0:8
+selector ok   AXPMacPlatformElement -accessibilityValue  enc=@16@0:8
+selector ok   AXPMacPlatformElement -accessibilityIdentifier  enc=@16@0:8
+selector ok   AXPMacPlatformElement -accessibilityPlaceholderValue  enc=@16@0:8
+selector ok   AXPMacPlatformElement -accessibilityFrame  enc={CGRect={CGPoint=dd}{CGSize=dd}}16@0:8
+selector ok   AXPMacPlatformElement -isAccessibilityEnabled  enc=B16@0:8
+selector ok   AXPMacPlatformElement -isAccessibilityFocused  enc=B16@0:8
+selector ok   AXPMacPlatformElement -isAccessibilitySelected  enc=B16@0:8
+selector ok   AXPMacPlatformElement -accessibilityAttributeNames  enc=@16@0:8
+selector ok   AXPMacPlatformElement -accessibilityAttributeValue:  enc=@24@0:8@16
+
+-- Bridge delegate methods the shim implements on APTranslationBridge
+protocol ok   delegate accessibilityTranslationDelegateBridgeCallbackWithToken:  declared in AXPTranslationTokenDelegateHelper(required)
+protocol MISS delegate accessibilityTranslationDelegateBridgeCallback
+protocol ok   delegate accessibilityTranslationConvertPlatformFrameToSystem:withToken:  declared in AXPTranslationTokenDelegateHelper(required)
+protocol MISS delegate accessibilityTranslationConvertPlatformFrameToSystem:withContext:postProcess:
+protocol ok   delegate accessibilityTranslationRootParentWithToken:  declared in AXPTranslationTokenDelegateHelper(required)
+protocol MISS delegate accessibilityTranslationRootParent
+protocol info required accessibilityTranslationConvertPlatformFrameToSystem:withToken:  enc={CGRect={CGPoint=dd}{CGSize=dd}}56@0:8{CGRect={CGPoint=dd}{CGSize=dd}}16@48
+protocol info required accessibilityTranslationDelegateBridgeCallbackWithToken:  enc=@?24@0:8@16
+protocol info required accessibilityTranslationRootParentWithToken:  enc=@24@0:8@16
+
+items missing: 5

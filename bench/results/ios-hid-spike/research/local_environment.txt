@@ -1,0 +1,26 @@
+# Output of lipo -archs and file on this machine (Xcode 27.2, macOS from sw_vers below)
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B131
+arm64
+Xcode 27.2
+Build version 27B52
+<Xcode-27.2.0.app/Contents>/SharedFrameworks/SimulatorKit.framework/SimulatorKit: arm64e
+/Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator: arm64e
+/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl: arm64e
+/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Resources/IndigoLegacyHIDServices.simdeviceio/Contents/MacOS/IndigoLegacyHIDServices: arm64e
+<Xcode-27.2.0.app/Contents>/Developer/usr/bin/xcodebuild: arm64
+<Xcode-27.2.0.app/Contents>/MacOS/Xcode: arm64
+<Xcode-27.2.0.app/Contents>/Developer/usr/bin/xctrace: arm64
+/usr/bin/xcrun: x86_64 arm64e arm64e.x1
+/usr/bin/clang: x86_64 arm64e arm64e.x1
+
+simctl wrapper in Xcode:
+Bourne-Again shell script text executable, ASCII text
+AccessibilityPlatformTranslation on disk: Resources _CodeSignature 
+Xcode LSMinimumSystemVersion: 26.6
+CoreSimulator CFBundleVersion: 1174.21
+SimulatorKit CFBundleVersion: 1005.14
+Rosetta check: arch: posix_spawnp: /usr/bin/true: Bad CPU type in executable
+Xcode-27.2.0.app
+/Applications/Xcode-27.2.0.app/Contents/Developer
