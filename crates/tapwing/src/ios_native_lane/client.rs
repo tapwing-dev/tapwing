@@ -299,6 +299,22 @@ impl IosNativeClient {
     /// `timeout` replaces the client's call timeout for this exchange; either
     /// way the runner is told the budget ([`DEADLINE_HEADER`]).
     fn exchange(&self, path: &str, body: Option<&[u8]>, timeout: Option<Duration>) -> Result<Answer, ureq::Error> {
+        let started = std::time::Instant::now();
+        let res = self.exchange_inner(path, body, timeout);
+        // Startup polling of a runner that is not up yet fails every 50 ms; leave that out.
+        if res.is_ok() || path != "status" {
+            let status = res.as_ref().map_or(0, |a| a.status);
+            super::timing::emit("http", started.elapsed(), &format!("route={path} status={status}"));
+        }
+        res
+    }
+
+    fn exchange_inner(
+        &self,
+        path: &str,
+        body: Option<&[u8]>,
+        timeout: Option<Duration>,
+    ) -> Result<Answer, ureq::Error> {
         let url = self.url(path);
         let limit = timeout.unwrap_or(self.call_timeout);
         let budget = limit.as_millis().to_string();

@@ -29,6 +29,7 @@ pub mod ops;
 mod orphans;
 mod session;
 pub mod tapwing_driver;
+pub mod timing;
 mod xcode_compat;
 
 use std::collections::HashSet;
@@ -449,6 +450,7 @@ fn wait_for_runner(
 /// Unpacks (if needed), launches the runner and waits for HTTP readiness. The
 /// returned client owns the runner process (dropping it stops the runner).
 fn start_session(udid: &str, cancel: &CancelSignal) -> Result<IosNativeClient> {
+    let session_started = Instant::now();
     let driver = tapwing_driver::locate(cancel.flag())?;
     // One advisory line per process if the runner was built with another major Xcode.
     xcode_compat::warn_once(driver.source.path(), cancel.flag());
@@ -480,6 +482,7 @@ fn start_session(udid: &str, cancel: &CancelSignal) -> Result<IosNativeClient> {
     if let Ok(honor) = std::env::var(HONOR_MODAL_VIEWS_ENV) {
         cmd.env("TEST_RUNNER_snapshotKeyHonorModalViews", honor.trim());
     }
+    let spawned = Instant::now();
     let child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
@@ -505,6 +508,7 @@ fn start_session(udid: &str, cancel: &CancelSignal) -> Result<IosNativeClient> {
         client.add_notice(notice);
     }
     client.set_runner(Box::new(guard));
+    timing::emit("runner_start", spawned.elapsed(), &format!("total_ms={}", session_started.elapsed().as_millis()));
     Ok(client)
 }
 
@@ -637,7 +641,10 @@ impl IosNativeLaneHandle {
 
     /// Waits up to `timeout` for the warm-up and returns the client.
     pub fn get_or_wait(&mut self, timeout: Duration) -> Result<&mut IosNativeClient> {
-        self.inner.get_or_wait(timeout)
+        let t = Instant::now();
+        let res = self.inner.get_or_wait(timeout);
+        timing::emit("warmup_wait", t.elapsed(), &format!("ok={}", res.is_ok()));
+        res
     }
 }
 

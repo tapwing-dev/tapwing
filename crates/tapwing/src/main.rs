@@ -219,6 +219,7 @@ enum Cmd {
 }
 
 fn main() {
+    tapwing::ios_native_lane::timing::init();
     let expanded_args = match tapwing::cli_args::expand_argfiles(std::env::args_os()) {
         Ok(args) => args,
         Err(e) => {
