@@ -20,13 +20,13 @@ use crate::native_core::ops::{self as core_ops, NativeHierarchy, NativeSurface};
 use crate::ui_tree::Bounds;
 
 /// `IOSDriver.longPress`: a 3 s press.
-const LONG_PRESS_SECS: f64 = 3.0;
+pub(super) const LONG_PRESS_SECS: f64 = 3.0;
 /// Pause between `isScreenStatic` probes that answered "still moving".
-const STATIC_POLL: Duration = Duration::from_millis(50);
+pub(super) const STATIC_POLL: Duration = Duration::from_millis(50);
 /// Settle budget when the command gives none (Maestro waits about 2 s).
-const DEFAULT_SETTLE: Duration = Duration::from_millis(2000);
+pub(super) const DEFAULT_SETTLE: Duration = Duration::from_millis(2000);
 /// `Maestro.SCREEN_SETTLE_TIMEOUT_MS`: default of `waitForAnimationToEnd`.
-const DEFAULT_ANIMATION_WAIT_MS: u64 = 3000;
+pub(super) const DEFAULT_ANIMATION_WAIT_MS: u64 = 3000;
 /// Settle budget after `Home` / `Lock` / rotation (transitions are short).
 const BUTTON_SETTLE: Duration = Duration::from_millis(1000);
 /// Hierarchy-comparison fallback: comparisons 200 ms apart, like `waitForAppToSettle`.

@@ -17,6 +17,7 @@
 #import <IOSurface/IOSurface.h>
 #import <ImageIO/ImageIO.h>
 #import <dlfcn.h>
+#import <libproc.h>
 #import <mach/mach_time.h>
 
 #pragma mark - Private API declarations
@@ -99,6 +100,30 @@ static void set_err(char **err, NSString *message) {
   }
 }
 
+// Error classes for the host. A message starts with "[unavailable] " when this Mac or simulator
+// cannot serve the backend at all (a framework, class, selector or symbol is missing, or the device
+// is not found or not booted), and with "[sent] " when an input message had already been handed
+// to SimulatorKit, so the event may have reached the device. Other messages are plain call failures.
+static const NSString *const kUnavailable = @"[unavailable] ";
+static const NSString *const kSent = @"[sent] ";
+
+static void set_unavailable(char **err, NSString *message) {
+  set_err(err, [kUnavailable stringByAppendingString:message]);
+}
+
+// True from the moment a message goes to SimulatorKit until the next input call starts.
+static __thread BOOL tl_dispatched;
+
+// Marks an input failure as "sent" when a message had been dispatched before it.
+static int fail_input(char **err) {
+  if (tl_dispatched && err && *err) {
+    char *old = *err;
+    *err = ap_strdup([kSent stringByAppendingString:@(old)]);
+    free(old);
+  }
+  return 1;
+}
+
 void ap_free(char *s) { free(s); }
 
 #pragma mark - Frameworks and devices
@@ -149,42 +174,42 @@ static id<APSimDevice> find_device(const char *dev_dir, const char *udid, char *
   NSString *devDir = @(dev_dir);
   NSString *failure = load_frameworks(devDir);
   if (failure) {
-    set_err(err, failure);
+    set_unavailable(err, failure);
     return nil;
   }
   NSString *key = @(udid);
   id<APSimDevice> cached = device_cache()[key];
   if (cached) {
     if (cached.state != 3) {
-      set_err(err, [NSString stringWithFormat:@"simulator %s is not booted", udid]);
+      set_unavailable(err, [NSString stringWithFormat:@"simulator %s is not booted", udid]);
       return nil;
     }
     return cached;
   }
   Class contextClass = NSClassFromString(@"SimServiceContext");
   if (!contextClass) {
-    set_err(err, @"CoreSimulator has no SimServiceContext; is Xcode installed and opened once?");
+    set_unavailable(err, @"CoreSimulator has no SimServiceContext; is Xcode installed and opened once?");
     return nil;
   }
   NSError *error = nil;
   id context = [(id<APSimServiceContext>)contextClass sharedServiceContextForDeveloperDir:devDir error:&error];
   id set = [context defaultDeviceSetWithError:&error];
   if (!set) {
-    set_err(err, [NSString stringWithFormat:@"could not open the simulator device set: %@", error.localizedDescription]);
+    set_unavailable(err, [NSString stringWithFormat:@"could not open the simulator device set: %@", error.localizedDescription]);
     return nil;
   }
   NSUUID *wanted = [[NSUUID alloc] initWithUUIDString:key];
   for (id<APSimDevice> device in [(id<APSimDeviceSet>)set devices]) {
     if ([device.UDID isEqual:wanted]) {
       if (device.state != 3) {
-        set_err(err, [NSString stringWithFormat:@"simulator %s is not booted", udid]);
+        set_unavailable(err, [NSString stringWithFormat:@"simulator %s is not booted", udid]);
         return nil;
       }
       device_cache()[key] = device;
       return device;
     }
   }
-  set_err(err, [NSString stringWithFormat:@"no simulator with UDID %s", udid]);
+  set_unavailable(err, [NSString stringWithFormat:@"no simulator with UDID %s", udid]);
   return nil;
 }
 
@@ -235,13 +260,13 @@ static id<APHIDClient> hid_client(id<APSimDevice> device, NSString *udid, char *
   }
   Class clientClass = NSClassFromString(@"SimulatorKit.SimDeviceLegacyHIDClient");
   if (!clientClass) {
-    set_err(err, @"SimulatorKit.SimDeviceLegacyHIDClient is not available in this Xcode");
+    set_unavailable(err, @"SimulatorKit.SimDeviceLegacyHIDClient is not available in this Xcode");
     return nil;
   }
   NSError *error = nil;
   id<APHIDClient> client = [(id<APHIDClient>)[clientClass alloc] initWithDevice:device error:&error];
   if (!client) {
-    set_err(err, [NSString stringWithFormat:@"could not connect to the simulator's HID service: %@",
+    set_unavailable(err, [NSString stringWithFormat:@"could not connect to the simulator's HID service: %@",
                                             error.localizedDescription]);
     return nil;
   }
@@ -262,6 +287,7 @@ static BOOL hid_send(id<APHIDClient> client, void *message, char **err) {
   }
   dispatch_semaphore_t done = dispatch_semaphore_create(0);
   __block NSError *failure = nil;
+  tl_dispatched = YES;
   [client sendWithMessage:message
              freeWhenDone:YES
           completionQueue:queue
@@ -315,29 +341,30 @@ static void *touch_message(MouseFn mouse, CGPoint ratio, BOOL down) {
 int ap_touch(const char *dev_dir, const char *udid, const double *xs, const double *ys, int n,
              int hold_ms, int step_ms, char **err) {
   @autoreleasepool {
+    tl_dispatched = NO;
     @try {
       if (n < 1) {
         set_err(err, @"a touch needs at least one point");
-        return 1;
+        return fail_input(err);
       }
       id<APSimDevice> device = find_device(dev_dir, udid, err);
       if (!device) {
-        return 1;
+        return fail_input(err);
       }
       MouseFn mouse = (MouseFn)simkit_symbol("IndigoHIDMessageForMouseNSEvent");
       if (!mouse) {
-        set_err(err, @"IndigoHIDMessageForMouseNSEvent is missing from SimulatorKit");
-        return 1;
+        set_unavailable(err, @"IndigoHIDMessageForMouseNSEvent is missing from SimulatorKit");
+        return fail_input(err);
       }
       id<APHIDClient> client = hid_client(device, @(udid), err);
       if (!client) {
-        return 1;
+        return fail_input(err);
       }
       CGSize size = screen_points(device, NULL);
       for (int i = 0; i < n; i++) {
         CGPoint ratio = CGPointMake(xs[i] / size.width, ys[i] / size.height);
         if (!hid_send(client, touch_message(mouse, ratio, YES), err)) {
-          return 1;
+          return fail_input(err);
         }
         int wait = i == 0 ? hold_ms : step_ms;
         if (wait > 0) {
@@ -345,29 +372,30 @@ int ap_touch(const char *dev_dir, const char *udid, const double *xs, const doub
         }
       }
       CGPoint last = CGPointMake(xs[n - 1] / size.width, ys[n - 1] / size.height);
-      return hid_send(client, touch_message(mouse, last, NO), err) ? 0 : 1;
+      return hid_send(client, touch_message(mouse, last, NO), err) ? 0 : fail_input(err);
     } @catch (NSException *exception) {
       set_err(err, exception.reason);
-      return 1;
+      return fail_input(err);
     }
   }
 }
 
 int ap_button(const char *dev_dir, const char *udid, int button, char **err) {
   @autoreleasepool {
+    tl_dispatched = NO;
     @try {
       id<APSimDevice> device = find_device(dev_dir, udid, err);
       if (!device) {
-        return 1;
+        return fail_input(err);
       }
       ButtonFn make = (ButtonFn)simkit_symbol("IndigoHIDMessageForButton");
       if (!make) {
-        set_err(err, @"IndigoHIDMessageForButton is missing from SimulatorKit");
-        return 1;
+        set_unavailable(err, @"IndigoHIDMessageForButton is missing from SimulatorKit");
+        return fail_input(err);
       }
       id<APHIDClient> client = hid_client(device, @(udid), err);
       if (!client) {
-        return 1;
+        return fail_input(err);
       }
       // idb uses target 0x33. On Xcode 27.2 with iOS 27.2 only 0x32 moved the simulator (home 3 of 3, lock 1 of 1
       // plus wake worked), 0x33 had no effect. Other values may crash backboardd, so do not
@@ -376,13 +404,13 @@ int ap_button(const char *dev_dir, const char *udid, int button, char **err) {
       const char *override = getenv("TAPWING_HID_BUTTON_TARGET");
       int32_t target = override ? (int32_t)strtol(override, NULL, 0) : 0x32;
       if (!hid_send(client, make(source, 1, target), err)) {
-        return 1;
+        return fail_input(err);
       }
       usleep(80 * 1000);
-      return hid_send(client, make(source, 2, target), err) ? 0 : 1;
+      return hid_send(client, make(source, 2, target), err) ? 0 : fail_input(err);
     } @catch (NSException *exception) {
       set_err(err, exception.reason);
-      return 1;
+      return fail_input(err);
     }
   }
 }
@@ -390,30 +418,31 @@ int ap_button(const char *dev_dir, const char *udid, int button, char **err) {
 int ap_keys(const char *dev_dir, const char *udid, const uint32_t *usages,
             const uint8_t *directions, int n, char **err) {
   @autoreleasepool {
+    tl_dispatched = NO;
     @try {
       id<APSimDevice> device = find_device(dev_dir, udid, err);
       if (!device) {
-        return 1;
+        return fail_input(err);
       }
       KeyboardFn make = (KeyboardFn)simkit_symbol("IndigoHIDMessageForKeyboardArbitrary");
       if (!make) {
-        set_err(err, @"IndigoHIDMessageForKeyboardArbitrary is missing from SimulatorKit");
-        return 1;
+        set_unavailable(err, @"IndigoHIDMessageForKeyboardArbitrary is missing from SimulatorKit");
+        return fail_input(err);
       }
       id<APHIDClient> client = hid_client(device, @(udid), err);
       if (!client) {
-        return 1;
+        return fail_input(err);
       }
       for (int i = 0; i < n; i++) {
         if (!hid_send(client, make((int32_t)usages[i], directions[i]), err)) {
-          return 1;
+          return fail_input(err);
         }
         usleep(4 * 1000);
       }
       return 0;
     } @catch (NSException *exception) {
       set_err(err, exception.reason);
-      return 1;
+      return fail_input(err);
     }
   }
 }
@@ -592,7 +621,14 @@ static NSDictionary *describe_root(id<APTranslator> translator, id translation, 
     return nil;
   }
   NSMutableDictionary *tree = [describe(root, 0, st) mutableCopy];
-  tree[@"pid"] = @([(id<APTranslationObject>)translation pid]);
+  int pid = [(id<APTranslationObject>)translation pid];
+  tree[@"pid"] = @(pid);
+  // The executable name of the process, so the host can tell SpringBoard from an app without
+  // knowing any pid. Simulator processes are ordinary host processes, so this works for them.
+  char path[PROC_PIDPATHINFO_MAXSIZE];
+  if (pid > 0 && proc_pidpath(pid, path, sizeof path) > 0) {
+    tree[@"process"] = [@(path) lastPathComponent];
+  }
   return tree;
 }
 
@@ -630,8 +666,10 @@ static NSDictionary *describe_root(id<APTranslator> translator, id translation, 
       // The frontmost request sometimes gets no answer (seen with the keyboard up, and with
       // accessibility just switched on) while hit tests still work. Hit test a column of points
       // and take the process of the first answer.
-      static const double fractions[] = {0.3, 0.15, 0.5, 0.7, 0.9};
-      for (int k = 0; k < 5 && !first; k++) {
+      // With the accessibility flags at 0 only some elements answer a hit test (a SpringBoard alert
+      // does, but not the gaps between its parts), so the column is dense around the middle.
+      static const double fractions[] = {0.3, 0.15, 0.5, 0.7, 0.9, 0.36, 0.4, 0.45, 0.55, 0.58, 0.6, 0.65};
+      for (int k = 0; k < (int)(sizeof fractions / sizeof fractions[0]) && !first; k++) {
         id hit = [translator objectAtPoint:CGPointMake(self.screen.width / 2, self.screen.height * fractions[k])
                                   displayId:display_id()
                         bridgeDelegateToken:kToken];
@@ -694,11 +732,11 @@ char *ap_snapshot(const char *dev_dir, const char *udid, double timeout_s,
         return NULL;
       }
       if (![(id)device respondsToSelector:@selector(sendAccessibilityRequestAsync:completionQueue:completionHandler:)]) {
-        set_err(err, @"this CoreSimulator has no accessibility request API");
+        set_unavailable(err, @"this CoreSimulator has no accessibility request API");
         return NULL;
       }
       if (!NSClassFromString(@"AXPTranslator")) {
-        set_err(err, @"AXPTranslator is not available on this Mac");
+        set_unavailable(err, @"AXPTranslator is not available on this Mac");
         return NULL;
       }
       double timeout = timeout_s > 0 ? timeout_s : 5;

@@ -10,6 +10,8 @@
 //!
 //! * [`client`]: synchronous HTTP facade ([`IosNativeClient`]), one persistent connection.
 //! * [`hierarchy`]: `AXElement` JSON into the shared selector engine.
+//! * [`hid`]: opt-in (`TAPWING_IOS_HID=1`) in-process HID and accessibility backend that serves some
+//!   steps without the runner.
 //! * [`tapwing_driver`]: finds the runner (env override, release bundle, checkout build).
 //! * [`ops`]: Maestro-style commands (tap, assert, swipe, ...) on top of the client.
 //! * `orphans`: removes runners a hard-killed earlier run left on the simulator.
@@ -24,6 +26,7 @@
 //! [`client`]); the restart starts the same way and honours the same cancel flag.
 
 pub mod client;
+pub mod hid;
 pub mod hierarchy;
 pub mod ops;
 mod orphans;

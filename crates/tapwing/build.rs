@@ -1,4 +1,5 @@
-//! Generates the Maestro Android driver gRPC client (`maestro_android.proto`).
+//! Generates the Maestro Android driver gRPC client (`maestro_android.proto`)
+//! and, on macOS only, compiles the iOS Simulator HID and accessibility shim.
 //!
 //! Needs `protoc`: `$PROTOC` wins, then `protoc` on `PATH`, then the usual
 //! Homebrew / system locations.
@@ -22,7 +23,30 @@ fn find_protoc() -> Option<PathBuf> {
     })
 }
 
+/// Compiles `native/ios_hid/shim.m` into the binary. The shim only links public frameworks. The
+/// private ones (CoreSimulator, SimulatorKit, AccessibilityPlatformTranslation) are `dlopen`ed at
+/// run time, so the binary still starts on a Mac without Xcode. Skipped for every other target
+/// (the Rust CI job runs on Linux), where `ios_native_lane::hid` reports the backend as unavailable.
+fn build_ios_hid_shim() {
+    println!("cargo:rerun-if-changed=native/ios_hid/shim.m");
+    println!("cargo:rerun-if-changed=native/ios_hid/shim.h");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
+        return;
+    }
+    cc::Build::new()
+        .file("native/ios_hid/shim.m")
+        .include("native/ios_hid")
+        .flag("-fobjc-arc")
+        .flag("-Wno-unused-function")
+        .warnings(true)
+        .compile("tapwing_ios_hid");
+    for framework in ["Foundation", "CoreGraphics", "IOSurface", "ImageIO"] {
+        println!("cargo:rustc-link-lib=framework={framework}");
+    }
+}
+
 fn main() {
+    build_ios_hid_shim();
     println!("cargo:rerun-if-changed=proto/maestro_android.proto");
     println!("cargo:rerun-if-env-changed=PROTOC");
     let Some(protoc) = find_protoc() else {

@@ -33,6 +33,7 @@ tapwing = { path = ".", features = ["test-support"] }
 tonic = { version = "0.14.9", default-features = false, features = ["server", "router", "codegen"] }
 
 [build-dependencies]
+cc = "1.11.3"
 tonic-prost-build = "0.14.9"
 
 [target.'cfg(unix)'.dependencies]

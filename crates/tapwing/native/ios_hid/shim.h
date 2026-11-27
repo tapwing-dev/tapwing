@@ -8,6 +8,12 @@
 // simulator UDID. It returns 0 (or a non-NULL pointer) on success. On failure it sets *err to a
 // malloc'd message that the caller frees with ap_free. No Objective-C exception crosses this
 // boundary. All Apple private frameworks are loaded with dlopen at run time.
+//
+// A message starts with "[unavailable] " when this Mac or simulator cannot serve the backend at all
+// (a framework, class, selector or symbol is missing, or the device is not found or not booted).
+// Input calls (ap_touch, ap_button, ap_keys) start it with "[sent] " when a message had already been
+// handed to SimulatorKit, so the event may have reached the device. Any other message is a plain
+// failure of that one call.
 
 #pragma once
 #include <stddef.h>
@@ -35,8 +41,8 @@ typedef struct {
 
 // JSON {"roots":[tree, ...]}. Each tree node has role, subrole, roleDescription, label, title,
 // value, identifier, placeholder, help, enabled, focused, selected, frame [x, y, w, h] in screen
-// points, and children. Root nodes also carry "pid". timeout_s bounds each request to the
-// simulator and the whole walk.
+// points, and children. Root nodes also carry "pid" and "process" (the executable name of the pid).
+// timeout_s bounds each request to the simulator and the whole walk.
 char *ap_snapshot(const char *dev_dir, const char *udid, double timeout_s,
                   const ap_snapshot_opts *opts, char **err);
 

@@ -1293,6 +1293,7 @@ name = "tapwing"
 version = "0.1.1"
 dependencies = [
  "anyhow",
+ "cc",
  "clap",
  "fancy-regex",
  "hyper-util",
