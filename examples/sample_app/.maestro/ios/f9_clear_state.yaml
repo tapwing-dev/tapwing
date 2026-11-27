@@ -1,0 +1,67 @@
+# clearState really clears: a preference (NSUserDefaults through
+# shared_preferences) and a file in the documents directory written by one
+# launch are gone after a `launchApp` with `clearState: true`.
+#   tapwing test .maestro/ios/f9_clear_state.yaml --device "<udid>"
+# Tapwing empties the app's data container (the default), `--maestro-compat
+# strict` reinstalls the app like Maestro; both must pass.
+appId: dev.tapwing.sampleApp
+name: F9 Clear State
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- scrollUntilVisible:
+    element:
+      id: "nav_app_state"
+- tapOn:
+    id: "nav_app_state"
+- assertVisible: "Preference: none"
+- assertVisible: "File: none"
+- tapOn:
+    id: "state_write"
+- assertVisible: "Preference: saved-pref"
+- assertVisible: "File: saved-file"
+
+# Control: a relaunch that keeps state still sees both, so the assertions
+# below can fail.
+- launchApp
+- tapOn:
+    id: "playground_button"
+- scrollUntilVisible:
+    element:
+      id: "nav_app_state"
+- tapOn:
+    id: "nav_app_state"
+- assertVisible: "Preference: saved-pref"
+- assertVisible: "File: saved-file"
+
+# clearState removes both.
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- scrollUntilVisible:
+    element:
+      id: "nav_app_state"
+- tapOn:
+    id: "nav_app_state"
+- assertVisible: "Preference: none"
+- assertVisible: "File: none"
+
+# The hard case: clearing right after the write, before the system's
+# preferences daemon has flushed the value to disk.
+- tapOn:
+    id: "state_write"
+- assertVisible: "Preference: saved-pref"
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "playground_button"
+- scrollUntilVisible:
+    element:
+      id: "nav_app_state"
+- tapOn:
+    id: "nav_app_state"
+- assertVisible: "Preference: none"
+- assertVisible: "File: none"

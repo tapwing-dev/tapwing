@@ -2,6 +2,7 @@
 //! implementing [`FlowDriver`] and the CLI entrypoint (`run_flow`) delegating
 //! execution to [`Orchestra`].
 
+mod driver_detect;
 mod flutter_ops;
 mod hybrid;
 mod launch;
@@ -33,13 +34,14 @@ use crate::native_lane::{InputMode, NativeLaneHandle};
 use crate::orchestra::{Orchestra, OrchestraOpts};
 pub use crate::orchestra::{adjusted_timeout, is_optional, kind};
 
-pub use hybrid::{IosNativeSlot, LaneStats, flows_need_ios_native};
+pub use hybrid::{Blackbox, IosNativeSlot, LaneStats, flows_need_ios_native};
 pub use mapping::{
     IosHostKey, android_keycode, driver_selector, explain, ios_host_key, is_in_app_key, is_in_app_key_ios, is_mutating,
     scale_crop_bounds, screen_swipe_ratios, scroll_duration_ms,
 };
 
-use launch::{LaunchPlan, LaunchPlanInput, decide_launch_plan, format_blackbox_demotion_warning};
+use driver_detect::LaunchProbe;
+use launch::{DriverKnowledge, LaunchPlan, LaunchPlanInput, decide_launch_plan, format_blackbox_demotion_warning};
 
 /// Default `--settle-load-timeout-ms`; the driver's own default
 /// (`HttpTracker.defaultSettleBound`) when the host sends nothing.
@@ -130,6 +132,11 @@ pub struct Opts {
     pub app_errors: crate::app_health::AppErrorsPolicy,
     /// F8b `--trace`: enables the driver's HTTP request log (`configure` `httpLog`).
     pub trace: bool,
+    /// Real runs: probe the installed build for the driver while a launch starts
+    /// (`--input auto` only) and keep what runs learn about it in
+    /// `~/.tapwing/driver-probe.json`. Off in unit tests, which must not touch
+    /// a device or the user's home.
+    pub driver_probe: bool,
 }
 
 pub struct Session<'a> {
@@ -185,6 +192,16 @@ pub struct DeviceFlutterBackend<'a> {
     /// Apps marked black-box for this flow only (cleared on the next
     /// `launchApp` for that app unless promoted to sticky shard-wide black-box).
     pub(super) flow_blackbox_apps: HashSet<String>,
+    /// Why the flow's last `launchApp` skipped the handshake wait without
+    /// trying it (no driver in the installed build, or learned from earlier
+    /// runs); `None` for a black-box fallback that waited and timed out.
+    pub(super) blackbox_reason: Option<String>,
+    /// A probe for the next launch, instead of starting one (tests).
+    #[cfg(test)]
+    probe_override: Option<LaunchProbe>,
+    /// The cache to use instead of the user's (tests).
+    #[cfg(test)]
+    cache_override: Option<crate::driver_probe::cache::DriverCache>,
     /// Native-lane command count at the last [`FlowDriver::take_app_issues`]
     /// (native steps send no driver RPC, so issues are re-read after them).
     native_at_issue_take: u32,
@@ -204,6 +221,9 @@ pub type AndroidFlutterBackend<'a> = DeviceFlutterBackend<'a>;
 
 impl<'a> DeviceFlutterBackend<'a> {
     pub fn new(session: &'a mut Session<'_>, flow_app: String) -> Self {
+        if let Some(sim) = session.dev.as_ios() {
+            sim.set_strict_clear_state(session.opts.maestro_compat_strict);
+        }
         Self {
             dev: session.dev,
             drv: session.drv,
@@ -218,6 +238,11 @@ impl<'a> DeviceFlutterBackend<'a> {
             overlay_hint: false,
             cold_app: None,
             flow_blackbox_apps: HashSet::new(),
+            blackbox_reason: None,
+            #[cfg(test)]
+            probe_override: None,
+            #[cfg(test)]
+            cache_override: None,
             native_at_issue_take: 0,
             started: SystemTime::now(),
             intentionally_stopped_epoch: None,
@@ -326,6 +351,13 @@ impl<'a> DeviceFlutterBackend<'a> {
     pub fn ran_blackbox(&self) -> bool {
         self.is_blackbox()
     }
+
+    /// [`Self::ran_blackbox`] with, when the host knew before waiting, why (see
+    /// [`Self::launch_without_handshake`]).
+    pub fn blackbox(&self) -> Blackbox {
+        let active = self.is_blackbox();
+        Blackbox { active, reason: self.blackbox_reason.clone().filter(|_| active) }
+    }
 }
 
 impl FlowDriver for DeviceFlutterBackend<'_> {
@@ -359,6 +391,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
         // Clear any flow-scoped black-box mark so the next `launchApp` tries
         // the fast Flutter path again unless the app missed twice in a row.
         self.clear_flow_blackbox(&req.app_id);
+        self.blackbox_reason = None;
 
         let was_connected = self.drv.is_connected();
         let restarting = req.stop_app || req.clear_state || app_changed || !was_connected;
@@ -366,6 +399,9 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
         if restarting {
             self.drv.disconnect();
         }
+        // Reads the installed build for the driver while the app launches, so a build
+        // without one need not wait for a handshake that cannot come.
+        let probe = self.start_driver_probe(&req.app_id, restarting);
 
         // Orchestra.kt:1338-1340 (iOS keychain; Android has none).
         if req.clear_keychain
@@ -394,6 +430,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
             previous_pid,
             launch_pid: launch.pid,
             old_pids: &launch.old_pids,
+            driver: probe.as_ref().map_or(DriverKnowledge::NotProbed, LaunchProbe::knowledge),
         });
 
         let start_key = match platform {
@@ -406,6 +443,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
                 self.drv.disconnect();
                 self.finish_native_launch(&launch, reason)
             }
+            LaunchPlan::SkipHandshake { reason } => self.launch_without_handshake(&launch, probe.as_ref(), reason),
             LaunchPlan::AcceptHandshake { relaunched, expected_pid, reject_pids, can_fall_back, accept_timeout } => {
                 // Resolve (and cache) the iOS display name for `configure` while
                 // the app is still booting, off the accept -> configure path.
@@ -417,9 +455,21 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
                 }
 
                 let t_accept = Instant::now();
-                let outcome = match self.drv.accept_with_pid(accept_timeout, expected_pid, &reject_pids) {
-                    Ok(o) => o,
+                // While the probe still reads, the wait gives up the moment it proves there is no driver.
+                let watching = probe.as_ref().filter(|_| can_fall_back);
+                let accepted = self.drv.accept_with_pid_or_abort(accept_timeout, expected_pid, &reject_pids, || {
+                    watching.is_some_and(|p| p.skip_reason().is_some())
+                });
+                let outcome = match accepted {
+                    Ok(Some(o)) => o,
+                    Ok(None) => {
+                        let Some(reason) = watching.and_then(LaunchProbe::skip_reason) else {
+                            return Err(anyhow!("the wait for the tapwing_driver handshake was aborted"));
+                        };
+                        return self.launch_without_handshake(&launch, probe.as_ref(), reason);
+                    }
                     Err(e) if can_fall_back && !crate::interrupt::is_interrupted_error(&e) => {
+                        self.learn_missed_handshake(&req.app_id, launch.pid, probe.as_ref());
                         let demotion = self.record_handshake_miss(&req.app_id);
                         self.drv.disconnect();
                         let reason = format!("{e:#}");
@@ -457,7 +507,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
                 if hs.retries > 0 {
                     res["phases"]["handshakeRetries"] = json!(hs.retries);
                 }
-                add_unsupported_permissions_warning(&mut res, &launch.unsupported_permissions);
+                add_launch_warnings(&mut res, &launch);
                 Ok(res)
             }
             LaunchPlan::ReuseConnection => {
@@ -482,7 +532,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
                         "waitIdleMs": wait_idle_ms,
                     }
                 });
-                add_unsupported_permissions_warning(&mut res, &launch.unsupported_permissions);
+                add_launch_warnings(&mut res, &launch);
                 Ok(res)
             }
         }
@@ -959,7 +1009,7 @@ pub fn run_flow(flow: &ParsedFlow, s: &mut Session) -> (bool, Value) {
     let mut orchestra = Orchestra::new(&mut backend, opts);
     let result = orchestra.run_parsed_flow(flow);
     let lanes = backend.lane_stats();
-    let blackbox = backend.ran_blackbox();
+    let Blackbox { active: blackbox, reason: blackbox_reason } = backend.blackbox();
 
     crate::orchestra::print_prefixed(
         &prefix,
@@ -979,6 +1029,9 @@ pub fn run_flow(flow: &ParsedFlow, s: &mut Session) -> (bool, Value) {
     }
     if blackbox {
         report["blackbox"] = json!(true);
+    }
+    if let Some(reason) = blackbox_reason {
+        report["blackboxReason"] = json!(reason);
     }
     (result.success, report)
 }
@@ -1007,6 +1060,22 @@ pub fn driver_config(opts: &Opts, platform: Platform, app_name: Option<&str>) ->
     cfg["settleLoadTimeoutMs"] = Value::from(opts.settle_load.timeout_ms);
     cfg["settleHttpIgnore"] = json!(opts.settle_load.http_ignore);
     cfg
+}
+
+/// Puts what a launch could not do as asked into its result, so the report
+/// carries it and not only stderr: permissions the platform cannot set, and a
+/// `clearState` that fell back to reinstalling the app.
+pub(super) fn add_launch_warnings(res: &mut Value, launch: &crate::device::LaunchMetrics) {
+    add_unsupported_permissions_warning(res, &launch.unsupported_permissions);
+    if let Some(fallback) = &launch.clear_state_fallback {
+        // The stderr line starts with `warning: `; the report field is one already.
+        let fallback = fallback.strip_prefix("warning: ").unwrap_or(fallback);
+        res["clearStateFallback"] = Value::from(fallback);
+        res["warning"] = match res["warning"].as_str() {
+            Some(earlier) => Value::from(format!("{earlier}; {fallback}")),
+            None => Value::from(fallback),
+        };
+    }
 }
 
 pub(super) fn add_unsupported_permissions_warning(res: &mut Value, unsupported: &[String]) {
@@ -1041,6 +1110,41 @@ fn parse_android_crash_probe(output: &str, package: &str, pid: Option<i64>, elap
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_clear_state_fallback_reaches_the_launch_result_next_to_other_warnings() {
+        let launch = |unsupported: &[&str], fallback: Option<&str>| crate::device::LaunchMetrics {
+            stop_clear_ms: 0,
+            permissions_ms: 0,
+            start_ms: 0,
+            granted_permissions: 0,
+            pid: Some(1),
+            old_pids: vec![],
+            unsupported_permissions: unsupported.iter().map(|s| s.to_string()).collect(),
+            clear_state_fallback: fallback.map(str::to_string),
+        };
+        let fallback = "warning: clearState dev.example.app: could not empty the data container (denied); \
+                        reinstalling the app instead";
+
+        // Nothing to say: the result is left alone.
+        let mut res = json!({});
+        add_launch_warnings(&mut res, &launch(&[], None));
+        assert_eq!(res, json!({}));
+
+        // The fallback alone, without the stderr prefix.
+        let mut res = json!({});
+        add_launch_warnings(&mut res, &launch(&[], Some(fallback)));
+        let text = res["warning"].as_str().unwrap();
+        assert!(text.starts_with("clearState dev.example.app: could not empty"), "{text}");
+        assert_eq!(res["clearStateFallback"], res["warning"]);
+
+        // With unsupported permissions both are kept.
+        let mut res = json!({});
+        add_launch_warnings(&mut res, &launch(&["notifications"], Some(fallback)));
+        let text = res["warning"].as_str().unwrap();
+        assert!(text.contains("notifications") && text.contains("reinstalling the app instead"), "{text}");
+        assert_eq!(res["unsupportedPermissions"], json!(["notifications"]));
+    }
 
     #[test]
     fn android_crash_probe_rejects_old_crashes_and_allows_recent_ones() {
@@ -1114,6 +1218,7 @@ TAPWING_NOW:2026 11 25 13 15 00
             log_prefix: String::new(),
             app_errors: crate::app_health::AppErrorsPolicy::Report,
             trace: true,
+            driver_probe: false,
         };
         let mut session =
             Session { dev: &mut dev, drv: &mut drv, opts: &opts, units_scale: 1.0, native: None, ios_native: None };

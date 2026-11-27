@@ -16,7 +16,7 @@ use super::mapping::{
     IosHostKey, android_keycode, direction, driver_selector, in_app_key_name, ios_host_key, ios_native_key_name,
     is_in_app_key, is_in_app_key_ios, scale_crop_bounds, screen_swipe_ratios, scroll_duration_ms,
 };
-use super::{DeviceFlutterBackend, add_unsupported_permissions_warning, driver_config};
+use super::{DeviceFlutterBackend, add_launch_warnings, driver_config};
 
 /// How long the driver waits for a host-injected Back to show an effect.
 const HOST_BACK_TIMEOUT_MS: u64 = 1000;
@@ -209,7 +209,7 @@ impl DeviceFlutterBackend<'_> {
                 "nativeSettleMs": t.elapsed().as_secs_f64() * 1000.0,
             }
         });
-        add_unsupported_permissions_warning(&mut res, &launch.unsupported_permissions);
+        add_launch_warnings(&mut res, launch);
         Ok(res)
     }
 
@@ -590,6 +590,7 @@ mod tests {
             log_prefix: String::new(),
             app_errors: crate::app_health::AppErrorsPolicy::Report,
             trace: false,
+            driver_probe: false,
         }
     }
 

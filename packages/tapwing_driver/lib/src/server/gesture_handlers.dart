@@ -17,6 +17,12 @@ class GestureHandlers {
   /// Required stable frames after each `scrollUntilVisible` drag step.
   static const int _scrollStepStableFrames = 2;
 
+  /// Content speed (logical pixels per second) below which a coasting list
+  /// counts as done enough for the next intermediate `scrollUntilVisible`
+  /// swipe (5 px per frame at 60 Hz). Between swipes the tail of a fling is
+  /// not worth waiting out; the step still ends with a full settle.
+  static const double _scrollCoastVelocity = 300;
+
   /// Wall-clock duration for accelerated drags (`swipe`, `scroll`,
   /// `scrollUntilVisible`). Pointer timestamps still span the full logical
   /// `duration` so Flutter's `VelocityTracker` computes the exact same fling
@@ -203,6 +209,10 @@ class GestureHandlers {
     final Stopwatch sw = Stopwatch()..start();
     int swipes = 0;
     int retryCenterCount = 0;
+    // Whether the last intermediate wait ended while the list was still
+    // coasting, and how much of its `settleTimeout` it left unused.
+    bool leftCoastEarly = false;
+    Duration unusedSettle = Duration.zero;
 
     KNode? checkReached(Snapshot snap) {
       final KNode? match = resolve(params.selector, snap);
@@ -246,24 +256,29 @@ class GestureHandlers {
           // Ensure ballistic scroll activity (`isScrollingNotifier`) has
           // completely ended before returning, so a following `tapOn` is never
           // swallowed by `ScrollActivity.shouldIgnorePointer`.
+          //
+          // After an early exit the coast the intermediate wait did not wait
+          // out is still to come, so it gets the time that wait left unused;
+          // from the swipe on, the step waits for rest as long as it always did.
           await _context.settle(
-            params.settleTimeout,
+            params.settleTimeout + unusedSettle,
             stableFrames: _scrollStepStableFrames,
           );
-          final KNode refreshed = _reaim(
-            reached,
-            params.selector,
-            _context.captureSnapshot(),
-          );
+          final Snapshot atRest = _context.captureSnapshot();
+          // The target was seen before the coast ended; make sure it is
+          // still reached once the list has stopped, otherwise keep going.
+          if (!leftCoastEarly || checkReached(atRest) != null) {
+            return ScrollUntilVisibleResult(
+              element: _reaim(reached, params.selector, atRest),
+              swipes: swipes,
+            ).toJson();
+          }
+        } else {
           return ScrollUntilVisibleResult(
-            element: refreshed,
+            element: reached,
             swipes: swipes,
           ).toJson();
         }
-        return ScrollUntilVisibleResult(
-          element: reached,
-          swipes: swipes,
-        ).toJson();
       }
       if (swipes == 0 && !_context.idle.loadingIdle) {
         final Duration remaining = params.timeout - sw.elapsed;
@@ -305,14 +320,24 @@ class GestureHandlers {
       );
       swipes++;
       // Between intermediate swipes, waiting for the semantics hash to stabilize
-      // (2 frames) already waits for the visible fling motion while skipping the
-      // sub-pixel tail (the next pointer down catches it cleanly with < 1 px
-      // difference). Full scroll-activity settle runs before returning above.
-      await _context.settle(
+      // (2 frames) skips the sub-pixel tail of a fling, but a long low-friction
+      // coast (iOS bouncing physics) keeps the hash changing for over a second
+      // at a few pixels per frame. Once the content is observed moving slower
+      // than `_scrollCoastVelocity` the next swipe may start (the pointer down
+      // catches the list at once); the target is checked before it, and a full
+      // scroll-activity settle runs before returning above.
+      final Stopwatch waited = Stopwatch()..start();
+      final String settled = await _context.settle(
         params.settleTimeout,
         stableFrames: _scrollStepStableFrames,
         includeScrollables: false,
+        maxContentVelocity: _scrollCoastVelocity,
       );
+      leftCoastEarly = settled == 'calm';
+      unusedSettle = leftCoastEarly
+          ? params.settleTimeout - waited.elapsed
+          : Duration.zero;
+      if (unusedSettle < Duration.zero) unusedSettle = Duration.zero;
     } while (sw.elapsed < params.timeout);
 
     throw _context.elementNotFound(params.selector);

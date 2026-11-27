@@ -32,6 +32,7 @@ fn flow(name: &str, status: FlowStatus) -> FlowRunRecord {
         flutter_steps: 1,
         native_steps: 0,
         blackbox: false,
+        blackbox_reason: None,
         steps: Vec::new(),
         failure_diagnostics: None,
         raw_json: json!({ "name": name }),

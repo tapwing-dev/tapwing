@@ -29,6 +29,25 @@ Future<void> _login(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// An [AppStateStore] in memory, standing in for the platform preferences and
+/// the documents directory (`clearState` is a device-level concern).
+class _MemoryStore implements AppStateStore {
+  String? preference;
+  String? file;
+
+  @override
+  Future<String?> readPreference() async => preference;
+
+  @override
+  Future<void> writePreference(String value) async => preference = value;
+
+  @override
+  Future<String?> readFile() async => file;
+
+  @override
+  Future<void> writeFile(String value) async => file = value;
+}
+
 void main() {
   group('Login screen', () {
     testWidgets('shows the welcome text, both fields and both buttons', (
@@ -229,6 +248,7 @@ void main() {
         'Async Channel Nav',
         'Network',
         'App Health',
+        'App State',
       ]) {
         expect(find.text(entry), findsOneWidget, reason: entry);
       }
@@ -388,6 +408,63 @@ void main() {
         tester.widget<MaterialApp>(find.byType(MaterialApp)).title,
         'Tapwing Sample',
       );
+    });
+  });
+
+  group('App State', () {
+    late AppStateStore original;
+    late _MemoryStore store;
+
+    setUp(() {
+      original = appStateStore;
+      store = _MemoryStore();
+      appStateStore = store;
+    });
+    tearDown(() => appStateStore = original);
+
+    Future<void> openAppState(WidgetTester tester) async {
+      // A process start: nothing of the previous app tree is left.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpApp(tester);
+      await tester.tap(find.text('F2 Playground'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('App State'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('shows a preference and a file that start empty', (
+      WidgetTester tester,
+    ) async {
+      await openAppState(tester);
+
+      expect(find.text('Preference: none'), findsOneWidget);
+      expect(find.text('File: none'), findsOneWidget);
+    });
+
+    testWidgets('writes both, and a relaunch sees them until the state is cleared', (
+      WidgetTester tester,
+    ) async {
+      await openAppState(tester);
+      await tester.tap(find.text('Write state'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Preference: saved-pref'), findsOneWidget);
+      expect(find.text('File: saved-file'), findsOneWidget);
+      expect(store.preference, 'saved-pref');
+      expect(store.file, 'saved-file');
+
+      // A relaunch with the same store (no clearState) still shows them.
+      await openAppState(tester);
+      expect(find.text('Preference: saved-pref'), findsOneWidget);
+      expect(find.text('File: saved-file'), findsOneWidget);
+
+      // What `clearState: true` does to the device, then a relaunch.
+      store
+        ..preference = null
+        ..file = null;
+      await openAppState(tester);
+      expect(find.text('Preference: none'), findsOneWidget);
+      expect(find.text('File: none'), findsOneWidget);
     });
   });
 }

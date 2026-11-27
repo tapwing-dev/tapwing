@@ -29,7 +29,7 @@ pub(in crate::device) fn wait_with_timeout(child: &mut Child, timeout: Duration)
 }
 
 /// Single-quotes `s` for the device's `sh`.
-pub(in crate::device) fn sh_quote(s: &str) -> String {
+pub(crate) fn sh_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
@@ -76,7 +76,7 @@ where
 
 /// Package ids are interpolated into shell scripts, so only the characters
 /// Android allows in them are accepted.
-pub(super) fn validate_package_name(app_id: &str) -> Result<()> {
+pub(crate) fn validate_package_name(app_id: &str) -> Result<()> {
     if app_id.is_empty() || !app_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_') {
         bail!("invalid Android package id `{app_id}`");
     }

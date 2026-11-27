@@ -7,6 +7,7 @@ pub mod cli_args;
 pub mod device;
 pub mod driver;
 pub mod driver_bundle;
+pub(crate) mod driver_probe;
 pub mod failure;
 pub mod fake_driver;
 pub mod flow;

@@ -119,6 +119,9 @@ pub struct FlowRunRecord {
     pub flutter_steps: u32,
     pub native_steps: u32,
     pub blackbox: bool,
+    /// Why the app ran black-box without a handshake wait, when the host knew
+    /// beforehand (no driver in the installed build, or learned from earlier runs).
+    pub blackbox_reason: Option<String>,
     pub steps: Vec<StepRecord>,
     /// F8 rich failure diagnostics captured at the failing leaf step, if any.
     pub failure_diagnostics: Option<crate::failure::FailureDiagnostics>,

@@ -10,6 +10,7 @@ import 'animation_scanner.dart';
 import 'channel_tracker.dart';
 import 'http_tracker.dart';
 import 'keyboard_waiter.dart';
+import 'semantics_motion_probe.dart';
 
 /// Strategy used to decide when the UI has settled despite active tickers.
 enum SettlePolicy {
@@ -152,6 +153,7 @@ class IdleDetector {
   final Duration Function()? _nowOverride;
   final Future<void> Function(Duration timeout)? _waitForFirstFrameOverride;
   late final KeyboardWaiter _keyboardWaiter;
+  final SemanticsMotionProbe _motionProbe = SemanticsMotionProbe();
 
   final Set<Completer<void>> _frameWaiters = <Completer<void>>{};
   bool _frameCallbackScheduled = false;
@@ -344,14 +346,26 @@ class IdleDetector {
 
   /// Waits until the UI settles or [timeout] elapses.
   ///
-  /// Returns `'idle'`, `'stable'`, `'background'` (when the OS pauses or
-  /// deactivates the app, e.g. for a system permission dialog), `'cancelled'`,
-  /// or `'timeout'`.
+  /// Returns `'idle'`, `'stable'`, `'calm'`, `'background'` (when the OS
+  /// pauses or deactivates the app, e.g. for a system permission dialog),
+  /// `'cancelled'`, or `'timeout'`.
+  ///
+  /// [maxContentVelocity] (logical pixels per second) additionally lets the
+  /// wait end with `'calm'` once the semantics tree has been seen moving faster
+  /// than that and has since slowed below it for [stableFrames] rendered
+  /// frames, with nothing but geometry changing. It is for waits between two
+  /// gestures of a scroll, where the tail of a fling (an iOS bouncing fling
+  /// creeps for over a second at under a pixel per frame) is not worth
+  /// waiting out: the structural hash never looks stable while content keeps
+  /// moving. Everything else a settle waits for (loads, other animations,
+  /// keyboard, lifecycle) still applies. Without it the result is never
+  /// `'calm'`.
   Future<String> waitForIdle(
     Duration timeout, {
     SettlePolicy policy = SettlePolicy.v2,
     int? stableFrames,
     bool includeScrollables = true,
+    double? maxContentVelocity,
     bool Function()? isCancelled,
   }) async {
     final int needStable =
@@ -387,6 +401,11 @@ class IdleDetector {
 
       int? lastHash;
       int stable = 0;
+      int calm = 0;
+      bool fastSeen = false;
+      Duration? lastSampleAt;
+      int? lastContentHash;
+      _motionProbe.reset();
       double lastInset = _readBottomInset();
       _keyboardWaiter.observeBottomInset(lastInset);
 
@@ -474,21 +493,47 @@ class IdleDetector {
             final int hash = _computeSemanticsHash();
             stable = hash == lastHash ? stable + 1 : 1;
             lastHash = hash;
+            if (maxContentVelocity != null) {
+              // Observation only: how fast did the tree move since the last
+              // rendered frame (wall clock, so dropped frames and display
+              // refresh rate do not skew it).
+              final Duration sampledAt = _nowOverride?.call() ?? _clock.elapsed;
+              final SemanticsMotion? motion = _motionProbe.sample();
+              final Duration? previousAt = lastSampleAt;
+              bool quiet = false;
+              if (motion != null && previousAt != null) {
+                final double seconds =
+                    (sampledAt - previousAt).inMicroseconds / 1e6;
+                final double velocity =
+                    motion.shift /
+                    _readDevicePixelRatio() /
+                    (seconds < 0.001 ? 0.001 : seconds);
+                if (velocity > maxContentVelocity) fastSeen = true;
+                quiet =
+                    velocity <= maxContentVelocity &&
+                    motion.contentHash == lastContentHash;
+              }
+              lastSampleAt = sampledAt;
+              lastContentHash = motion?.contentHash;
+              calm = quiet && fastSeen ? calm + 1 : 0;
+            }
             // Rescan every time (never cache a blocking animation): an animation
             // inside a route that was just covered is muted by TickerMode, stays
             // "animating" forever, and must stop blocking immediately. Passing
             // `treeHash` lets endless animations (> 1.5 s with unchanged tree)
             // stop blocking settling.
-            if (stable >= needStable &&
+            final bool isStable = stable >= needStable;
+            if ((isStable || calm >= needStable) &&
                 (policy == SettlePolicy.legacy ||
                     !_animationScanner.hasSignificantAnimation(
                       treeHash: hash,
                       includeScrollables: includeScrollables,
                     ))) {
-              return 'stable';
+              return isStable ? 'stable' : 'calm';
             }
           } else {
             stable = 0;
+            calm = 0;
           }
         } else {
           // Frames are idle, but HTTP requests, platform-channel replies, or
@@ -601,6 +646,15 @@ class IdleDetector {
 
   static ui.AppLifecycleState? _defaultLifecycleState() =>
       SchedulerBinding.instance.lifecycleState;
+
+  static double _readDevicePixelRatio() {
+    final ui.PlatformDispatcher dispatcher =
+        WidgetsBinding.instance.platformDispatcher;
+    final double? ratio =
+        (dispatcher.implicitView ?? dispatcher.views.firstOrNull)
+            ?.devicePixelRatio;
+    return ratio != null && ratio > 0 ? ratio : 1.0;
+  }
 
   static double _defaultBottomInset() {
     final ui.PlatformDispatcher dispatcher =

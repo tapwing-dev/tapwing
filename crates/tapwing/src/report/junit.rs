@@ -113,6 +113,9 @@ pub fn render_junit(summary: &TestExecutionSummary) -> Result<String> {
                 if let Some(diag) = flow.failure_diagnostics.as_ref().filter(|d| !d.is_empty()) {
                     system_err_sections.push(sanitize_xml_text(&crate::failure::format_system_err(diag)));
                 }
+                if let Some(reason) = flow.blackbox_reason.as_deref().filter(|_| flow.blackbox) {
+                    system_err_sections.push(format!("Black-box: {}", sanitize_xml_text(reason)));
+                }
                 if !issue_lines.is_empty() {
                     system_err_sections.push(format!("App issues:\n{}", issue_lines.join("\n")));
                 }
@@ -205,6 +208,7 @@ mod tests {
             flutter_steps: 1,
             native_steps: 0,
             blackbox: false,
+            blackbox_reason: None,
             steps: Vec::new(),
             failure_diagnostics: None,
             raw_json: json!({}),
@@ -312,6 +316,44 @@ mod tests {
         assert!(xml.contains(
             "<system-err>App issues:\nstep 3 `tapOn &quot;Pay&quot;`: layoutOverflow: A RenderFlex overflowed by 12 pixels on the right. (×2)</system-err>"
         ), "{xml}");
+    }
+
+    #[test]
+    fn a_black_box_flow_with_a_known_reason_says_so_in_system_err_and_other_flows_stay_clean() {
+        let mut black = sample_flow("No driver", FlowStatus::Success, 1000.0);
+        black.blackbox = true;
+        black.blackbox_reason = Some("no tapwing_driver in the installed build: read <base.apk> completely".into());
+        let mut timed_out = sample_flow("Timed out", FlowStatus::Success, 1000.0);
+        timed_out.blackbox = true; // fell back after waiting: no reason known beforehand
+        let clean = sample_flow("Clean", FlowStatus::Success, 1000.0);
+        let summary = TestExecutionSummary {
+            passed: true,
+            suite_name: None,
+            input_mode: "auto".into(),
+            total_ms: 10.0,
+            utc_offset_secs: 0,
+            interrupted: None,
+            suites: vec![SuiteResult {
+                shard_index: None,
+                device_id: None,
+                device_description: None,
+                platform: "android".into(),
+                passed: true,
+                setup_ms: 1.0,
+                duration_ms: 10.0,
+                start_epoch_ms: TS_MS,
+                skipped_count: 0,
+                error: None,
+                flows: vec![black, timed_out, clean],
+            }],
+        };
+        let xml = render_junit(&summary).unwrap();
+        assert_valid_xml(&xml);
+        assert_eq!(xml.matches("<system-err>").count(), 1, "{xml}");
+        assert!(
+            xml.contains("<system-err>Black-box: no tapwing_driver in the installed build: read &lt;base.apk&gt; completely</system-err>"),
+            "{xml}"
+        );
     }
 
     #[test]

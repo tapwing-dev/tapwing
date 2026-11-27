@@ -24,7 +24,36 @@ On each step, Tapwing tries Flutter first so normal app UI stays fast. If an ele
 
 Commands that can be affected by overlays upfront (`assertNotVisible`, `back`, `scrollUntilVisible`) check window focus right away.
 
-**Apps without `tapwing_driver`.** If `launchApp` receives no driver handshake within 15 seconds (or a flow attaches to an uninstrumented app), Tapwing automatically marks that `appId` as black-box and drives it through the native lane for the rest of the run.
+**Apps without `tapwing_driver`.** If `launchApp` receives no driver handshake within 15 seconds (or a flow attaches to an uninstrumented app), Tapwing marks that `appId` as black-box for the flow and drives it through the native lane. Two misses in a row in one run make that last for the rest of the run. Most of the time Tapwing knows earlier than that, and does not wait at all (next section).
+
+## Skipping the handshake wait for a build without the driver
+
+In `--input auto`, `launchApp` looks inside the installed app while the app starts, on its own thread and with its own 5-second deadline, so an instrumented app is not slowed down. When the app provably has no driver, the 15-second wait ends at once, the flow drives the app through the native lane, and the iOS XCUITest runner starts immediately instead of after the wait. Tapwing says so on stderr:
+
+```text
+warning: launchApp com.example.app: the installed build contains no tapwing_driver (read base.apk: lib/arm64-v8a/libapp.so (7.3 MB) completely: no tapwing_driver marker); not waiting 15 s for a handshake that cannot come, driving it black-box via the native lane (pass --input flutter to wait for the driver anyway)
+```
+
+The same reason is in the reports: `blackbox: true` and `blackboxReason` on the flow in run.json and the trace, a `driverProbe` object (`verdict`, `source`, `evidence`) on the `launchApp` step, the reason next to `blackbox` in the HTML report and under `Black-box:` in the JUnit `<system-err>`.
+
+**What counts as proof.** The probe looks for the literals of the driver (`tapwing_driver_hello_v1` and the older `tapwing_port`, `TAPWING_PORT`, `TAPWING_ALLOW_RELEASE` and `package:tapwing_driver/`) in the Dart payload of the build. Dart never obfuscates string literals and compiles in only what the entrypoint reaches, so a build made from the plain `lib/main.dart` has none of them, while `lib/main_tapwing.dart` has them in debug, profile and release with `--dart-define=TAPWING_ALLOW_RELEASE=true`, with or without `--obfuscate`.
+
+| Where the payload is read | What is read |
+|---|---|
+| Android profile and release | `lib/<abi>/libapp.so`, stored uncompressed in the APK, read on the device with `unzip -p … \| grep` through adb |
+| Android debug | `assets/flutter_assets/kernel_blob.bin`, deflated in the APK, inflated on the device (about a second) |
+| Android app bundle splits | every APK `pm path` lists, so a payload in `split_config.<abi>.apk` is found |
+| Android, libraries extracted next to the APK | `<codePath>/lib/<abi>/libapp.so` in place |
+| iOS Simulator | `Frameworks/App.framework/flutter_assets/kernel_blob.bin` and `Frameworks/App.framework/App` of the installed `.app`, read by Tapwing itself |
+| Any app without the Flutter engine | none: an app with no `libflutter.so` (Android) or no `Flutter.framework` (iOS) is not a Flutter app |
+
+The verdict is **absent** only when the payload was found, read completely (the byte count must match the file) and holds none of those literals. A marker anywhere is **present**. Everything else is **unknown** and behaves exactly as before, with the 15-second wait: a payload that could not be found or read in full, a split or listing the device would not give, `unzip` or `grep` missing on the device, a deferred Dart component, more than 128 MB of payload, a deadline, or any error. A wrong "present" only costs the old wait. A release build of `main_tapwing.dart` without `TAPWING_ALLOW_RELEASE` still links the driver package without its dial path, so it is judged present and waits as before (the driver itself prints that it is disabled).
+
+On `emulator-5554` (Android 15, profile APK) a plain build's `launchApp` went from 15.4 s to 1.8 s (median of 5, alternating runs); on an iPhone 18 Pro simulator (debug build) from 20.2 s to 3.9 s. A build with the driver is not slowed: the same flows show no measurable change.
+
+`--input flutter` never probes and never skips: it is how you insist on the driver. `--input native` never reaches the driver at all. Set `TAPWING_DEBUG=1` to print each verdict with the time it took.
+
+**What runs remember.** Verdicts and handshake misses are kept per device, app id and install in `~/.tapwing/driver-probe.json` (written atomically, at most 256 entries, entries older than 90 days dropped; a missing or corrupt file is ignored and rewritten, so deleting it is always safe). The install is identified on Android by the path, size and modification time of every APK (the path changes with every `adb install`), on iOS by the code-signature resource lists of the bundle, which depend on its content only and so survive `clearState`. A rebuilt app is a new install and is read again. When a build cannot be read, Tapwing also counts the launches that waited the full 15 seconds with the app still running (a crashing or never-started app is not counted) and got no handshake. After two in a row it stops waiting for that install and says so, until a handshake clears the count or a week has passed. The count is never acted on for a build the probe could show to dial in.
 
 ## Android and iOS Simulator drivers
 
@@ -61,8 +90,9 @@ Mock-location providers created by `setLocation` or `travel` on Android are clea
 | `TAPWING_NATIVE_STARTUP_TIMEOUT_MS` | `20000` | Android native driver startup timeout (ms) |
 | `TAPWING_IOS_NATIVE_STARTUP_TIMEOUT_MS` | `60000` | iOS XCUITest runner startup timeout (ms) |
 | `TAPWING_NATIVE_RESTART_TIMEOUT_MS` | `30000` | How long one Android driver restart may take, including the wait for a device to return after a disconnect (ms) |
+| `TAPWING_DEBUG` | unset | Any value but empty or `0` logs which native driver each lane uses and each driver-probe verdict with its duration |
 | `TAPWING_NATIVE_RESTART_BUDGET_MS` | twice the restart timeout | How long all Android driver restarts of one run may take together (ms) |
 
-In JSON reports (`--report`), each flow records its `lane` (`flutter`, `native`, or `hybrid`), per-lane command counts (`laneStats`), `blackbox: true` when no in-app driver connected, and `coldStartRetries` if any occurred.
+In JSON reports (`--report`), each flow records its `lane` (`flutter`, `native`, or `hybrid`), per-lane command counts (`laneStats`), `blackbox: true` when no in-app driver connected (with `blackboxReason` when Tapwing knew before waiting), and `coldStartRetries` if any occurred.
 
 *Note:* `--native-driver` and `tapwing.nativeDriver` in `config.yaml` are deprecated no-ops. Tapwing always uses its own native drivers.

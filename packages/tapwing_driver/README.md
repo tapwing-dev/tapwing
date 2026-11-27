@@ -73,6 +73,7 @@ lib/
     │   ├── channel_tracker.dart        Pending non-system BinaryMessenger reply tracker (with safety cap)
     │   ├── http_tracker.dart           HttpOverrides wrapper tracking in-flight dart:io requests (+ F8b request log)
     │   ├── keyboard_waiter.dart        Soft-keyboard viewInsets transition wait & deduplication
+    │   ├── semantics_motion_probe.dart How far the semantics tree moved between two frames (read-only)
     │   └── idle_detector.dart          SettlePolicy, BusyReport, frame/loading/animation settle loop
     ├── input/
     │   ├── pointer_input.dart          Engine-boundary tap, drag, and back injection
@@ -145,6 +146,8 @@ For `tapwing test --trace` ([PLAN.md §8.4](../../PLAN.md#84-f8b-trace-viewer)),
    - **`SettlePolicy.v2` (default):** requires **3** consecutive identical hashes (counter starts at `1` on change) **and** no non-infinite significant animation or active scroll (`ScrollableState.position.isScrollingNotifier`) covering `>= 2 %` of the screen. Static animations (`AlwaysStoppedAnimation`, stopped mid-range `AnimationController`s, and `CurvedAnimation`/`ProxyAnimation`/`Tween` wrappers around them) are ignored. The element tree is rescanned on every check (never cached) so animations inside newly covered `TickerMode(enabled: false)` routes stop blocking immediately. Any animation/scroll that keeps running continuously for `>= 1500 ms` with an unchanged semantics tree is classified `infinite: true` (non-blocking) until it stops animating, preventing endless large animations from hitting the 3 s settle timeout on every command.
    - **`SettlePolicy.legacy`:** requires **8** consecutive identical hashes without animation scanning.
 5. **Loading wait:** When frames are idle but HTTP requests, non-system platform-channel calls (`ChannelTracker`, excluding `flutter/*` and capped at 10 s per call), or images are still pending, wakes immediately when `HttpTracker` or `ChannelTracker` drains to zero (or polls every 4 ms for pending images). The HTTP wait also wakes when the last blocking request reaches the load bound.
+
+**Between the swipes of `scrollUntilVisible`** the settle may also return `'calm'` (it never does elsewhere). A long low-friction coast (iOS bouncing physics) moves the content by a few pixels per frame for over a second, so the rounded hash keeps changing and the wait runs into its cap after every swipe. `SemanticsMotionProbe` samples the semantics tree on each rendered frame and measures how far any node moved (wall clock, so refresh rate and dropped frames do not skew it); once the content has been seen moving faster than 300 logical px/s and has slowed below it for the stable frame count, with nothing but geometry changing (loads, keyboard and non-scroll animations are still waited for as usual), the next swipe may start. The pointer-down catches the list at once. The target is checked before every swipe as before; once it is found the full settle runs as before (including active scrolls) with the time the early exit left unused added to its timeout, and the target is checked again at rest before the step returns. Reads the semantics tree only; no scroll controller is read or driven.
 
 ### Bounded loads
 

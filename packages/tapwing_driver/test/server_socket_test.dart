@@ -59,6 +59,7 @@ class _ProbeIdleDetector extends IdleDetector {
     SettlePolicy policy = SettlePolicy.v2,
     int? stableFrames,
     bool includeScrollables = true,
+    double? maxContentVelocity,
     bool Function()? isCancelled,
   }) async {
     final String result = await super.waitForIdle(
@@ -66,6 +67,7 @@ class _ProbeIdleDetector extends IdleDetector {
       policy: policy,
       stableFrames: stableFrames,
       includeScrollables: includeScrollables,
+      maxContentVelocity: maxContentVelocity,
       isCancelled: isCancelled,
     );
     results.add(result);

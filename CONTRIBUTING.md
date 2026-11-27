@@ -6,7 +6,7 @@ Everything you need to build Tapwing from source and run its tests. For what Tap
 
 | Path | What lives there |
 |---|---|
-| `crates/tapwing` | The Rust CLI and library: `init/`, flow parser (`flow/`), workspace and sharding planners (`workspace/`, `shard.rs`), orchestrator (`orchestra.rs`), QuickJS-ng engine (`js.rs`), driver trait and `FakeDriver` (`backend.rs`, `fake_driver.rs`), device backends (`device/`: adb client, Android host commands, iOS Simulator over `simctl`), native lanes (`native_lane/` for Android, `ios_native_lane/` for iOS), the hybrid and multi-shard runner (`run/`, `driver.rs`), reports (`report/`), app health (`app_health.rs`), failure diagnostics (`failure.rs`) and the trace viewer (`trace/`) |
+| `crates/tapwing` | The Rust CLI and library: `init/`, flow parser (`flow/`), workspace and sharding planners (`workspace/`, `shard.rs`), orchestrator (`orchestra.rs`), QuickJS-ng engine (`js.rs`), driver trait and `FakeDriver` (`backend.rs`, `fake_driver.rs`), device backends (`device/`: adb client, Android host commands, iOS Simulator over `simctl`), native lanes (`native_lane/` for Android, `ios_native_lane/` for iOS), the driver probe that tells before `launchApp` whether the installed build holds the driver (`driver_probe/`), the hybrid and multi-shard runner (`run/`, `driver.rs`), reports (`report/`), app health (`app_health.rs`), failure diagnostics (`failure.rs`) and the trace viewer (`trace/`) |
 | `packages/tapwing_driver` | The in-app Dart driver: Semantics tree snapshot, Maestro selector engine, idle detector, input injection. See its [README](packages/tapwing_driver/README.md) |
 | `drivers/` | Tapwing's own native drivers: the Android UiAutomator APK ([drivers/android](drivers/android/README.md)) and the iOS Simulator XCUITest runner ([drivers/ios](drivers/ios/README.md)) |
 | `compat/` | Parser compatibility suite: 463 Maestro fixtures and 81 custom probes with their reference Maestro IR. See [compat/README.md](compat/README.md) |
@@ -66,7 +66,7 @@ scripts/test-dist.sh
 
 | Suite | Where | What it guards |
 |---|---|---|
-| Unit tests | `crates/tapwing/src/**` (`#[cfg(test)]`) | Driver connection and reconnect handling, the `launchApp` / `setPermissions` scripts and the Android native-lane startup against a fake ADB server (`device/adb_client/fake.rs`; every script is parsed with `sh -n` and run under the host `sh` with stubbed device commands), driver artifact discovery and SHA-256 checks, reports, trace redaction, planners |
+| Unit tests | `crates/tapwing/src/**` (`#[cfg(test)]`) | Driver connection and reconnect handling, the `launchApp` / `setPermissions` scripts, the driver-probe scripts and the Android native-lane startup against a fake ADB server (`device/adb_client/fake.rs`; every script is parsed with `sh -n` and run under the host `sh` with stubbed device commands, the probe's over real zip fixtures with the host's `unzip` and `grep`), driver artifact discovery and SHA-256 checks, reports, trace redaction, planners |
 | CLI end-to-end | `crates/tapwing/tests/cli_e2e.rs` | The compiled `tapwing` binary: `--version`/`--help`, `check`, `init`, `test` argument validation, exit codes and messages |
 | Integration | `crates/tapwing/tests/*.rs` | Parser parity with Maestro (`compat`), workspace planner, sharding, reports (`report_edge_cases`), app health, failure reports, trace, `init` |
 | Dart driver | `packages/tapwing_driver/test` | Selector engine, snapshot semantics, RPC protocol and error wire format, idle detection, input injection |

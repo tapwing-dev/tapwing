@@ -125,6 +125,17 @@ impl IosNativeSlot {
         }
     }
 
+    /// Takes over a lane that was started elsewhere (the driver probe starts
+    /// the runner the moment it proves the app has no driver) while the slot is
+    /// still lazy, keeping the handshake-miss counts. A slot that is already
+    /// started keeps its own lane and the spare is dropped, which stops it.
+    pub fn adopt(&mut self, mut handle: IosNativeLaneHandle) {
+        if let Self::Lazy { blackbox, .. } = self {
+            handle.set_blackbox_tracker(std::mem::take(blackbox));
+            *self = Self::Started(handle);
+        }
+    }
+
     pub fn ensure_started(&mut self) -> &mut IosNativeLaneHandle {
         if let Self::Lazy { udid, blackbox } = self {
             let mut handle = IosNativeLaneHandle::spawn(udid);
@@ -315,6 +326,14 @@ impl LaneStats {
     }
 }
 
+/// Whether a flow ran its app black-box (no `tapwing_driver` handshake), and
+/// why when the host knew before waiting for one.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Blackbox {
+    pub active: bool,
+    pub reason: Option<String>,
+}
+
 /// Error raised by [`DeviceFlutterBackend::ensure_connected`] when a step runs
 /// without an active `tapwing_driver` connection (e.g. a flow starting without
 /// `launchApp` on an uninstrumented or external app).
@@ -446,6 +465,7 @@ impl DeviceFlutterBackend<'_> {
     /// counter after a healthy Flutter handshake.
     pub(super) fn record_handshake_success(&mut self, app_id: &str) {
         self.clear_flow_blackbox(app_id);
+        self.forget_learned_misses(app_id);
         match self.platform() {
             Platform::Android => {
                 if let Some(n) = self.native.as_deref_mut() {
@@ -1150,7 +1170,7 @@ fn wait_on_flutter_while_warming<C, T>(
 }
 
 #[cfg(test)]
-mod tests {
+pub(in crate::run) mod tests {
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
@@ -1161,7 +1181,7 @@ mod tests {
     use crate::driver::Driver;
     use crate::run::{Opts, Session};
 
-    fn test_opts(mode: InputMode) -> Opts {
+    pub(in crate::run) fn test_opts(mode: InputMode) -> Opts {
         Opts {
             settle_policy: "v2".into(),
             check_settle: false,
@@ -1177,6 +1197,7 @@ mod tests {
             log_prefix: String::new(),
             app_errors: crate::app_health::AppErrorsPolicy::Report,
             trace: false,
+            driver_probe: false,
         }
     }
 
@@ -1699,7 +1720,7 @@ mod tests {
         thread: std::thread::JoinHandle<()>,
     }
 
-    fn serve_static_native(
+    pub(in crate::run) fn serve_static_native(
         xml: &str,
     ) -> (NativeLaneHandle, tokio::sync::oneshot::Sender<()>, std::thread::JoinHandle<()>) {
         let srv = serve_static_native_recording(xml);
@@ -1750,6 +1771,7 @@ mod tests {
             old_pids: vec![],
             granted_permissions: 0,
             unsupported_permissions: vec![],
+            clear_state_fallback: None,
             stop_clear_ms: 0,
             permissions_ms: 0,
             start_ms: 1,

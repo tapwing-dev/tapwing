@@ -214,16 +214,21 @@ class DriverContext {
   /// Waits for the UI to settle under the current [settlePolicy], then
   /// records layout overflows visible on the settled screen (profile and
   /// release builds; debug builds report them through `FlutterError`).
+  ///
+  /// [maxContentVelocity] is forwarded to [IdleDetector.waitForIdle]; only the
+  /// wait between two gestures of a scroll sets it.
   Future<String> settle(
     Duration timeout, {
     int? stableFrames,
     bool includeScrollables = true,
+    double? maxContentVelocity,
   }) async {
     final String result = await idle.waitForIdle(
       timeout,
       policy: settlePolicy,
       stableFrames: stableFrames,
       includeScrollables: includeScrollables,
+      maxContentVelocity: maxContentVelocity,
       isCancelled: isCancelled,
     );
     errorHooks.scanOverflows();

@@ -163,6 +163,10 @@ void main() {
         expect(helloParams['protocol'], 1);
         expect(helloParams['screen'], <double>[1080, 2400]);
         expect(helloParams['dpr'], 2.625);
+        // The host reads this literal from the installed build, see
+        // `driverProbeMarker`; changing it needs a matching host release.
+        expect(helloParams['driver'], 'tapwing_driver_hello_v1');
+        expect(driverProbeMarker, 'tapwing_driver_hello_v1');
 
         final Map<String, Object?> notFound = DriverError.elementNotFound(
           Selector(text: 'Missing'),

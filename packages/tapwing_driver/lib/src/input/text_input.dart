@@ -15,7 +15,8 @@ import 'back_signals.dart';
 /// (`TextInputClient.updateEditingState` or
 /// `TextInputClient.updateEditingStateWithDeltas` when `enableDeltaModel` is
 /// configured) so `TextInputFormatter`s and `onChanged` callbacks run normally,
-/// and mirrored to the native IME via `TextInput.setEditingState`.
+/// and mirrored to the native IME with one `TextInput.setEditingState` when
+/// [type] or [erase] finishes.
 class TextInputController {
   /// Creates a controller with its own diagnostic [log].
   TextInputController({TextInputLog? log}) : log = log ?? TextInputLog();
@@ -154,34 +155,52 @@ class TextInputController {
   /// Types [text] one Unicode rune at a time at the current selection.
   ///
   /// Yields a zero-duration timer after each rune so per-character formatters
-  /// and listeners observe each edit sequentially.
+  /// and listeners observe each edit sequentially. The native IME is told the
+  /// final state once at the end, not after every rune: the engine handles that
+  /// message on the platform thread, so a message per rune delays every yield.
   Future<void> type(String text) async {
-    for (final int rune in text.runes) {
-      _replaceSelection(String.fromCharCode(rune));
-      await Future<void>.delayed(Duration.zero);
+    final int? client = _clientId;
+    bool edited = false;
+    try {
+      for (final int rune in text.runes) {
+        _replaceSelection(String.fromCharCode(rune));
+        edited = true;
+        await Future<void>.delayed(Duration.zero);
+      }
+    } finally {
+      if (edited) _syncEngine(client);
     }
   }
 
   /// Deletes backward [count] times from the current selection (Maestro
   /// `eraseText`), stepping cleanly over UTF-16 surrogate pairs.
+  ///
+  /// Like [type], tells the native IME the final state once at the end.
   Future<void> erase(int count) async {
-    for (int i = 0; i < count; i++) {
-      final Map<String, Object?> state = _requireState();
-      final String text = (state['text'] as String?) ?? '';
-      final (int start, int end) = _normalizedSelection(state, text.length);
-      if (start == end && start == 0) return;
-      final int from = start == end
-          ? _prevCodePointBoundary(text, start)
-          : start;
-      _commit(
-        oldText: text,
-        deltaText: '',
-        deltaStart: from,
-        deltaEnd: end,
-        newText: text.replaceRange(from, end, ''),
-        cursor: from,
-      );
-      await Future<void>.delayed(Duration.zero);
+    final int? client = _clientId;
+    bool edited = false;
+    try {
+      for (int i = 0; i < count; i++) {
+        final Map<String, Object?> state = _requireState();
+        final String text = (state['text'] as String?) ?? '';
+        final (int start, int end) = _normalizedSelection(state, text.length);
+        if (start == end && start == 0) return;
+        final int from = start == end
+            ? _prevCodePointBoundary(text, start)
+            : start;
+        _commit(
+          oldText: text,
+          deltaText: '',
+          deltaStart: from,
+          deltaEnd: end,
+          newText: text.replaceRange(from, end, ''),
+          cursor: from,
+        );
+        edited = true;
+        await Future<void>.delayed(Duration.zero);
+      }
+    } finally {
+      if (edited) _syncEngine(client);
     }
   }
 
@@ -312,12 +331,23 @@ class TextInputController {
       const JSONMethodCodec().encodeMethodCall(clientCall),
       (ByteData? _) {},
     );
-    // Keep the native IME's model in sync, as the framework does after a
-    // programmatic editing change.
+  }
+
+  /// Keeps the native IME's model in sync with the edits [type] or [erase]
+  /// made, as the framework does after a programmatic editing change.
+  ///
+  /// Sends [_editingState], not the last value this controller committed: when
+  /// an input formatter rewrote a keystroke the framework already told the
+  /// platform the rewritten value (observed in [onOutgoing]), and that is the
+  /// one the IME must end with. Nothing is sent when the field the edits went
+  /// to is gone.
+  void _syncEngine(int? client) {
+    final Map<String, Object?>? state = _editingState;
+    if (client == null || client != _clientId || state == null) return;
     _engine?.send(
       SystemChannels.textInput.name,
       const JSONMethodCodec().encodeMethodCall(
-        MethodCall('TextInput.setEditingState', value),
+        MethodCall('TextInput.setEditingState', state),
       ),
     );
   }

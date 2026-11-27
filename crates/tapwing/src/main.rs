@@ -22,7 +22,8 @@ use tapwing::workspace;
 enum MaestroCompat {
     /// Maestro semantics, except platform bugs Tapwing fixes with a warning.
     Default,
-    /// Also emulate Maestro bugs (iOS `hideKeyboard` failing on a focused field).
+    /// Also emulate what Tapwing changes on purpose (iOS `hideKeyboard` failing on a focused
+    /// field, iOS Simulator `clearState` reinstalling the app).
     Strict,
 }
 
@@ -135,7 +136,8 @@ struct TestArgs {
     /// Fail `inputText`/`eraseText` when no text field is focused.
     #[arg(long)]
     strict_input: bool,
-    /// `strict` also reproduces Maestro bugs that Tapwing otherwise fixes with a warning.
+    /// `strict` also reproduces Maestro behavior that Tapwing otherwise changes (a warning for bugs, a faster
+    /// `clearState` on the iOS Simulator).
     #[arg(long, value_enum, default_value = "default")]
     maestro_compat: MaestroCompat,
     /// Which lane drives the UI (`auto`, `flutter`, `native`).
@@ -440,6 +442,7 @@ fn run(cli: Cli) -> Result<bool> {
                 log_prefix: String::new(),
                 app_errors: tapwing::app_health::AppErrorsPolicy::Off,
                 trace: false,
+                driver_probe: false,
             };
             drv.call("configure", run::driver_config(&opts, dev.platform(), app_name.as_deref()))?;
             let snap = drv.call("snapshot", json!({}))?;

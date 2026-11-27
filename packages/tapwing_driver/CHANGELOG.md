@@ -1,5 +1,7 @@
 ## Unreleased
 
+* The `hello` event carries `driver: tapwing_driver_hello_v1`. `tapwing test` looks for that literal (and the driver's older strings) in the installed app to skip the 15 s handshake wait for a build without the driver; it exists only in builds where the driver starts.
+* `scrollUntilVisible` no longer waits out the whole coast of a long fling between swipes: the next swipe starts once the content, observed through the semantics tree, moves slower than 300 logical px/s. On the iOS Simulator (`BouncingScrollPhysics`) the wait between swipes used to run into the 1.5 s settle cap every time. The target is still checked before every swipe, the step still ends with a full settle, and the target is checked again at rest. The number of swipes can differ.
 * Settle no longer waits without limit for a single HTTP request or pending image: each counts as busy for at most 5 s (`configure` `settleLoadTimeoutMs`, `0` = no bound), and requests whose URL matches `configure` `settleHttpIgnore` never count. Both stay in the HTTP request log.
 
 ## 0.1.1

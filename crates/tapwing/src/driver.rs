@@ -222,6 +222,12 @@ impl Driver {
         self.liveness = Some(probe);
     }
 
+    /// Whether the app process `pid` is alive according to the installed
+    /// liveness probe: `None` when there is none or it cannot tell.
+    pub fn process_alive(&mut self, pid: i64) -> Option<bool> {
+        self.liveness.as_mut().and_then(|probe| probe(pid))
+    }
+
     /// PID reported by the most recently accepted `hello`, if any.
     pub fn last_pid(&self) -> Option<i64> {
         self.last_pid
@@ -278,15 +284,36 @@ impl Driver {
         expected_pid: Option<i64>,
         reject_pids: &[i64],
     ) -> Result<AcceptOutcome> {
+        match self.accept_with_pid_or_abort(timeout, expected_pid, reject_pids, || false)? {
+            Some(outcome) => Ok(outcome),
+            None => bail!("the wait for the app's hello was aborted"),
+        }
+    }
+
+    /// [`Self::accept_with_pid`] that stops waiting, with `Ok(None)`, as soon as
+    /// `abort` returns `true` (checked every poll step, at most 10 ms apart). A
+    /// hello that arrives first still wins: after the abort fires the sockets
+    /// are read once more, and the wait only ends if that finds none.
+    pub fn accept_with_pid_or_abort(
+        &mut self,
+        timeout: Duration,
+        expected_pid: Option<i64>,
+        reject_pids: &[i64],
+        mut abort: impl FnMut() -> bool,
+    ) -> Result<Option<AcceptOutcome>> {
         let started = Instant::now();
         let deadline = started + timeout;
         let mut pending: Vec<PendingConn> = Vec::new();
         let mut rejected_connections = 0usize;
+        // Set once `abort` fired: the sockets get one last look before the wait
+        // ends, so a hello that arrived between the previous look and the abort
+        // is not thrown away.
+        let mut aborting = false;
 
         loop {
             crate::interrupt::check()?;
             let now = Instant::now();
-            if now > deadline {
+            if now > deadline && !aborting {
                 bail!("app did not connect within {} ms (is tapwing_driver in the build?)", timeout.as_millis());
             }
 
@@ -372,7 +399,7 @@ impl Driver {
                 if let Some(hello) = accepted_hello {
                     // Remaining pending sockets are stale/extra; drop them.
                     rejected_connections += pending.len();
-                    return Ok(AcceptOutcome { hello, rejected_connections });
+                    return Ok(Some(AcceptOutcome { hello, rejected_connections }));
                 }
 
                 if drop_conn {
@@ -381,6 +408,14 @@ impl Driver {
                 } else {
                     idx += 1;
                 }
+            }
+
+            if aborting {
+                return Ok(None);
+            }
+            if abort() {
+                aborting = true;
+                continue;
             }
 
             // Keep 1 ms responsiveness during the initial fast-connect window,
@@ -936,6 +971,63 @@ mod tests {
         drv.poll_issues();
         assert!(drv.poll_http().is_empty());
         drv.disconnect();
+    }
+
+    #[test]
+    fn an_abort_ends_the_wait_at_once_and_only_when_no_hello_arrived_first() {
+        // Nothing dials in: the wait ends as soon as the abort fires, not at the timeout.
+        let mut drv = Driver::listen(0).unwrap();
+        let polls = std::cell::Cell::new(0u32);
+        let t0 = Instant::now();
+        let outcome = drv
+            .accept_with_pid_or_abort(Duration::from_secs(30), None, &[], || {
+                polls.set(polls.get() + 1);
+                polls.get() >= 5
+            })
+            .unwrap();
+        assert!(outcome.is_none());
+        assert!(t0.elapsed() < Duration::from_secs(2), "{:?}", t0.elapsed());
+        assert_eq!(polls.get(), 5, "checked on every poll step");
+        assert!(!drv.is_connected());
+
+        // A hello that is already there wins over an abort that is true from the start.
+        let mut drv = Driver::listen(0).unwrap();
+        let port = drv.port().unwrap();
+        let mut app = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        writeln!(app, r#"{{"event":"hello","params":{{"protocol":1,"pid":77}}}}"#).unwrap();
+        app.flush().unwrap();
+        let outcome = drv
+            .accept_with_pid_or_abort(Duration::from_secs(5), Some(77), &[], || {
+                // Let the hello reach the socket after the first look at it: the
+                // last look, after the abort, must still find it.
+                std::thread::sleep(Duration::from_millis(30));
+                true
+            })
+            .unwrap();
+        assert!(outcome.is_some(), "the abort fired but the hello had arrived");
+        assert!(drv.is_connected());
+    }
+
+    #[test]
+    fn without_an_abort_the_wait_still_ends_at_its_timeout() {
+        let mut drv = Driver::listen(0).unwrap();
+        let err = drv.accept_with_pid_or_abort(Duration::from_millis(50), None, &[], || false).unwrap_err();
+        assert!(err.to_string().contains("did not connect within 50 ms"), "{err:#}");
+    }
+
+    #[test]
+    fn process_alive_asks_the_installed_probe_and_says_nothing_without_one() {
+        let mut drv = Driver::listen(0).unwrap();
+        assert_eq!(drv.process_alive(10), None);
+        drv.set_liveness_probe(Box::new(|pid| match pid {
+            10 => Some(true),
+            11 => Some(false),
+            _ => None,
+        }));
+        assert_eq!(
+            (drv.process_alive(10), drv.process_alive(11), drv.process_alive(12)),
+            (Some(true), Some(false), None)
+        );
     }
 
     #[test]

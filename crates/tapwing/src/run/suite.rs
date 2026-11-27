@@ -24,7 +24,7 @@ use crate::native_lane::{InputMode, NativeLaneHandle};
 use crate::orchestra::{Orchestra, OrchestraOpts, print_prefixed};
 use crate::report::{self, FlowRunRecord, FlowStatus, ReportFormat, StepRecord, SuiteResult, TestExecutionSummary};
 use crate::run::shard_outcome::{self, ReportSinks, ShardMeta, UnrunFlow, panic_message, unrun_flow_record};
-use crate::run::{DeviceFlutterBackend, IosNativeSlot, LaneStats, Opts, Session, flows_need_ios_native};
+use crate::run::{Blackbox, DeviceFlutterBackend, IosNativeSlot, LaneStats, Opts, Session, flows_need_ios_native};
 use crate::shard::{self, ShardPlan};
 use crate::workspace::{self, ExecutionPlan};
 
@@ -84,7 +84,7 @@ pub fn execute_shard_with_driver<D, F>(
 ) -> SuiteResult
 where
     D: FlowDriver,
-    F: FnMut(&ParsedFlow, OrchestraOpts) -> (crate::orchestra::FlowResult, LaneStats, bool),
+    F: FnMut(&ParsedFlow, OrchestraOpts) -> (crate::orchestra::FlowResult, LaneStats, Blackbox),
 {
     let target = ShardTarget { device_id, device_description, platform_name, setup_ms };
     execute_shard(shard_plan, base_opts, &target, run_one, crate::interrupt::is_interrupted)
@@ -108,7 +108,7 @@ pub(crate) fn execute_shard<F, I>(
     is_interrupted: I,
 ) -> SuiteResult
 where
-    F: FnMut(&ParsedFlow, OrchestraOpts) -> (crate::orchestra::FlowResult, LaneStats, bool),
+    F: FnMut(&ParsedFlow, OrchestraOpts) -> (crate::orchestra::FlowResult, LaneStats, Blackbox),
     I: Fn() -> bool,
 {
     let suite_start_epoch_ms = now_epoch_ms();
@@ -213,7 +213,7 @@ pub fn execute_shard_on_fake_driver(
             let mut orchestra = Orchestra::new(driver, opts);
             let res = orchestra.run_parsed_flow(flow);
             let steps_len = res.steps.len() as u32;
-            (res, LaneStats { flutter: steps_len, native: 0, ..Default::default() }, false)
+            (res, LaneStats { flutter: steps_len, native: 0, ..Default::default() }, Blackbox::default())
         },
     )
 }
@@ -227,7 +227,7 @@ fn execute_single_flow<F>(
     run_one: &mut F,
 ) -> Result<FlowRunRecord, String>
 where
-    F: FnMut(&ParsedFlow, OrchestraOpts) -> (crate::orchestra::FlowResult, LaneStats, bool),
+    F: FnMut(&ParsedFlow, OrchestraOpts) -> (crate::orchestra::FlowResult, LaneStats, Blackbox),
 {
     let name = workspace::flow_name(flow);
     if base_opts.print_progress {
@@ -292,7 +292,7 @@ pub(crate) fn build_flow_record(
     start_epoch_ms: u64,
     settle_policy: &str,
     lanes: LaneStats,
-    blackbox: bool,
+    blackbox: Blackbox,
 ) -> FlowRunRecord {
     // A flow cut short by SIGINT/SIGTERM is not a test failure: it gets its own
     // status even when a child process (`adb`, `iproxy`, `xcrun`) died from the
@@ -309,8 +309,11 @@ pub(crate) fn build_flow_record(
     if lanes.cold_start_retries > 0 {
         raw_json["coldStartRetries"] = json!(lanes.cold_start_retries);
     }
-    if blackbox {
+    if blackbox.active {
         raw_json["blackbox"] = json!(true);
+    }
+    if let Some(reason) = &blackbox.reason {
+        raw_json["blackboxReason"] = json!(reason);
     }
 
     let steps: Vec<StepRecord> = result
@@ -377,7 +380,8 @@ pub(crate) fn build_flow_record(
         lane: lanes.lane_name().to_string(),
         flutter_steps: lanes.flutter,
         native_steps: lanes.native,
-        blackbox,
+        blackbox: blackbox.active,
+        blackbox_reason: blackbox.reason,
         steps,
         failure_diagnostics,
         raw_json,
@@ -634,6 +638,7 @@ fn run_device_shard(
         log_prefix: prefix.clone(),
         app_errors: settings.app_health.policy,
         trace: settings.trace.is_some(),
+        driver_probe: true,
     };
 
     let setup_ms = t0.elapsed().as_secs_f64() * 1000.0;
@@ -681,7 +686,7 @@ fn run_device_shard(
             let mut backend = DeviceFlutterBackend::new(&mut session, flow.app_id().to_string());
             let mut orchestra = Orchestra::new(&mut backend, orch_opts);
             let res = orchestra.run_parsed_flow(flow);
-            (res, backend.lane_stats(), backend.ran_blackbox())
+            (res, backend.lane_stats(), backend.blackbox())
         },
     ))
 }
@@ -830,7 +835,7 @@ mod tests {
             1_700_000_000_000,
             "v2",
             LaneStats { flutter: 1, native: 0, cold_start_retries: 0 },
-            false,
+            Blackbox::default(),
         );
         let retried = build_flow_record(
             &flow,
@@ -839,7 +844,7 @@ mod tests {
             1_700_000_000_000,
             "v2",
             LaneStats { flutter: 1, native: 1, cold_start_retries: 2 },
-            false,
+            Blackbox::default(),
         );
 
         assert!(clean.raw_json.get("coldStartRetries").is_none(), "omitted when 0");
