@@ -1,0 +1,119 @@
+{
+  "platform": "ios",
+  "inputMode": "native",
+  "setupMs": 17.759125,
+  "flows": [
+    {
+      "flow": "F5 iOS Permission Dialog",
+      "path": "/Users/me/Development/Flutter/tapwing/bench/results/ios-hid-spike/flows/f5_cs_lazy.yaml",
+      "status": "passed",
+      "totalMs": 6321.799417,
+      "settlePolicy": "v2",
+      "settleViolations": 0,
+      "js": {
+        "runtimeInitialized": false,
+        "evalCount": 0,
+        "fastPathHits": 0,
+        "cacheHits": 0,
+        "evalMs": 0.0,
+        "httpRequests": 0,
+        "httpMs": 0.0
+      },
+      "steps": [
+        {
+          "index": 0,
+          "command": "launchApp",
+          "description": "launchApp (clearState)",
+          "status": "passed",
+          "ms": 3092.187208,
+          "driver": {
+            "lane": "native",
+            "blackbox": true,
+            "pid": 79161,
+            "grantedPermissions": 1,
+            "note": "--input native: Flutter driver not used",
+            "phases": {
+              "stopClearMs": 533,
+              "permissionsMs": 135,
+              "simctlLaunchMs": 138,
+              "nativeSettleMs": 2285.02575
+            }
+          }
+        },
+        {
+          "index": 1,
+          "command": "tapOn",
+          "description": "tapOn id: playground_button",
+          "status": "passed",
+          "ms": 1163.7960839999998,
+          "driver": {
+            "x": 220,
+            "y": 426,
+            "lane": "native"
+          }
+        },
+        {
+          "index": 2,
+          "command": "assertVisible",
+          "description": "assertVisible \"Permission: unknown.*\" is visible",
+          "status": "passed",
+          "ms": 28.410459,
+          "driver": null
+        },
+        {
+          "index": 3,
+          "command": "tapOn",
+          "description": "tapOn \"Request Location Permission\"",
+          "status": "passed",
+          "ms": 1058.238625,
+          "driver": {
+            "x": 220,
+            "y": 594,
+            "lane": "native"
+          }
+        },
+        {
+          "index": 4,
+          "command": "assertVisible",
+          "description": "assertVisible \"Povolit jen při používání aplikace\" is visible",
+          "status": "passed",
+          "ms": 24.442458000000002,
+          "driver": null
+        },
+        {
+          "index": 5,
+          "command": "tapOn",
+          "description": "tapOn \"Povolit jen při používání aplikace\"",
+          "status": "passed",
+          "ms": 912.525083,
+          "driver": {
+            "x": 220,
+            "y": 570,
+            "lane": "native"
+          }
+        },
+        {
+          "index": 6,
+          "command": "assertVisible",
+          "description": "assertVisible \"Permission: granted.*\" is visible",
+          "status": "passed",
+          "ms": 21.326083,
+          "driver": null
+        },
+        {
+          "index": 7,
+          "command": "assertNotVisible",
+          "description": "assertNotVisible \"Povolit jen při používání aplikace\" is not visible",
+          "status": "passed",
+          "ms": 20.722082999999998,
+          "driver": null
+        }
+      ],
+      "lane": "native",
+      "laneStats": {
+        "flutter": 0,
+        "native": 8
+      }
+    }
+  ]
+}

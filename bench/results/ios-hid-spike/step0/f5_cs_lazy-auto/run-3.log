@@ -1,0 +1,34 @@
+device iPhone 18 Pro Max (32E8A0E5-D41A-4CC4-BCD4-39E9809FAA7D, iOS simulator) · setup 17 ms
+
+▶ F5 iOS Permission Dialog
+  ✓  1409.7 ms  launchApp (clearState)
+  ✓   549.4 ms  tapOn id: playground_button
+  ✓     3.7 ms  assertVisible "Permission: unknown.*" is visible
+  ✓  3017.7 ms  tapOn "Request Location Permission"
+ios-native-timing event=http t_ms=9742 ms=29 route=status status=200
+ios-native-timing event=runner_start t_ms=9743 ms=2604 total_ms=2729
+ios-native-timing event=warmup_wait t_ms=9829 ms=0 ok=true
+ios-native-timing event=http t_ms=9856 ms=27 route=deviceInfo status=200
+ios-native-timing event=http t_ms=9885 ms=29 route=viewHierarchy status=200
+ios-native-timing event=warmup_wait t_ms=9886 ms=0 ok=true
+ios-native-timing event=http t_ms=9918 ms=31 route=viewHierarchy status=200
+  ✓  4920.5 ms  assertVisible "Povolit jen při používání aplikace" is visible
+ios-native-timing event=warmup_wait t_ms=9918 ms=0 ok=true
+ios-native-timing event=http t_ms=9981 ms=63 route=viewHierarchy status=200
+ios-native-timing event=warmup_wait t_ms=9982 ms=0 ok=true
+ios-native-timing event=http t_ms=10030 ms=47 route=viewHierarchy status=200
+ios-native-timing event=http t_ms=10172 ms=141 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=10220 ms=47 route=viewHierarchy status=200
+ios-native-timing event=http t_ms=10666 ms=445 route=touch status=200
+ios-native-timing event=http t_ms=10799 ms=132 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=10982 ms=123 route=isScreenStatic status=200
+ios-native-timing event=http t_ms=11054 ms=71 route=viewHierarchy status=200
+  ✓  1136.4 ms  tapOn "Povolit jen při používání aplikace"
+ios-native-timing event=warmup_wait t_ms=11054 ms=0 ok=true
+ios-native-timing event=http t_ms=11079 ms=24 route=viewHierarchy status=200
+ios-native-timing event=http t_ms=11081 ms=1 route=runningApp status=200
+  ✓    27.8 ms  assertVisible "Permission: granted.*" is visible
+ios-native-timing event=http t_ms=11105 ms=21 route=viewHierarchy status=200
+ios-native-timing event=http t_ms=11105 ms=0 route=runningApp status=200
+  ✓    22.9 ms  assertNotVisible "Povolit jen při používání aplikace" is not visible
+PASSED F5 iOS Permission Dialog in 11089 ms

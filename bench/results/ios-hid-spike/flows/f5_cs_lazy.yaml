@@ -1,0 +1,27 @@
+# F5b iOS native lane: a REAL iOS Simulator permission alert.
+# The location alert belongs to SpringBoard, so the Flutter driver cannot see
+# it; in `--input auto` the XCUITest driver (Tapwing's iOS runner, `drivers/ios`)
+# taps it. Also rotates the
+# simulator, which `simctl` cannot do. Run on an iOS Simulator:
+#   tapwing test .maestro/ios/f5_permission_dialog.yaml --device "<name or UDID>"
+appId: dev.tapwing.sampleApp
+name: F5 iOS Permission Dialog
+---
+- launchApp:
+    clearState: true
+    permissions:
+      # `unset` resets every privacy service, so iOS asks again.
+      all: unset
+- tapOn:
+    id: "playground_button"
+- assertVisible: "Permission: unknown.*"
+- tapOn: "Request Location Permission"
+# The SpringBoard alert is on screen now. English labels: iOS 13+ offers
+# "Allow Once", "Allow While Using App" and "Don't Allow". This copy uses the
+# Czech label of the Czech simulator.
+- assertVisible: "Povolit jen při používání aplikace"
+- tapOn: "Povolit jen při používání aplikace"
+# Back in Flutter: the app got the answer through the permissions channel.
+- assertVisible: "Permission: granted.*"
+- assertNotVisible: "Povolit jen při používání aplikace"
+
