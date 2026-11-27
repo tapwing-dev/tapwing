@@ -28,6 +28,7 @@
 //! the runner, within the same [`MAX_RESTARTS`] budget. Any other answer
 //! resets the count.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
@@ -35,6 +36,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use ureq::Agent;
 
+use super::hid::{self, Button, HidSession};
 use crate::native_core::LaneClient;
 pub use crate::native_core::recovery::MAX_RESTARTS;
 use crate::native_core::recovery::{
@@ -214,6 +216,12 @@ pub struct IosNativeClient {
     call_timeout: Duration,
     /// Session id the runner was started with; `/status` must echo it.
     session: Option<String>,
+    /// The in-process HID backend (`TAPWING_IOS_HID=1`): touches, swipes, buttons and the screen
+    /// comparison go through it first and fall back to the runner. See [`Self::hid_for_input`].
+    hid: Option<Arc<HidSession>>,
+    /// False after a `setOrientation` to anything but portrait. HID touches and frames are
+    /// unrotated, and the screen size alone cannot tell portrait from upside down.
+    portrait: bool,
 }
 
 impl LaneClient for IosNativeClient {
@@ -256,7 +264,32 @@ impl IosNativeClient {
             recovery_state: RecoveryState::new(),
             call_timeout,
             session: None,
+            hid: None,
+            portrait: true,
         }
+    }
+
+    /// Serves touches, swipes, buttons and `isScreenStatic` through `hid` where it can. `None`
+    /// (the flag is off) leaves every call on the runner.
+    pub fn set_hid(&mut self, hid: Option<Arc<HidSession>>) {
+        self.hid = hid;
+    }
+
+    /// The HID session, when HID may serve a call that depends on the interface orientation: the
+    /// session is still usable and the interface is portrait (the cached device info says the
+    /// screen is taller than wide, and no `setOrientation` left it rotated).
+    fn hid_for_input(&mut self) -> Option<Arc<HidSession>> {
+        let session = self.hid_active()?;
+        if !self.portrait {
+            return None;
+        }
+        let d = self.device_info().ok()?;
+        (d.width_points < d.height_points).then_some(session)
+    }
+
+    /// The HID session when it is usable, for calls that do not depend on the orientation.
+    fn hid_active(&self) -> Option<Arc<HidSession>> {
+        self.hid.as_ref().filter(|h| h.is_active()).map(Arc::clone)
     }
 
     /// Makes [`Self::probe`] accept only a runner that reports `session`.
@@ -551,7 +584,24 @@ impl IosNativeClient {
 
     /// `POST /touch` in points; `duration` (seconds) turns the tap into a long press.
     pub fn touch(&mut self, x: f64, y: f64, duration: Option<f64>) -> Result<()> {
+        if let Some(hid) = self.hid_for_input() {
+            let hold = duration.map_or(hid::TAP_HOLD_MS, hid::hold_ms);
+            if let Some(res) = Self::hid_input(hid.touch(&[(x, y)], hold, 0)) {
+                return res;
+            }
+        }
         self.post("touch", Replay::IfNotSent, "touch", &json!({ "x": x, "y": y, "duration": duration }))
+    }
+
+    /// Reads the outcome of an HID input call. `Some` ends the call (success, or an event that may
+    /// have been delivered and must never be repeated on the runner). `None` means nothing was
+    /// sent, so the runner route runs.
+    fn hid_input(res: Result<(), hid::HidError>) -> Option<Result<()>> {
+        match res {
+            Ok(()) => Some(Ok(())),
+            Err(e) if e.input_maybe_sent() => Some(Err(anyhow!(e))),
+            Err(_) => None,
+        }
     }
 
     /// `POST /swipeV2` in points (`XCTestDriverClient.swipeV2`: `appId` is null,
@@ -564,6 +614,12 @@ impl IosNativeClient {
         duration_secs: f64,
         app_ids: &[String],
     ) -> Result<()> {
+        if let Some(hid) = self.hid_for_input() {
+            let (path, step) = hid::swipe_path(start, end, (duration_secs * 1000.0) as i64);
+            if let Some(res) = Self::hid_input(hid.touch(&path, hid::SWIPE_HOLD_MS, step)) {
+                return res;
+            }
+        }
         self.post(
             "swipeV2",
             Replay::IfNotSent,
@@ -601,6 +657,16 @@ impl IosNativeClient {
     /// `POST /pressButton`: hardware buttons (`home`, `lock`). `lock` toggles,
     /// so a press is never repeated blindly.
     pub fn press_button(&mut self, button: &str) -> Result<()> {
+        let hid_button = match button {
+            "home" => Some(Button::Home),
+            "lock" => Some(Button::Lock),
+            _ => None,
+        };
+        if let (Some(b), Some(hid)) = (hid_button, self.hid_active())
+            && let Some(res) = Self::hid_input(hid.button(b))
+        {
+            return res;
+        }
         self.post("pressButton", Replay::IfNotSent, "pressButton", &json!({ "button": button }))
     }
 
@@ -609,12 +675,19 @@ impl IosNativeClient {
     /// absolute orientation, so repeating it is harmless.
     pub fn set_orientation(&mut self, orientation: &str) -> Result<()> {
         self.post("setOrientation", Replay::Always, "setOrientation", &json!({ "orientation": orientation }))?;
+        self.portrait = orientation == "portrait";
         self.invalidate_screen();
         Ok(())
     }
 
     /// `GET /isScreenStatic`: the runner compares consecutive screenshots.
     pub fn is_screen_static(&mut self) -> Result<bool> {
+        // Two framebuffer frames compared like the runner's two screenshots, in about a third of the time.
+        if let Some(hid) = self.hid_for_input()
+            && let Ok(still) = hid.screen_static()
+        {
+            return Ok(still);
+        }
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct Resp {

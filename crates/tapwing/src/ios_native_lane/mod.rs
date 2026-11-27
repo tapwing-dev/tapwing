@@ -503,6 +503,7 @@ fn start_session(udid: &str, cancel: &CancelSignal) -> Result<IosNativeClient> {
     };
 
     let mut client = IosNativeClient::connect(port);
+    client.set_hid(hid::session_for(udid));
     client.expect_session(session_id);
     let ready = wait_for_runner(&client, driver_label, || guard.exited(), cancel, Instant::now() + startup_timeout())?;
     if ready == Readiness::Unverified
