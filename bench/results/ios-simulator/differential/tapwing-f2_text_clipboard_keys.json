@@ -4,7 +4,7 @@
   "flows": [
     {
       "flow": "F2 Text Clipboard and Keys (iOS)",
-      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ios/f2_text_clipboard_keys.yaml",
+      "path": "examples/sample_app/.maestro/ios/f2_text_clipboard_keys.yaml",
       "status": "passed",
       "totalMs": 12680.56125,
       "settlePolicy": "v2",

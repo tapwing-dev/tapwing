@@ -32,7 +32,7 @@ dev_dependencies:
 ```
 
 - **Self-contained git dependency:** `tapwing_driver` keeps `publish_to: none` and depends exclusively on the Flutter SDK (`flutter: sdk: flutter`), with no local path dependencies, repo-only assets, or generated files required.
-- **Lockstep versioning:** `crates/tapwing/Cargo.toml` and `packages/tapwing_driver/pubspec.yaml` always share the same version (`X.Y.Z`) so every release tag `vX.Y.Z` matches the `ref` written by `tapwing init`. Bump both files together before tagging; `cargo test --test init` fails if they drift.
+- **Lockstep versioning:** `crates/tapwing/Cargo.toml` and `packages/tapwing_driver/pubspec.yaml` always share the same version (`X.Y.Z`) so every release tag `vX.Y.Z` matches the `ref` written by `tapwing init`. Bump both files together before tagging; `cargo test --test integration init::` fails if they drift.
 
 ---
 
@@ -118,15 +118,15 @@ lib/
 
 ## App Health Capture (F7)
 
-The driver observes what the app reports while a flow runs, even when every assertion passes. Design and CLI side: [PLAN.md §8.1](../../PLAN.md#81-f7-app-health-diagnostics).
+The driver observes what the app reports while a flow runs, even when every assertion passes. Design and CLI side: [docs/app-health.md](../../docs/app-health.md).
 
-- **Sources:** `FlutterError.onError` (layout overflow, build/layout/paint errors, image load failures, other framework assertions) and `PlatformDispatcher.onError` (uncaught async errors). In profile and release builds, `OverflowDetector` runs after each settle, because Flutter compiles its overflow report out there ([spike](../../spikes/f7-profile-overflow/README.md)).
+- **Sources:** `FlutterError.onError` (layout overflow, build/layout/paint errors, image load failures, other framework assertions) and `PlatformDispatcher.onError` (uncaught async errors). In profile and release builds, `OverflowDetector` runs after each settle, because Flutter compiles its overflow report out there.
 - **Read-only chaining:** every hook calls the handler installed before it, and `PlatformDispatcher.onError` returns the previous handler's result (`false` without one). Handlers replaced by the app (Crashlytics, Sentry) are re-wrapped after the first frame and at every RPC. An error passing two Tapwing wrappers in one chain is recorded once.
 - **Delivery:** opt-in via `configure` `appIssues: true`. Each response then carries `issues` recorded since the previous response, each tagged with the `request` id that caused it. `appIssues` re-reads the buffer. `configure` `appIssues: false` uninstalls the hooks and clears the buffer.
 
 ## HTTP Request Log (F8b)
 
-For `tapwing test --trace` ([PLAN.md §8.4](../../PLAN.md#84-f8b-trace-viewer)), `HttpTracker` also records the app's `dart:io` requests. It is off by default; with it off, the tracker only counts in-flight requests for idleness, as before.
+For `tapwing test --trace` ([docs/failure-diagnostics.md](../../docs/failure-diagnostics.md#trace-viewer)), `HttpTracker` also records the app's `dart:io` requests. It is off by default; with it off, the tracker only counts in-flight requests for idleness, as before.
 
 - **Opt-in:** `configure` `httpLog: true`. Each response then carries `http` entries that finished since the previous response (method, redacted URL and headers, status, `startMs`/`headersMs`/`durationMs`, request/response bytes, sanitized error, `state`), tagged with the `request` id in flight when the request started. `httpLog` re-reads finished entries and lists requests still in flight. `configure` `httpLog: false` clears the log while keeping idle counting active.
 - **Chaining:** an `HttpOverrides` the app installs after the binding is re-wrapped by `ensureInstalled()` (at the first frame, `drawFrame`, and every RPC boundary) so idle counting (and HTTP logging when enabled) delegates to it. A per-tracker client-creation guard prevents double-counting or double-logging when the app's override chains to the previous `HttpOverrides`.

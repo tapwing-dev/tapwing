@@ -1,6 +1,0 @@
-== HW OFF: tap soft-keyboard 'Done' key (center of [300,759][399,813])
-{"isKeyboardVisible":false}
-== refocus Email
-{"isKeyboardVisible":true}
-== pressKey return
-{"isKeyboardVisible":false}

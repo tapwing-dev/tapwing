@@ -12,7 +12,7 @@ Tapwing parses YAML flow files into the exact same IR as Maestro 2.12.1 (`Maestr
 | `workspace-cases.json` | Workspace planning cases (`tapwing test <dirs>`): Maestro's `WorkspaceExecutionPlannerTest` and `…ErrorsTest` inputs over `maestro-fixtures/maestro-orchestra/workspaces`, plus Tapwing extras |
 | `workspace-plans.json`, `harness/WorkspacePlanDump.kt`, `dump_workspace_plans.sh` | What Maestro 2.12.1's `WorkspaceExecutionPlanner` decides for each case (flows, `executionOrder` sequence, or the error), regenerated from the installed Maestro JARs |
 
-Test command: `cd crates/tapwing && cargo test --test compat`. For every file it verifies:
+Test command: `cd crates/tapwing && cargo test --test integration compat::`. For every file it verifies:
 - **Parsed flow:** IR matches field-for-field;
 - **Rejected flow:** Tapwing rejects it as well, with the same error title ("Unknown Property: x", "Invalid Command: y", "Media File Not Found"…).
 
@@ -20,7 +20,7 @@ Per-file reports are written to `crates/tapwing/target/compat-*.txt`.
 
 Status: **463/463** fixtures and **81/81** probes passing.
 
-Workspace planning: `cargo test --test workspace` plans every case in `workspace-cases.json` and requires the same flows, the same sequence (in order) and `continueOnFailure`, the identical message for Maestro's validation errors, and the same title and file for flow syntax errors. Status: **42/42** cases identical.
+Workspace planning: `cargo test --test integration workspace::` plans every case in `workspace-cases.json` and requires the same flows, the same sequence (in order) and `continueOnFailure`, the identical message for Maestro's validation errors, and the same title and file for flow syntax errors. Status: **42/42** cases identical.
 
 ## Jackson Quirks Replicated (Verified via `probes/`)
 

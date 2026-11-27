@@ -746,7 +746,7 @@ impl DeviceFlutterBackend<'_> {
 
     /// F8: captures the active lane's UI hierarchy for rich failure diagnostics
     /// without incrementing `lanes` stats or cold-spawning lazy iOS `xcodebuild`.
-    pub(super) fn capture_failure_hierarchy_impl(&mut self) -> Option<(String, crate::fake_driver::TreeNode)> {
+    pub(super) fn capture_failure_hierarchy_impl(&mut self) -> Option<(String, crate::ui_tree::TreeNode)> {
         let prefer_native =
             self.lane_mode() == InputMode::Native || self.is_blackbox() || self.native_hint || self.overlay_hint;
         if !prefer_native

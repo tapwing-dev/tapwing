@@ -4,7 +4,7 @@
   "flows": [
     {
       "flow": "F2 Selectors and Taps",
-      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/f2_selectors_and_taps.yaml",
+      "path": "examples/sample_app/.maestro/f2_selectors_and_taps.yaml",
       "status": "passed",
       "totalMs": 24514.098791999997,
       "settlePolicy": "v2",

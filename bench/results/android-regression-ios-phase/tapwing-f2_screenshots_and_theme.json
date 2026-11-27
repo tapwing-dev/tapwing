@@ -4,7 +4,7 @@
   "flows": [
     {
       "flow": "F2 Screenshots and Light Mode",
-      "path": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/f2_screenshots_and_theme.yaml",
+      "path": "examples/sample_app/.maestro/f2_screenshots_and_theme.yaml",
       "status": "passed",
       "totalMs": 4770.701208,
       "settlePolicy": "v2",
@@ -175,7 +175,7 @@
           "status": "passed",
           "ms": 583.1045409999999,
           "driver": {
-            "expected": "/Users/me/tapwing/54c2afe3-ce2b15efd654e7b9/examples/sample_app/.maestro/ref_visual_badge.png",
+            "expected": "examples/sample_app/.maestro/ref_visual_badge.png",
             "matchPercent": 100.0
           }
         },

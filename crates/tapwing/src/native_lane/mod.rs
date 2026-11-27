@@ -30,23 +30,28 @@ mod restart;
 mod startup_tests;
 pub mod tapwing_apk;
 
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, TryRecvError};
-use std::sync::{Arc, Condvar, Mutex};
-use std::thread::JoinHandle;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+#[cfg(test)]
+use std::sync::atomic::Ordering;
+#[cfg(test)]
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, anyhow, bail};
+#[cfg(test)]
+use anyhow::anyhow;
+use anyhow::{Context, Result, bail};
 
 pub use apk::Adb;
 pub use client::NativeDriverClient;
 pub use ops::{ColdStart, NativeOps};
 pub use restart::{RESTART_BUDGET_ENV, RESTART_TIMEOUT_ENV};
 
+pub use crate::native_core::{BlackboxDemotion, BlackboxTracker, STICKY_BLACKBOX_THRESHOLD};
+use crate::native_core::{CancelSignal, LaneHandle};
 use restart::{InstrumentationExited, RESTART_RETRY_INTERVAL, RestartBudget, RestartClock, Unrecoverable};
 
 /// Warning for the deprecated `--native-driver` / `tapwing.nativeDriver` (`origin` names which).
@@ -75,67 +80,6 @@ const READINESS_PROBE_TIMEOUT: Duration = Duration::from_millis(250);
 const READINESS_PROBE_MAX_TIMEOUT: Duration = Duration::from_millis(1000);
 /// Delay between readiness probes (cancel-aware via [`CancelSignal`]).
 const READINESS_POLL_INTERVAL: Duration = Duration::from_millis(50);
-
-/// Cooperative cancellation signal backed by a [`Condvar`] so warm-up backoff
-/// sleeps wake immediately when [`NativeLaneHandle`] is dropped.
-///
-/// Keeps an [`AtomicBool`] alongside the mutex-guarded predicate for lock-free
-/// polling and compatibility with [`apk::ensure_installed`] (note: an in-flight
-/// first-time `adb install` subprocess is only checked between steps).
-struct CancelSignal {
-    flag: AtomicBool,
-    lock: Mutex<bool>,
-    cv: Condvar,
-}
-
-impl CancelSignal {
-    fn new() -> Self {
-        Self { flag: AtomicBool::new(false), lock: Mutex::new(false), cv: Condvar::new() }
-    }
-
-    fn flag(&self) -> &AtomicBool {
-        &self.flag
-    }
-
-    fn is_cancelled(&self) -> bool {
-        self.flag.load(Ordering::Acquire) || crate::interrupt::is_interrupted()
-    }
-
-    fn cancel(&self) {
-        self.flag.store(true, Ordering::Release);
-        let mut cancelled = self.lock.lock().unwrap_or_else(|e| e.into_inner());
-        *cancelled = true;
-        self.cv.notify_all();
-    }
-
-    /// Waits up to `duration`, returning `true` immediately if cancelled (or
-    /// interrupted by `SIGINT`/`SIGTERM`) before or during the wait.
-    fn wait_timeout(&self, duration: Duration) -> bool {
-        if self.is_cancelled() {
-            return true;
-        }
-        let deadline = Instant::now() + duration;
-        loop {
-            if self.is_cancelled() {
-                return true;
-            }
-            let rem = deadline.saturating_duration_since(Instant::now());
-            if rem.is_zero() {
-                return self.is_cancelled();
-            }
-            let guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
-            if *guard {
-                return true;
-            }
-            let chunk = rem.min(Duration::from_millis(50));
-            let (guard, _) =
-                self.cv.wait_timeout_while(guard, chunk, |cancelled| !*cancelled).unwrap_or_else(|e| e.into_inner());
-            if *guard || self.is_cancelled() {
-                return true;
-            }
-        }
-    }
-}
 
 /// `--input`: which lane executes UI commands.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
@@ -199,61 +143,6 @@ pub fn decide_lane(ctx: &RouteCtx<'_>) -> Lane {
 /// Whether a window owned by `package` is not the app under test.
 pub fn is_external_window(package: &str, flow_app: &str) -> bool {
     !package.is_empty() && package != flow_app
-}
-
-/// Number of consecutive `launchApp` handshake misses before an app is
-/// promoted to sticky shard-wide black-box mode.
-pub const STICKY_BLACKBOX_THRESHOLD: u32 = 2;
-
-/// Result of recording a missed `launchApp` `tapwing_driver` handshake.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BlackboxDemotion {
-    /// Below [`STICKY_BLACKBOX_THRESHOLD`]: black-box for the current flow only;
-    /// the next `launchApp` will retry the Flutter driver.
-    FlowOnly { consecutive_misses: u32 },
-    /// Reached [`STICKY_BLACKBOX_THRESHOLD`] consecutive misses: stays black-box
-    /// for the rest of the shard.
-    StickyShard { consecutive_misses: u32 },
-}
-
-/// Shard-scoped consecutive handshake-miss tracker per `app_id`.
-///
-/// One missed 15 s handshake falls back to black-box for that flow only; two
-/// misses in a row promote the app to sticky shard-wide black-box, and any
-/// successful Flutter handshake resets the counter.
-#[derive(Clone, Debug, Default)]
-pub struct BlackboxTracker {
-    consecutive_misses: HashMap<String, u32>,
-}
-
-impl BlackboxTracker {
-    /// Records a missed `launchApp` handshake for `app_id` and returns whether
-    /// the fallback is flow-only or sticky for the rest of the shard.
-    pub fn record_handshake_miss(&mut self, app_id: &str) -> BlackboxDemotion {
-        let count = self.consecutive_misses.entry(app_id.to_string()).or_insert(0);
-        *count = count.saturating_add(1);
-        if *count >= STICKY_BLACKBOX_THRESHOLD {
-            BlackboxDemotion::StickyShard { consecutive_misses: *count }
-        } else {
-            BlackboxDemotion::FlowOnly { consecutive_misses: *count }
-        }
-    }
-
-    /// Records a successful Flutter handshake for `app_id`, resetting its
-    /// consecutive-miss counter.
-    pub fn record_handshake_success(&mut self, app_id: &str) {
-        self.consecutive_misses.remove(app_id);
-    }
-
-    /// Whether `app_id` has been demoted to sticky shard-wide black-box.
-    pub fn is_sticky(&self, app_id: &str) -> bool {
-        self.consecutive_misses.get(app_id).copied().unwrap_or(0) >= STICKY_BLACKBOX_THRESHOLD
-    }
-
-    /// Number of consecutive missed handshakes recorded for `app_id`.
-    pub fn consecutive_misses(&self, app_id: &str) -> u32 {
-        self.consecutive_misses.get(app_id).copied().unwrap_or(0)
-    }
 }
 
 /// Packages of the usual Android system dialogs (runtime permissions,
@@ -566,22 +455,10 @@ fn restart_session(adb: &Adb, cancel: &CancelSignal, budget: &mut RestartBudget)
     })
 }
 
-enum State {
-    Pending(Receiver<Result<NativeDriverClient>>),
-    Ready(Box<NativeDriverClient>),
-    Unavailable(String),
-}
-
 /// Background-warmed native lane. Created at session start; Flutter-only
 /// flows never touch it, so they pay nothing for it.
 pub struct NativeLaneHandle {
-    state: State,
-    adb: Option<Adb>,
-    cancel: Arc<CancelSignal>,
-    thread: Option<JoinHandle<()>>,
-    /// Consecutive `launchApp` handshake misses per app in this shard.
-    blackbox: BlackboxTracker,
-    failure_reported: bool,
+    inner: LaneHandle<NativeDriverClient, Adb>,
 }
 
 impl NativeLaneHandle {
@@ -604,176 +481,74 @@ impl NativeLaneHandle {
     where
         F: FnOnce(&Arc<CancelSignal>) -> Result<NativeDriverClient> + Send + 'static,
     {
-        let cancel = Arc::new(CancelSignal::new());
-        let (tx, rx) = mpsc::channel();
-        let thread = {
-            let cancel = cancel.clone();
-            std::thread::Builder::new().name("tapwing-native-warmup".into()).spawn(move || {
-                // A failed send means the handle is gone: the session drops here and cleans up.
-                let _ = tx.send(starter(&cancel));
-            })
-        };
-        match thread {
-            Ok(thread) => Self {
-                state: State::Pending(rx),
-                adb: Some(adb),
-                cancel,
-                thread: Some(thread),
-                blackbox: BlackboxTracker::default(),
-                failure_reported: false,
-            },
-            Err(e) => Self::unavailable(format!("cannot start the warm-up thread: {e}")),
+        Self {
+            inner: LaneHandle::spawn_with(
+                "the native lane",
+                "the native-lane warm-up thread died",
+                "tapwing-native-warmup",
+                adb,
+                starter,
+            ),
         }
     }
 
     /// A lane that is known not to work (no driver APK, iOS, ...).
     pub fn unavailable(reason: impl Into<String>) -> Self {
-        Self {
-            state: State::Unavailable(reason.into()),
-            adb: None,
-            cancel: Arc::new(CancelSignal::new()),
-            thread: None,
-            blackbox: BlackboxTracker::default(),
-            failure_reported: false,
-        }
+        Self { inner: LaneHandle::unavailable("the native lane", "the native-lane warm-up thread died", reason) }
     }
 
     #[cfg(test)]
     pub(crate) fn ready_for_test(client: NativeDriverClient, adb: Adb) -> Self {
-        Self {
-            state: State::Ready(Box::new(client)),
-            adb: Some(adb),
-            cancel: Arc::new(CancelSignal::new()),
-            thread: None,
-            blackbox: BlackboxTracker::default(),
-            failure_reported: false,
-        }
+        Self { inner: LaneHandle::ready("the native lane", "the native-lane warm-up thread died", client, adb) }
     }
 
     /// Records a missed `launchApp` handshake for `app_id`.
     pub fn record_handshake_miss(&mut self, app_id: &str) -> BlackboxDemotion {
-        self.blackbox.record_handshake_miss(app_id)
+        self.inner.record_handshake_miss(app_id)
     }
 
     /// Records a successful Flutter handshake for `app_id`, resetting misses.
     pub fn record_handshake_success(&mut self, app_id: &str) {
-        self.blackbox.record_handshake_success(app_id);
+        self.inner.record_handshake_success(app_id);
     }
 
     /// Whether `app_id` is permanently demoted to black-box for this shard.
     pub fn is_sticky_blackbox(&self, app_id: &str) -> bool {
-        self.blackbox.is_sticky(app_id)
+        self.inner.is_sticky_blackbox(app_id)
     }
 
     /// The warm-up failure reason, once (for a single user-visible warning).
     pub fn take_failure_notice(&mut self) -> Option<String> {
-        self.poll(None);
-        if self.failure_reported {
-            return None;
-        }
-        let why = self.failure()?.to_string();
-        self.failure_reported = true;
-        Some(why)
+        self.inner.take_failure_notice()
     }
 
     /// `false` once warm-up is known to have failed.
     pub fn is_usable(&self) -> bool {
-        !matches!(self.state, State::Unavailable(_))
+        self.inner.is_usable()
     }
 
     /// Why the lane is unusable, if it is.
     pub fn failure(&self) -> Option<&str> {
-        match &self.state {
-            State::Unavailable(why) => Some(why),
-            _ => None,
-        }
+        self.inner.failure()
     }
 
     pub fn adb(&self) -> Option<&Adb> {
-        self.adb.as_ref()
+        self.inner.meta()
     }
 
     /// One line per time the driver connection was lost and restarted since the last call.
     pub fn take_restart_notices(&mut self) -> Vec<String> {
-        match &mut self.state {
-            State::Ready(c) => c.take_restart_notices(),
-            _ => Vec::new(),
-        }
-    }
-
-    fn finish(&mut self, res: Result<NativeDriverClient>) {
-        self.state = match res {
-            Ok(s) => State::Ready(Box::new(s)),
-            Err(e) => State::Unavailable(format!("{e:#}")),
-        };
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
-        }
-    }
-
-    /// Joins the warm-up for at most `timeout` (`None` = poll once) and
-    /// returns the client when ready.
-    fn poll(&mut self, timeout: Option<Duration>) -> Option<&mut NativeDriverClient> {
-        if let State::Pending(rx) = &self.state {
-            let res = match timeout {
-                Some(t) => {
-                    let deadline = Instant::now() + t;
-                    loop {
-                        if crate::interrupt::is_interrupted() {
-                            self.cancel.cancel();
-                            break Err(RecvTimeoutError::Timeout);
-                        }
-                        let rem = deadline.saturating_duration_since(Instant::now());
-                        match rx.recv_timeout(rem.min(Duration::from_millis(50))) {
-                            Ok(r) => break Ok(r),
-                            Err(RecvTimeoutError::Timeout) if Instant::now() < deadline => continue,
-                            Err(e) => break Err(e),
-                        }
-                    }
-                }
-                None => rx.try_recv().map_err(|e| match e {
-                    TryRecvError::Empty => RecvTimeoutError::Timeout,
-                    TryRecvError::Disconnected => RecvTimeoutError::Disconnected,
-                }),
-            };
-            match res {
-                Ok(r) => self.finish(r),
-                Err(RecvTimeoutError::Timeout) => {}
-                Err(RecvTimeoutError::Disconnected) => {
-                    self.finish(Err(anyhow!("the native-lane warm-up thread died")));
-                }
-            }
-        }
-        match &mut self.state {
-            State::Ready(c) => Some(c),
-            _ => None,
-        }
+        self.inner.take_restart_notices()
     }
 
     /// Non-blocking: the client only if warm-up already finished.
     pub fn try_get(&mut self) -> Option<&mut NativeDriverClient> {
-        self.poll(None)
+        self.inner.try_get()
     }
 
     /// Waits up to `timeout` for the warm-up and returns the client.
     pub fn get_or_wait(&mut self, timeout: Duration) -> Result<&mut NativeDriverClient> {
-        crate::interrupt::check()?;
-        self.poll(Some(timeout));
-        crate::interrupt::check()?;
-        match &mut self.state {
-            State::Ready(c) => Ok(c),
-            State::Unavailable(why) => Err(anyhow!("the native lane is unavailable: {why}")),
-            State::Pending(_) => Err(anyhow!("the native lane is still starting after {} ms", timeout.as_millis())),
-        }
-    }
-}
-
-impl Drop for NativeLaneHandle {
-    fn drop(&mut self) {
-        self.cancel.cancel();
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
-        }
+        self.inner.get_or_wait(timeout)
     }
 }
 

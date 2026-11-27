@@ -58,6 +58,7 @@ final class HierarchyBuilder {
     private func getAppViewHierarchy(
         foregroundApp originalForegroundApp: XCUIApplication,
         foregroundBundleId: String,
+        // Retained for Maestro 2.12.1 `ViewHierarchyRequest` wire compatibility.
         excludeKeyboardElements _: Bool
     ) throws -> AXElement {
         let isSpringboardTarget = HierarchyQueryPolicy.isSpringboardTarget(foregroundBundleId: foregroundBundleId)
@@ -97,35 +98,8 @@ final class HierarchyBuilder {
         let deviceAxFrame = cache.deviceFrame(for: orientation) { [self] in
             axFrame(from: springboardApplication.frame)
         }
-        let appFrame = appHierarchy.frame
-
-        if deviceAxFrame != appFrame {
-            guard
-                let deviceWidth = deviceAxFrame["Width"], deviceWidth > 0,
-                let deviceHeight = deviceAxFrame["Height"], deviceHeight > 0,
-                let appWidth = appFrame["Width"], appWidth > 0,
-                let appHeight = appFrame["Height"], appHeight > 0
-            else {
-                return wrapRoot(appHierarchy, statusBars: statusBars, safari: safariWebViewHierarchy)
-            }
-
-            // SpringBoard reports portrait dimensions even when the app is in landscape.
-            if OrientationMath.isSameAreaDifferentOrientation(
-                deviceWidth: deviceWidth,
-                deviceHeight: deviceHeight,
-                appWidth: appWidth,
-                appHeight: appHeight
-            ) {
-                return wrapRoot(appHierarchy, statusBars: statusBars, safari: safariWebViewHierarchy)
-            }
-
-            let offsetX = deviceWidth - appWidth
-            let offsetY = deviceHeight - appHeight
-            let adjusted = expandElementSizes(appHierarchy, offsetX: offsetX, offsetY: offsetY)
-            return wrapRoot(adjusted, statusBars: statusBars, safari: safariWebViewHierarchy)
-        }
-
-        return wrapRoot(appHierarchy, statusBars: statusBars, safari: safariWebViewHierarchy)
+        let adjusted = HierarchyFrameMath.adjustAppHierarchy(appHierarchy, deviceFrame: deviceAxFrame)
+        return wrapRoot(adjusted, statusBars: statusBars, safari: safariWebViewHierarchy)
     }
 
     private func wrapRoot(_ app: AXElement, statusBars: [AXElement], safari: AXElement?) -> AXElement {
@@ -134,33 +108,6 @@ final class HierarchyBuilder {
             children.append(safari)
         }
         return AXElement(children: children)
-    }
-
-    private func expandElementSizes(_ element: AXElement, offsetX: Double, offsetY: Double) -> AXElement {
-        let adjustedFrame: AXFrame = [
-            "X": element.frame.x + offsetX,
-            "Y": element.frame.y + offsetY,
-            "Width": element.frame.width,
-            "Height": element.frame.height,
-        ]
-        let adjustedChildren = element.children?.map { expandElementSizes($0, offsetX: offsetX, offsetY: offsetY) } ?? []
-        return AXElement(
-            identifier: element.identifier,
-            frame: adjustedFrame,
-            value: element.value,
-            title: element.title,
-            label: element.label,
-            elementType: element.elementType,
-            enabled: element.enabled,
-            horizontalSizeClass: element.horizontalSizeClass,
-            verticalSizeClass: element.verticalSizeClass,
-            placeholderValue: element.placeholderValue,
-            selected: element.selected,
-            hasFocus: element.hasFocus,
-            displayID: element.displayID,
-            windowContextID: element.windowContextID,
-            children: adjustedChildren
-        )
     }
 
     private func getHierarchyWithFallback(
@@ -314,7 +261,7 @@ final class HierarchyBuilder {
     /// and applies cross-process window offsets when entering remote subtrees.
     private func elementHierarchy(
         snapshot: XCUIElementSnapshot,
-        inheritedOffset: CGVector,
+        inheritedOffset: FrameOffset,
         parentWindowContextID: Double?,
         hasRemoteElement: inout Bool
     ) -> AXElement {
@@ -325,17 +272,14 @@ final class HierarchyBuilder {
             hasRemoteElement = true
         }
 
-        let boundaryOffset = crossProcessWindowOffset(
-            snapshot: snapshot,
+        let boundaryOffset = HierarchyFrameMath.crossProcessWindowOffset(
             rawFrame: rawFrame,
             parentWindowContextID: parentWindowContextID,
             windowContextID: windowContextID,
-            nodeIsRemote: nodeIsRemote
+            hasRemoteSubtree: containsRemoteSubtree(snapshot, nodeIsRemote: nodeIsRemote),
+            visibleFrame: visibleFrame(snapshot)
         )
-        let currentOffset = CGVector(
-            dx: inheritedOffset.dx + boundaryOffset.dx,
-            dy: inheritedOffset.dy + boundaryOffset.dy
-        )
+        let currentOffset = inheritedOffset.adding(boundaryOffset)
 
         let children = snapshot.children.map { child in
             elementHierarchy(
@@ -348,7 +292,7 @@ final class HierarchyBuilder {
 
         return AXElement(
             identifier: snapshot.identifier,
-            frame: offsetFrame(rawFrame, by: currentOffset),
+            frame: HierarchyFrameMath.offsetFrame(rawFrame, by: currentOffset),
             value: snapshot.value as? String,
             title: snapshot.title,
             label: snapshot.label,
@@ -363,26 +307,6 @@ final class HierarchyBuilder {
             windowContextID: windowContextID,
             children: children
         )
-    }
-
-    private func crossProcessWindowOffset(
-        snapshot: XCUIElementSnapshot,
-        rawFrame: AXFrame,
-        parentWindowContextID: Double?,
-        windowContextID: Double,
-        nodeIsRemote: Bool
-    ) -> CGVector {
-        guard
-            let parentWindowContextID,
-            parentWindowContextID != 0,
-            windowContextID != 0,
-            parentWindowContextID != windowContextID,
-            containsRemoteSubtree(snapshot, nodeIsRemote: nodeIsRemote),
-            let visibleFrame = visibleFrame(snapshot)
-        else {
-            return .zero
-        }
-        return CGVector(dx: visibleFrame.x - rawFrame.x, dy: visibleFrame.y - rawFrame.y)
     }
 
     private func containsRemoteSubtree(_ snapshot: XCUIElementSnapshot, nodeIsRemote: Bool) -> Bool {
@@ -437,15 +361,5 @@ final class HierarchyBuilder {
             return nil
         }
         return (obj.value(forKey: key) as? NSNumber)?.intValue
-    }
-
-    private func offsetFrame(_ frame: AXFrame, by offset: CGVector) -> AXFrame {
-        guard offset.dx != 0 || offset.dy != 0 else { return frame }
-        return [
-            "X": frame.x + Double(offset.dx),
-            "Y": frame.y + Double(offset.dy),
-            "Width": frame.width,
-            "Height": frame.height,
-        ]
     }
 }

@@ -4,6 +4,9 @@ version = "0.1.1"
 edition = "2024"
 license = "Apache-2.0"
 
+[features]
+test-support = []
+
 [dependencies]
 anyhow = "1.0.104"
 clap = { version = "4.6.9", features = ["derive"] }
@@ -26,6 +29,7 @@ zip = { version = "9.8.1", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 socket2 = "0.6.5"
+tapwing = { path = ".", features = ["test-support"] }
 tonic = { version = "0.14.9", default-features = false, features = ["server", "router", "codegen"] }
 
 [build-dependencies]

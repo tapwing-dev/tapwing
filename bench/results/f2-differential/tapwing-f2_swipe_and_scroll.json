@@ -3,7 +3,7 @@
   "flows": [
     {
       "flow": "F2 Swipe and Scroll",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/f2_swipe_and_scroll.yaml",
+      "path": "examples/sample_app/.maestro/f2_swipe_and_scroll.yaml",
       "status": "passed",
       "totalMs": 12943.303,
       "settlePolicy": "v2",

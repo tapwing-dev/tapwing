@@ -3,7 +3,7 @@
   "flows": [
     {
       "flow": "Login and browse",
-      "path": "/Users/me/tapwing/examples/sample_app/.maestro/login_and_browse.yaml",
+      "path": "examples/sample_app/.maestro/login_and_browse.yaml",
       "status": "passed",
       "totalMs": 6095.974292,
       "settlePolicy": "v2",

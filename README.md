@@ -15,7 +15,7 @@ Tapwing is a single Rust binary that runs Maestro flows against Flutter apps on 
 ## Why Tapwing?
 
 - **Drop-in for Maestro.** Same YAML, timeouts, and selector rules (passes all 463 Maestro parser fixtures). Replace `maestro test .maestro/` with `tapwing test .maestro/`.
-- **Fast.** No JVM startup and no polling. Runs the same flows 4–11× faster end-to-end than Maestro (4.1× on iOS Simulator, 7.8× on Android emulator, 11.4× on a Pixel 8a).
+- **Fast.** No JVM startup and no polling. Compared against Maestro 2.12.1 (2026-11-20/21 benchmarks), Tapwing runs the same flow [4.1× faster on iOS Simulator](bench/IOS_RESULTS.md) (debug build), [7.8× on Android emulator](bench/F0_RESULTS.md) (profile APK), and [11.4× on a Pixel 8a](bench/F0_RESULTS.md#pixel-8a-real-device) (profile APK); see also the [comparison vs. `agent-device`](bench/results/agent-device/summary.md).
 - **Black-box.** Flows live outside your app. The driver is a `dev_dependency` behind its own entrypoint (`lib/main_tapwing.dart`), so your production `main.dart` stays untouched.
 - **Catches silent app issues.** Layout overflows, uncaught exceptions, and crashes are reported under the step that triggered them, even when all assertions pass.
 - **Actionable failures.** Every failing step gives you "Did you mean" suggestions, a pruned UI tree, and a screenshot. Add `--trace` for an offline step-by-step viewer with the app's HTTP requests.
@@ -41,7 +41,7 @@ tags:
 - assertVisible: "Products"
 ```
 
-Every standard Maestro command, selector, and `config.yaml` option works. See [docs/commands.md](docs/commands.md) for the full list.
+Every standard (non-AI) Maestro command, selector, and `config.yaml` option works. See [docs/commands.md](docs/commands.md) for the full list.
 
 ## How it works
 
@@ -142,8 +142,13 @@ Exit codes: `0` all flows passed, `1` a flow failed, `2` CLI, config, device, or
 | [Supported commands](docs/commands.md) | Maestro commands, selectors, timeouts, and platform differences |
 | [Maestro compatibility](docs/compatibility.md) | Parser parity, JS engine, intentional differences, test coverage |
 | [Install](docs/install.md) | Homebrew, `install.sh` flags, building from source, driver lookup, releasing |
-| [Architecture and roadmap](PLAN.md) | Design decisions and project roadmap |
+| [Migrating from Maestro](docs/migrating-from-maestro.md) | Drop-in migration checklist, flag parity, intentional differences |
+| [CI setup](docs/ci.md) | GitHub Actions workflows for Android emulators, iOS Simulators, and sharding |
+| [Troubleshooting](docs/troubleshooting.md) | `adb` 37.0.1 fix, connection errors, zone mismatch, settle and runner diagnostics |
+| [Architecture](docs/architecture.md) and [Design decisions](docs/decisions.md) | Two-lane runtime, module map, and core engineering trade-offs |
+| [Roadmap](docs/roadmap.md) and [Strategy](STRATEGY.md) | Priorities (`1.0`, React Native, physical iOS) and explicit non-goals |
 | [Contributing](CONTRIBUTING.md) | Repository layout, building from source, running tests and benchmarks |
+| [Changelog](CHANGELOG.md) and [Security](SECURITY.md) | Release history and vulnerability reporting policy |
 
 ## Limitations
 

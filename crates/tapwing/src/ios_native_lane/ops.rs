@@ -14,15 +14,13 @@ use super::client::IosNativeClient;
 use super::hierarchy::IosHierarchy;
 use crate::backend::{
     AssertionError, MaestroError, ScrollUntilVisibleRequest, SwipeRequest, TapElementRequest, TapPointRequest,
-    resolve_screen_point,
 };
-use crate::fake_driver::{Bounds, TreeNode, calculate_element_relative_point, describe_sel, is_element_not_found};
-use crate::flow::ir::{Direction, ElementSelector};
+use crate::flow::ir::ElementSelector;
+use crate::native_core::ops::{self as core_ops, NativeHierarchy, NativeSurface};
+use crate::ui_tree::Bounds;
 
 /// `IOSDriver.longPress`: a 3 s press.
 const LONG_PRESS_SECS: f64 = 3.0;
-/// Pause between hierarchy polls while waiting for an element.
-const POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// Pause between `isScreenStatic` probes that answered "still moving".
 const STATIC_POLL: Duration = Duration::from_millis(50);
 /// Settle budget when the command gives none (Maestro waits about 2 s).
@@ -70,6 +68,36 @@ pub struct IosNativeOps<'a> {
     app_ids: &'a [String],
 }
 
+impl NativeSurface for IosNativeOps<'_> {
+    type Hierarchy = IosHierarchy;
+
+    const SWIPE_UP_START_Y: f64 = 0.9;
+
+    fn screen(&mut self) -> Result<(i32, i32)> {
+        IosNativeOps::screen(self)
+    }
+
+    fn hierarchy_for_poll(&mut self) -> Result<IosHierarchy> {
+        self.hierarchy()
+    }
+
+    fn hierarchy_for_negative(&mut self) -> Result<IosHierarchy> {
+        self.hierarchy()
+    }
+
+    fn settle(&mut self, initial: Option<IosHierarchy>, timeout_ms: Option<i32>) -> Result<IosHierarchy> {
+        IosNativeOps::settle(self, initial, timeout_ms)
+    }
+
+    fn tap_xy(&mut self, x: i32, y: i32, long_press: bool) -> Result<()> {
+        self.client.touch(f64::from(x), f64::from(y), long_press.then_some(LONG_PRESS_SECS))
+    }
+
+    fn raw_swipe(&mut self, start: (i32, i32), end: (i32, i32), duration_ms: i64) -> Result<()> {
+        IosNativeOps::raw_swipe(self, start, end, duration_ms)
+    }
+}
+
 impl<'a> IosNativeOps<'a> {
     pub fn new(client: &'a mut IosNativeClient, app_ids: &'a [String]) -> Self {
         Self { client, app_ids }
@@ -96,34 +124,6 @@ impl<'a> IosNativeOps<'a> {
     /// Bundle id of the foreground app, when the runner can tell.
     pub fn foreground_app_id(&mut self) -> Result<String> {
         self.client.running_app_id(self.app_ids)
-    }
-
-    /// Single lookup; nodes without bounds cannot be tapped and count as missing.
-    fn find_once(&mut self, sel: &ElementSelector) -> Result<(Option<TreeNode>, IosHierarchy)> {
-        let h = self.hierarchy()?;
-        let found = h.find(sel)?.filter(|n| n.bounds.is_some());
-        Ok((found, h))
-    }
-
-    fn not_found(sel: &ElementSelector, h: &IosHierarchy) -> anyhow::Error {
-        let seen = h.visible_texts(12).iter().map(|t| format!("\"{t}\"")).collect::<Vec<_>>().join(", ");
-        MaestroError::element_not_found(format!("Element not found: {}\n      on screen: {seen}", describe_sel(sel)))
-            .into()
-    }
-
-    /// `Maestro.findElementWithTimeout`: poll until found, at least one attempt.
-    fn poll_find(&mut self, sel: &ElementSelector, timeout_ms: u64) -> Result<(TreeNode, IosHierarchy)> {
-        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
-        loop {
-            let (found, h) = self.find_once(sel)?;
-            if let Some(node) = found {
-                return Ok((node, h));
-            }
-            if Instant::now() >= deadline {
-                return Err(Self::not_found(sel, &h));
-            }
-            crate::interrupt::sleep(POLL_INTERVAL.min(deadline.saturating_duration_since(Instant::now())))?;
-        }
     }
 
     /// Polls `isScreenStatic` until it reports a static screen (`true`) or
@@ -218,118 +218,27 @@ impl<'a> IosNativeOps<'a> {
         Ok(json!({ "lane": "native", "settled": settled }))
     }
 
-    fn tap_xy(&mut self, x: i32, y: i32, long_press: bool) -> Result<()> {
-        self.client.touch(f64::from(x), f64::from(y), long_press.then_some(LONG_PRESS_SECS))
-    }
-
-    /// `hierarchyBasedTap`: tap (optionally repeated), settle, and when
-    /// `retry_if_no_change` and nothing changed, tap once more.
-    fn perform_tap(
-        &mut self,
-        (x, y): (i32, i32),
-        long_press: bool,
-        repeat: Option<&crate::flow::ir::TapRepeat>,
-        retry_if_no_change: bool,
-        before: Option<IosHierarchy>,
-        settle_ms: Option<i32>,
-    ) -> Result<()> {
-        let before = if retry_if_no_change {
-            Some(match before {
-                Some(h) => h,
-                None => self.hierarchy()?,
-            })
-        } else {
-            before
-        };
-        let attempts = if retry_if_no_change { 2 } else { 1 };
-        for _ in 0..attempts {
-            match repeat {
-                Some(r) if !long_press => {
-                    let count = r.repeat.max(1);
-                    for i in 0..count {
-                        let t = Instant::now();
-                        self.tap_xy(x, y, false)?;
-                        if i + 1 < count {
-                            let spent = t.elapsed().as_millis().min(i64::MAX as u128) as i64;
-                            crate::interrupt::sleep(
-                                Duration::from_millis(r.delay.saturating_sub(spent).max(0) as u64),
-                            )?;
-                        }
-                    }
-                }
-                _ => self.tap_xy(x, y, long_press)?,
-            }
-            let after = self.settle(None, settle_ms)?;
-            if !retry_if_no_change || before.as_ref().is_none_or(|b| after.signature() != b.signature()) {
-                break;
-            }
-        }
-        Ok(())
-    }
-
     pub fn tap_on_element(&mut self, req: &TapElementRequest) -> Result<Value> {
-        let (node, hier) = self.poll_find(&req.selector, req.timeout_ms)?;
-        // Aim at the settled hierarchy: animating alerts move their buttons.
-        let settled = self.settle(Some(hier), req.wait_to_settle_timeout_ms)?;
-        let node = settled.find(&req.selector)?.filter(|n| n.bounds.is_some()).unwrap_or(node);
-        let bounds = node.bounds.unwrap_or(Bounds::new(0, 0, 0, 0));
-        let point = match &req.relative_point {
-            Some(rel) => calculate_element_relative_point(bounds, rel)?,
-            None => bounds.center(),
-        };
-        self.perform_tap(
-            point,
-            req.long_press,
-            req.repeat.as_ref(),
-            req.retry_if_no_change,
-            Some(settled),
-            req.wait_to_settle_timeout_ms,
-        )?;
-        Ok(json!({ "x": point.0, "y": point.1, "lane": "native" }))
+        core_ops::tap_on_element(self, req)
     }
 
     pub fn tap_on_point(&mut self, req: &TapPointRequest) -> Result<Value> {
-        let (w, h) = self.screen()?;
-        let point = resolve_screen_point(&req.point, w, h)?;
-        self.perform_tap(
-            point,
-            req.long_press,
-            req.repeat.as_ref(),
-            req.retry_if_no_change,
-            None,
-            req.wait_to_settle_timeout_ms,
-        )?;
-        Ok(json!({ "x": point.0, "y": point.1, "lane": "native" }))
+        core_ops::tap_on_point(self, req)
     }
 
     pub fn assert_visible(&mut self, sel: &ElementSelector, timeout_ms: u64) -> Result<Value> {
-        let (node, _) = self.poll_find(sel, timeout_ms)?;
-        Ok(json!({ "text": node.text, "id": node.id, "lane": "native" }))
+        core_ops::assert_visible(self, sel, timeout_ms)
     }
 
     /// Passes once the selector no longer matches; fails when it still does at the timeout.
     pub fn assert_not_visible(&mut self, sel: &ElementSelector, timeout_ms: u64) -> Result<Value> {
-        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
-        loop {
-            let (found, _) = self.find_once(sel)?;
-            if found.is_none() {
-                return Ok(json!({ "lane": "native" }));
-            }
-            if Instant::now() >= deadline {
-                return Err(MaestroError::assertion(format!(
-                    "Assertion is false: {} is not visible",
-                    describe_sel(sel)
-                ))
-                .into());
-            }
-            crate::interrupt::sleep(POLL_INTERVAL.min(deadline.saturating_duration_since(Instant::now())))?;
-        }
+        core_ops::assert_not_visible(self, sel, timeout_ms)
     }
 
     /// Element bounds scaled from logical points to physical screenshot pixels
     /// (`Maestro.takeScreenshot`, `Maestro.kt:651-663`: `scale = heightPixels / heightGrid`).
     pub fn find_element_bounds(&mut self, sel: &ElementSelector, timeout_ms: u64) -> Result<[i64; 4]> {
-        let (node, _) = self.poll_find(sel, timeout_ms)?;
+        let (node, _) = core_ops::poll_find(self, sel, timeout_ms)?;
         let b = node.bounds.unwrap_or(Bounds::new(0, 0, 0, 0));
         if b.width() <= 0 || b.height() <= 0 {
             return Err(AssertionError(format!(
@@ -349,11 +258,7 @@ impl<'a> IosNativeOps<'a> {
     }
 
     pub fn copy_text_from(&mut self, sel: &ElementSelector, timeout_ms: u64) -> Result<(String, Value)> {
-        let (node, _) = self.poll_find(sel, timeout_ms)?;
-        let text = node
-            .resolved_copy_text()
-            .ok_or_else(|| MaestroError::unable_to_copy("Element does not contain text to copy"))?;
-        Ok((text.clone(), json!({ "text": text, "lane": "native" })))
+        core_ops::copy_text_from(self, sel, timeout_ms)
     }
 
     /// Types into the focused field (the runner types any Unicode text).
@@ -459,32 +364,6 @@ impl<'a> IosNativeOps<'a> {
         )
     }
 
-    /// Screen-wide swipe with `IOSDriver.swipe(direction)` start/end ratios.
-    fn swipe_direction(&mut self, dir: Direction, duration_ms: i64) -> Result<()> {
-        let (w, h) = self.screen()?;
-        let p = |fx: f64, fy: f64| ((f64::from(w) * fx) as i32, (f64::from(h) * fy) as i32);
-        let (start, end) = match dir {
-            Direction::Up => (p(0.5, 0.9), p(0.5, 0.1)),
-            Direction::Down => (p(0.5, 0.2), p(0.5, 0.9)),
-            Direction::Right => (p(0.1, 0.5), p(0.9, 0.5)),
-            Direction::Left => (p(0.9, 0.5), p(0.1, 0.5)),
-        };
-        self.raw_swipe(start, end, duration_ms)
-    }
-
-    /// `IOSDriver.swipe(point, direction)`: to 10% / 90% of the screen along the axis.
-    fn swipe_from_point(&mut self, from: (i32, i32), dir: Direction, duration_ms: i64) -> Result<()> {
-        let (w, h) = self.screen()?;
-        let (w, h) = (f64::from(w), f64::from(h));
-        let end = match dir {
-            Direction::Up => (from.0, (h * 0.1) as i32),
-            Direction::Down => (from.0, (h * 0.9) as i32),
-            Direction::Right => ((w * 0.9) as i32, from.1),
-            Direction::Left => ((w * 0.1) as i32, from.1),
-        };
-        self.raw_swipe(from, end, duration_ms)
-    }
-
     /// `IOSDriver.scrollVertical`: 333 ms from the screen centre to 10% height.
     pub fn scroll(&mut self) -> Result<Value> {
         let (w, h) = self.screen()?;
@@ -495,71 +374,12 @@ impl<'a> IosNativeOps<'a> {
     }
 
     pub fn swipe(&mut self, req: &SwipeRequest) -> Result<Value> {
-        let (w, h) = self.screen()?;
-        if let (Some(sel), Some(dir)) = (&req.element_selector, req.direction) {
-            let (node, _) = self.poll_find(sel, req.timeout_ms)?;
-            let bounds = node.bounds.unwrap_or(Bounds::new(0, 0, 0, 0));
-            let from = match &req.relative_point {
-                Some(rel) => calculate_element_relative_point(bounds, rel)?,
-                None => bounds.center(),
-            };
-            self.swipe_from_point(from, dir, req.duration_ms)?;
-        } else if let (Some(sr), Some(er)) = (&req.start_relative, &req.end_relative) {
-            let start = crate::backend::resolve_screen_point(sr, w, h)?;
-            let end = crate::backend::resolve_screen_point(er, w, h)?;
-            self.raw_swipe(start, end, req.duration_ms)?;
-        } else if let Some(dir) = req.direction {
-            self.swipe_direction(dir, req.duration_ms)?;
-        } else if let (Some(s), Some(e)) = (&req.start_point, &req.end_point) {
-            self.raw_swipe((s.x, s.y), (e.x, e.y), req.duration_ms)?;
-        } else {
-            return Err(MaestroError::invalid_command("Illegal arguments for swiping").into());
-        }
-        self.settle(None, req.wait_to_settle_timeout_ms)?;
-        Ok(json!({ "lane": "native" }))
+        core_ops::swipe(self, req)
     }
 
     /// `Orchestra.scrollUntilVisible`: look (500 ms), then swipe from the centre.
     pub fn scroll_until_visible(&mut self, req: &ScrollUntilVisibleRequest) -> Result<Value> {
-        let swipe_dir = match req.direction {
-            Direction::Down => Direction::Up,
-            Direction::Up => Direction::Down,
-            Direction::Right => Direction::Left,
-            Direction::Left => Direction::Right,
-        };
-        let (w, h) = self.screen()?;
-        let threshold = f64::from(req.visibility_percentage) / 100.0;
-        let deadline = Instant::now() + Duration::from_millis(req.timeout_ms);
-        let (mut retry_center, max_retry_center) = (0, 4);
-        loop {
-            let poll_ms = 500_u64.min(deadline.saturating_duration_since(Instant::now()).as_millis() as u64);
-            match self.poll_find(&req.selector, poll_ms) {
-                Ok((node, _)) => {
-                    let b = node.bounds.unwrap_or(Bounds::new(0, 0, 0, 0));
-                    let visibility = b.visible_percentage(w, h);
-                    if req.center_element && visibility > 0.1 && retry_center <= max_retry_center {
-                        if b.is_near_screen_center(swipe_dir, w, h) {
-                            return Ok(json!({ "lane": "native" }));
-                        }
-                        retry_center += 1;
-                    } else if visibility >= threshold {
-                        return Ok(json!({ "lane": "native" }));
-                    }
-                }
-                Err(e) if is_element_not_found(&e) => {}
-                Err(e) => return Err(e),
-            }
-            if Instant::now() >= deadline {
-                break;
-            }
-            self.swipe_from_point((w / 2, h / 2), swipe_dir, req.duration_ms as i64)?;
-            self.settle(None, req.wait_to_settle_timeout_ms)?;
-        }
-        Err(MaestroError::element_not_found(format!(
-            "Could not find a visible element matching selector: {}",
-            describe_sel(&req.selector)
-        ))
-        .into())
+        core_ops::scroll_until_visible(self, req)
     }
 
     /// PNG of the current screen through the driver (uncompressed capture).
@@ -576,7 +396,8 @@ mod tests {
     use super::super::client::mock::{MockRunner, Req, Resp};
     use super::*;
     use crate::backend::MaestroErrorKind;
-    use crate::flow::ir::Point;
+    use crate::flow::ir::{Direction, Point};
+    use crate::ui_tree::is_element_not_found;
 
     fn el(element_type: i64, label: &str, frame: [f64; 4], children: Vec<Value>) -> Value {
         json!({
@@ -1169,5 +990,39 @@ mod tests {
         let mut ops = IosNativeOps::new(&mut client, &apps);
         let res = ops.wait_for_animation_to_end(Some(1500)).unwrap();
         assert_eq!(res["settled"], true);
+    }
+
+    #[test]
+    fn wait_until_visible_waits_out_an_overlay_and_taps_again() {
+        let covered = screen(vec![
+            el(9, "Covered target", [20.0, 300.0, 362.0, 44.0], vec![]),
+            el(48, "Temporary cover", [0.0, 0.0, 402.0, 874.0], vec![]),
+        ]);
+        let uncovered = screen(vec![el(9, "Covered target", [20.0, 300.0, 362.0, 44.0], vec![])]);
+        let vh_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let vh_calls_srv = vh_calls.clone();
+        let runner = MockRunner::start(Box::new(move |req| match req.path() {
+            "/deviceInfo" => {
+                Resp::json(r#"{"widthPixels":1206,"heightPixels":2622,"widthPoints":402,"heightPoints":874}"#)
+            }
+            "/isScreenStatic" => Resp::json(r#"{"isScreenStatic":true}"#),
+            "/viewHierarchy" => {
+                let n = vh_calls_srv.fetch_add(1, Ordering::Relaxed) + 1;
+                // Polls 1..=3 keep the overlay across settle() and the first post-tap settle();
+                // poll 4+ uncovers the target inside wait_until_visible().
+                Resp::json(if n <= 3 { &covered } else { &uncovered })
+            }
+            _ => Resp::json("{}"),
+        }));
+        let mut client = IosNativeClient::connect(runner.port);
+        let apps = vec!["dev.tapwing.sampleApp".to_string()];
+        let mut ops = IosNativeOps::new(&mut client, &apps);
+
+        let mut req = tap_req(text("Covered target"), 500);
+        req.wait_until_visible = true;
+        let res = ops.tap_on_element(&req).unwrap();
+        assert_eq!((res["x"].as_i64(), res["y"].as_i64()), (Some(201), Some(322)));
+        assert_eq!(runner.calls("touch").len(), 2, "first tap while covered, second once uncovered");
+        assert!(vh_calls.load(Ordering::Relaxed) >= 4, "waited across at least one wait_until_visible poll");
     }
 }

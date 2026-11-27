@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::backend::parse_index;
 use crate::device::Platform;
 use crate::driver::DriverError;
-use crate::flow::ir::{Direction, ElementSelector, ElementTrait, KeyCode, MaestroCommand};
+use crate::flow::ir::{Direction, ElementSelector, ElementTrait, KeyCode};
 
 /// `scroll` duration: 400 ms on Android (`AndroidDriver.scrollVertical`),
 /// 333 ms on iOS (`IOSDriver.scrollVertical`).
@@ -30,27 +30,6 @@ pub fn scale_crop_bounds(b: [i64; 4], scale: f64) -> [i64; 4] {
     let w = ((b[2] - b[0]) as f64 * scale) as i64;
     let h = ((b[3] - b[1]) as f64 * scale) as i64;
     [sx, sy, sx + w, sy + h]
-}
-
-/// Whether `cmd` mutates device/UI state (`Orchestra.kt:431-499`), resetting
-/// the `adjustedToLatestInteraction` timeout window.
-pub fn is_mutating(cmd: &MaestroCommand) -> bool {
-    !matches!(
-        cmd,
-        MaestroCommand::ApplyConfiguration(_)
-            | MaestroCommand::DefineVariables(_)
-            | MaestroCommand::AssertCondition(_)
-            | MaestroCommand::AssertDarkMode(_)
-            | MaestroCommand::AssertLightMode(_)
-            | MaestroCommand::AssertScreenshot(_)
-            | MaestroCommand::TakeScreenshot(_)
-            | MaestroCommand::CopyTextFrom(_)
-            | MaestroCommand::SetClipboard(_)
-            | MaestroCommand::SetPermissions(_)
-            | MaestroCommand::ClearKeychain(_)
-            | MaestroCommand::StartRecording(_)
-            | MaestroCommand::StopRecording(_)
-    )
 }
 
 /// Keys routed through the Flutter engine boundary instead of `adb shell input keyevent`.
@@ -235,6 +214,7 @@ mod tests {
         AssertionError, DEFAULT_SCROLL_TIMEOUT_MS, InvalidNumericError, is_optional_downgradable, scroll_timeout_ms,
         speed_to_duration,
     };
+    use crate::flow::MaestroCommand;
     use crate::flow::ir::{Basic, Platform as IrPlatform, TakeScreenshot};
     use crate::native_lane::InputMode;
     use crate::orchestra::{adjusted_timeout, is_optional, settles_for_platform};

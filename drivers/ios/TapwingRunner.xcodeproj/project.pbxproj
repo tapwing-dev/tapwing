@@ -14,6 +14,8 @@
 		B000000200000000000000A1 /* RequestGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F000000200000000000000A1 /* RequestGate.swift */; };
 		B000000200000000000000A2 /* TypingPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = F000000200000000000000A2 /* TypingPlan.swift */; };
 		B000000200000000000000A3 /* RunnerCaches.swift in Sources */ = {isa = PBXBuildFile; fileRef = F000000200000000000000A3 /* RunnerCaches.swift */; };
+		B000000200000000000000A4 /* HierarchyFrameMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = F000000200000000000000A4 /* HierarchyFrameMath.swift */; };
+		B000000200000000000000A5 /* HttpConnectionMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F000000200000000000000A5 /* HttpConnectionMachine.swift */; };
 		B00000020000000000000004 /* RunnerTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000004 /* RunnerTest.swift */; };
 		B00000020000000000000005 /* HttpServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000005 /* HttpServer.swift */; };
 		B00000020000000000000006 /* Router.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000006 /* Router.swift */; };
@@ -47,6 +49,8 @@
 		F000000200000000000000A1 /* RequestGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestGate.swift; sourceTree = "<group>"; };
 		F000000200000000000000A2 /* TypingPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingPlan.swift; sourceTree = "<group>"; };
 		F000000200000000000000A3 /* RunnerCaches.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerCaches.swift; sourceTree = "<group>"; };
+		F000000200000000000000A4 /* HierarchyFrameMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HierarchyFrameMath.swift; sourceTree = "<group>"; };
+		F000000200000000000000A5 /* HttpConnectionMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HttpConnectionMachine.swift; sourceTree = "<group>"; };
 		F00000020000000000000004 /* RunnerTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTest.swift; sourceTree = "<group>"; };
 		F00000020000000000000005 /* HttpServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HttpServer.swift; sourceTree = "<group>"; };
 		F00000020000000000000006 /* Router.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Router.swift; sourceTree = "<group>"; };
@@ -99,6 +103,8 @@
 				F000000200000000000000A1 /* RequestGate.swift */,
 				F000000200000000000000A2 /* TypingPlan.swift */,
 				F000000200000000000000A3 /* RunnerCaches.swift */,
+				F000000200000000000000A4 /* HierarchyFrameMath.swift */,
+				F000000200000000000000A5 /* HttpConnectionMachine.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -241,6 +247,8 @@
 				B000000200000000000000A1 /* RequestGate.swift in Sources */,
 				B000000200000000000000A2 /* TypingPlan.swift in Sources */,
 				B000000200000000000000A3 /* RunnerCaches.swift in Sources */,
+				B000000200000000000000A4 /* HierarchyFrameMath.swift in Sources */,
+				B000000200000000000000A5 /* HttpConnectionMachine.swift in Sources */,
 				B00000020000000000000004 /* RunnerTest.swift in Sources */,
 				B00000020000000000000005 /* HttpServer.swift in Sources */,
 				B00000020000000000000006 /* Router.swift in Sources */,

@@ -602,6 +602,7 @@ printf '[package]\nname = "tapwing-parse-bench"\nversion = "0.1.0"\n' >"$REL/ben
 printf '[[package]]\nname = "tapwing"\nversion = "0.1.0"\n\n[[package]]\nname = "tapwing-parse-bench"\nversion = "0.1.0"\n' >"$REL/bench/parse/Cargo.lock"
 printf 'name: tapwing_driver\nversion: 0.1.0\n' >"$REL/packages/tapwing_driver/pubspec.yaml"
 printf '# Driver\n\n```yaml\n    git:\n      path: packages/tapwing_driver\n      ref: v0.1.0\n```\n\nPinned by `ref: v0.1.0` above.\n' >"$REL/packages/tapwing_driver/README.md"
+printf '## Unreleased\n\n* A fix.\n\n## 0.1.0\n\n* Initial release.\n' >"$REL/CHANGELOG.md"
 printf '## Unreleased\n\n* A fix.\n\n## 0.1.0\n\n* Initial release.\n' >"$REL/packages/tapwing_driver/CHANGELOG.md"
 
 # cargo: `update --manifest-path <dir>/Cargo.toml` copies the tapwing version into the tapwing
@@ -686,6 +687,8 @@ git -C "$REL" show "$rb:bench/parse/Cargo.lock" | grep -A1 '^name = "tapwing-par
 git -C "$REL" show "$rb:packages/tapwing_driver/pubspec.yaml" | grep -qx 'version: 0.1.1' || fail "release branch: pubspec.yaml not bumped"
 git -C "$REL" show "$rb:packages/tapwing_driver/README.md" | grep -qx '      ref: v0.1.1' || fail "release branch: README.md ref not bumped"
 git -C "$REL" show "$rb:packages/tapwing_driver/README.md" | grep -qxF 'Pinned by `ref: v0.1.0` above.' || fail "release branch: README.md changed outside the install snippet"
+git -C "$REL" show "$rb:CHANGELOG.md" | grep -qx '## 0.1.1' || fail "release branch: root CHANGELOG.md has no 0.1.1 entry"
+if git -C "$REL" show "$rb:CHANGELOG.md" | grep -q 'Unreleased'; then fail "release branch: root CHANGELOG.md still says Unreleased"; fi
 git -C "$REL" show "$rb:packages/tapwing_driver/CHANGELOG.md" | grep -qx '## 0.1.1' || fail "release branch: CHANGELOG.md has no 0.1.1 entry"
 if git -C "$REL" show "$rb:packages/tapwing_driver/CHANGELOG.md" | grep -q 'Unreleased'; then fail "release branch: CHANGELOG.md still says Unreleased"; fi
 grep -q "^pr create --base main --head release/v0.1.1 --title release: v0.1.1" "$WORK/gh.log" || fail "release.sh prepare did not open a pull request: $(cat "$WORK/gh.log")"

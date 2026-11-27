@@ -25,9 +25,8 @@ class SampleApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       // iOS only: unfocus text fields on taps outside them (standard iOS UX,
       // like Flutter on desktop and web). Flutter on iOS keeps focus, which
-      // makes stock Maestro's iOS `hideKeyboard` fail (see
-      // spikes/ios/hide-keyboard/REPORT.md). Scoped to iOS so the Android F2
-      // flows that exercise `back` with an open keyboard are unaffected.
+      // makes stock Maestro's iOS `hideKeyboard` fail. Scoped to iOS so the
+      // Android F2 flows that exercise `back` with an open keyboard are unaffected.
       builder: defaultTargetPlatform == TargetPlatform.iOS && _iosTapOutsideUnfocus
           ? _unfocusOnTapOutside
           : null,

@@ -17,6 +17,7 @@ use serde_json::{Value, json};
 use crate::backend::{FlowDriver, LOOKUP_TIMEOUT_MS, OPTIONAL_LOOKUP_TIMEOUT_MS};
 use crate::device::{Device, Platform, SessionGuards};
 use crate::driver::Driver;
+#[cfg(any(test, feature = "test-support"))]
 use crate::fake_driver::FakeDriver;
 use crate::flow::ParsedFlow;
 use crate::js::default_http_agent;
@@ -191,13 +192,14 @@ where
 }
 
 /// Convenience test seam executing a [`ShardPlan`] against a [`FakeDriver`].
+#[cfg(any(test, feature = "test-support"))]
 pub fn execute_shard_on_fake_driver(
     driver: &mut FakeDriver,
     shard_plan: &ShardPlan,
     base_opts: &OrchestraOpts,
     device_id: Option<&str>,
 ) -> SuiteResult {
-    let platform_name = match driver.device_info().platform {
+    let platform_name = match driver.platform() {
         crate::flow::ir::Platform::Android => "android",
         crate::flow::ir::Platform::Ios => "ios",
         crate::flow::ir::Platform::Web => "web",

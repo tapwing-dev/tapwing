@@ -224,6 +224,8 @@ public struct DeviceInfoResponse: Codable, Equatable, Sendable {
 
 public struct ViewHierarchyRequest: Codable, Equatable, Sendable {
     public let appIds: [String]?
+    /// Accepted for wire compatibility with Maestro 2.12.1 `ViewHierarchyRequest`;
+    /// currently ignored by `HierarchyBuilder` (keyboard filtering happens host-side when needed).
     public let excludeKeyboardElements: Bool?
 
     public init(appIds: [String]? = nil, excludeKeyboardElements: Bool? = nil) {

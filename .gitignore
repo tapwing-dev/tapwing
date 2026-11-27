@@ -10,5 +10,4 @@ bench/*.json
 !bench/results/**/summary.md
 compat/harness/build/
 .tapwing/
-reviews/snapshots/
 dist/
