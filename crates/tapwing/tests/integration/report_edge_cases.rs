@@ -37,6 +37,7 @@ fn flow(name: &str, status: FlowStatus) -> FlowRunRecord {
         failure_diagnostics: None,
         raw_json: json!({ "name": name }),
         trace: None,
+        graybox: Default::default(),
     }
 }
 

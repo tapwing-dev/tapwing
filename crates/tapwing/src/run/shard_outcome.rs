@@ -78,6 +78,7 @@ pub(crate) fn unrun_flow_record(flow: &ParsedFlow, why: UnrunFlow<'_>) -> FlowRu
         failure_diagnostics: None,
         raw_json,
         trace: None,
+        graybox: Default::default(),
     }
 }
 
@@ -503,6 +504,7 @@ mod tests {
             js_closed: true,
             dropped_app_issues: 0,
             trace: None,
+            graybox: Default::default(),
         }
     }
 

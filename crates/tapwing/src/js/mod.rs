@@ -509,6 +509,22 @@ impl JsEngine {
         out.map_err(|err| self.classify_eval_error(err))
     }
 
+    /// Assigns `output.<key>` to the parsed JSON representation of `value` inside QuickJS.
+    pub fn set_output_json(&mut self, key: &str, value: &serde_json::Value) -> Result<()> {
+        let json_src = serde_json::to_string(value)?;
+        let key_json = serde_json::to_string(key)?;
+        let qjs = self.ensure_qjs()?;
+        let res = qjs.context.with(|ctx| -> Result<()> {
+            let script = format!(
+                "(function(k, v) {{ globalThis.output[k] = JSON.parse(v); }})({key_json}, {json_src_str});",
+                json_src_str = serde_json::to_string(&json_src)?
+            );
+            ctx.eval::<(), _>(script).catch(&ctx).map_err(caught_to_anyhow)?;
+            Ok(())
+        });
+        res.map_err(|err| self.classify_eval_error(err))
+    }
+
     /// Replaces the engine's raw failure with what actually ended the script.
     ///
     /// QuickJS reports an abort by the interrupt handler as an uncatchable
@@ -1303,5 +1319,22 @@ mod tests {
         assert_eq!(err.to_string(), "terminated by SIGTERM");
         assert!(waited < Duration::from_secs(5), "request held the run for {waited:?} (agent timeout is 300 s)");
         assert_eq!(engine.metrics().http_requests, 0, "an abandoned request must not be counted as completed");
+    }
+
+    #[test]
+    fn set_output_json_binds_nested_values_and_primitives() {
+        let mut engine = JsEngine::new("ios");
+        let payload = serde_json::json!({
+            "userId": 42,
+            "tags": ["vip", "beta"],
+            "active": true
+        });
+        engine.set_output_json("seed", &payload).unwrap();
+        assert_eq!(engine.evaluate_scripts("${output.seed.userId}").unwrap(), "42");
+        assert_eq!(engine.evaluate_scripts("${output.seed.tags[1]}").unwrap(), "beta");
+        assert_eq!(engine.evaluate_scripts("${output.seed.active}").unwrap(), "true");
+
+        engine.set_output_json("empty", &serde_json::Value::Null).unwrap();
+        assert_eq!(engine.evaluate_scripts("${output.empty === null}").unwrap(), "true");
     }
 }

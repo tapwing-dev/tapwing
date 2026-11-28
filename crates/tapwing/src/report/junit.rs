@@ -97,6 +97,9 @@ pub fn render_junit(summary: &TestExecutionSummary) -> Result<String> {
                     let joined = flow.tags.iter().map(|t| sanitize_xml_text(t)).collect::<Vec<_>>().join(", ");
                     props.push(("tags".to_string(), joined));
                 }
+                for (k, v) in flow.graybox.junit_properties() {
+                    props.push((sanitize_xml_text(&k), sanitize_xml_text(&v)));
+                }
 
                 // F7 app health issues and F8 failure diagnostics go into
                 // `<system-err>` (Maestro has neither, so clean flows keep
@@ -115,6 +118,9 @@ pub fn render_junit(summary: &TestExecutionSummary) -> Result<String> {
                 }
                 if let Some(reason) = flow.blackbox_reason.as_deref().filter(|_| flow.blackbox) {
                     system_err_sections.push(format!("Black-box: {}", sanitize_xml_text(reason)));
+                }
+                if let Some(gb) = flow.graybox.junit_system_err() {
+                    system_err_sections.push(sanitize_xml_text(&gb));
                 }
                 if !issue_lines.is_empty() {
                     system_err_sections.push(format!("App issues:\n{}", issue_lines.join("\n")));
@@ -213,6 +219,7 @@ mod tests {
             failure_diagnostics: None,
             raw_json: json!({}),
             trace: None,
+            graybox: Default::default(),
         }
     }
 

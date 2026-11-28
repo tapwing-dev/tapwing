@@ -5,9 +5,9 @@ use serde_json::Value;
 
 use crate::backend::{MaestroError, scroll_timeout_ms, speed_to_duration};
 use crate::flow::ir::{
-    AssertCondition, Condition, DefineVariables, ElementSelector, EvalScript, GeoPoint, LaunchApp, MaestroCommand,
-    MaestroConfig, OpenLink, Repeat, Retry, RunFlow, RunScript, ScrollUntilVisible, SetLocation, SetOrientation,
-    SetPermissions, StartRecording, Swipe, TakeScreenshot, TapOnElement, TapOnPoint, Travel, ValueMap,
+    AssertCondition, CallHook, Condition, DefineVariables, ElementSelector, EvalScript, GeoPoint, LaunchApp,
+    MaestroCommand, MaestroConfig, OpenLink, Repeat, Retry, RunFlow, RunScript, ScrollUntilVisible, SetLocation,
+    SetOrientation, SetPermissions, StartRecording, Swipe, TakeScreenshot, TapOnElement, TapOnPoint, Travel, ValueMap,
     WaitForAnimationToEnd, orientation_by_name,
 };
 use crate::js::JsEngine;
@@ -160,6 +160,16 @@ pub fn evaluate_command_scripts(cmd: &MaestroCommand, js: &mut JsEngine) -> Resu
             label: eval_opt(&c.label, js)?,
             ..c.clone()
         }),
+        MaestroCommand::CallHook(c) => MaestroCommand::CallHook(CallHook {
+            name: js.evaluate_scripts(&c.name)?,
+            args: c.args.as_ref().map(|m| evaluate_json_value_map(m, js)).transpose()?,
+            timeout: eval_opt(&c.timeout, js)?,
+            settle: c.settle,
+            wait_to_settle_timeout_ms: eval_opt(&c.wait_to_settle_timeout_ms, js)?,
+            output_variable: eval_opt(&c.output_variable, js)?,
+            label: eval_opt(&c.label, js)?,
+            optional: c.optional,
+        }),
         MaestroCommand::DefineVariables(c) => MaestroCommand::DefineVariables(evaluate_define_variables(c, js)?),
         MaestroCommand::RunScript(c) => MaestroCommand::RunScript(RunScript {
             env: evaluate_value_map(&c.env, js, false)?,
@@ -279,6 +289,33 @@ fn evaluate_value_map(map: &ValueMap, js: &mut JsEngine, eval_keys: bool) -> Res
             other => other.clone(),
         };
         out.insert(new_key, new_val);
+    }
+    Ok(out)
+}
+
+fn evaluate_json_value(v: &Value, js: &mut JsEngine) -> Result<Value> {
+    match v {
+        Value::String(s) => Ok(Value::String(js.evaluate_scripts(s)?)),
+        Value::Array(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                out.push(evaluate_json_value(item, js)?);
+            }
+            Ok(Value::Array(out))
+        }
+        Value::Object(map) => Ok(Value::Object(evaluate_json_value_map(map, js)?)),
+        other => Ok(other.clone()),
+    }
+}
+
+fn evaluate_json_value_map(map: &ValueMap, js: &mut JsEngine) -> Result<ValueMap> {
+    let mut out = ValueMap::new();
+    for (k, v) in map {
+        let new_key = js.evaluate_scripts(k)?;
+        if out.contains_key(&new_key) {
+            return Err(anyhow::anyhow!("duplicate key \"{new_key}\" after interpolation"));
+        }
+        out.insert(new_key, evaluate_json_value(v, js)?);
     }
     Ok(out)
 }

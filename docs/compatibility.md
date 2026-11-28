@@ -62,11 +62,15 @@ Tapwing mirrors Maestro 2.12.1's global and `test` flags so existing CI invocati
 | `--maestro-compat <default\|strict>` | Emulate Maestro behavior Tapwing changes on purpose in `strict` mode (iOS `hideKeyboard` failure, iOS Simulator `clearState` by reinstalling the app) |
 | `--app-errors`, `--app-errors-ignore`, `--app-errors-screenshot` | Capture/fail on Flutter overflows, exceptions, and crashes |
 | `--trace`, `--trace-screenshots <failures\|steps>` | Write offline `trace.html` + `trace.json` diagnostics |
+| `--attach`, `--start-from <STEP_OR_LABEL>` | Reuse a running app or resume from a 1-based step / top-level label (flagged gray-box on stderr and reports) |
+| `--allow-hooks`, `--no-hooks` | Permit or block in-app `callHook` commands (overrides `config.yaml` `tapwing.allowHooks`) |
 | `--native-driver <DRIVER>` | Deprecated no-op (warns for non-`tapwing` values) |
 
 ## Intentional differences
 
 A few places where Tapwing goes slightly beyond Maestro by default:
+
+- **Fast inner-loop gray-box features (`callHook`, `--attach`, `--start-from`).** Clean black-box flows stay 100% Maestro-compatible and emit no gray-box metadata. When hooks (opt-in via `tapwing.allowHooks: true` or `--allow-hooks`), warm `--attach`, or partial `--start-from` runs are used, Tapwing explicitly announces `[tapwing] gray-box: ...` on `stderr` and marks the flow across JSON, HTML, JUnit, and Trace outputs. See [Supported commands](commands.md#fast-inner-loop-extensions-gray-box) and [Design decisions](decisions.md#9-fast-inner-loop-extensions-opt-in-gray-box-flagged).
 
 - **App health reporting.** Tapwing observes layout overflows, uncaught exceptions, and crashes during runs (`--app-errors report` by default). It never fails a flow unless you opt in with `--app-errors fail`, and `--app-errors off` disables it completely. See [App health](app-health.md).
 - **iOS `hideKeyboard`.** Tapwing dismisses the keyboard with a warning even if a Flutter text field remains focused. Pass `--maestro-compat strict` to reproduce Maestro's iOS failure behavior.

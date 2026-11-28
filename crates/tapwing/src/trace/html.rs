@@ -361,6 +361,7 @@ const SCRIPT: &str = r#"
     else if (flow.http === 'unsupported') meta.push('HTTP log unavailable (no Tapwing driver connection: --input native, black-box app, or an older driver)');
     if (typeof flow.httpDropped === 'number' && flow.httpDropped > 0) meta.push(flow.httpDropped + ' HTTP entries dropped');
     if (flow.blackbox) meta.push(flow.blackboxReason ? 'black-box (' + flow.blackboxReason + ')' : 'black-box');
+    if (flow.graybox) meta.push(Array.isArray(flow.grayboxReasons) && flow.grayboxReasons.length ? 'gray-box (' + flow.grayboxReasons.join('; ') + ')' : 'gray-box');
     add(head, title, el('span', 'flow-meta', meta.join(' · ')));
     add(section, head);
     if (flow.file || flow.path) add(section, el('div', 'muted mono', flow.file || flow.path));

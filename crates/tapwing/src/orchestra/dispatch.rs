@@ -8,7 +8,7 @@ use anyhow::{Result, anyhow};
 use serde_json::{Value, json};
 
 use crate::backend::{
-    AssertionError, FlowDriver, InvalidNumericError, LaunchRequest, MAX_RETRIES_ALLOWED, MaestroError,
+    AssertionError, CallHookRequest, FlowDriver, InvalidNumericError, LaunchRequest, MAX_RETRIES_ALLOWED, MaestroError,
     ScrollUntilVisibleRequest, SwipeRequest, TapElementRequest, TapPointRequest, is_maestro_error, parse_timeout_ms,
     parse_wait_animation_timeout, scroll_timeout_ms,
 };
@@ -18,6 +18,16 @@ use crate::{random, screenshot};
 use super::describe::{describe_condition, is_optional};
 use super::eval::evaluate_condition_scripts;
 use super::{CommandMetadata, CommandSkipped, Orchestra};
+
+fn parse_hook_ms_field(raw: &str, field: &str, min: u64, max: u64) -> Result<u64> {
+    let clean = raw.trim().replace('_', "");
+    let parsed = clean.parse::<u64>().ok().filter(|v| (min..=max).contains(v)).ok_or_else(|| {
+        anyhow::Error::new(InvalidNumericError(format!(
+            "Invalid `{field}` value `{raw}` for callHook: expected integer in {min}..={max} ms"
+        )))
+    })?;
+    Ok(parsed)
+}
 
 impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
     pub(super) fn execute_single_command(
@@ -39,6 +49,19 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
             MaestroCommand::LaunchApp(c) => {
                 self.flow_app_id = Some(c.app_id.clone());
                 self.app_intentionally_stopped = false;
+                if self.warm_attach_pending_launch {
+                    self.warm_attach_pending_launch = false;
+                    let mut extra = self.driver.warm_attach(&c.app_id)?;
+                    if (c.clear_state == Some(true) || c.clear_keychain == Some(true))
+                        && let Some(obj) = extra.as_object_mut()
+                    {
+                        obj.insert(
+                            "warning".to_string(),
+                            Value::String("Skipped clearState/clearKeychain because `--attach` is active".to_string()),
+                        );
+                    }
+                    return Ok((true, extra));
+                }
                 let permissions: BTreeMap<String, String> = match &c.permissions {
                     Some(map) => map
                         .iter()
@@ -434,6 +457,47 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                         }
                     }
                 }
+            }
+            MaestroCommand::CallHook(c) => {
+                if !self.opts.allow_hooks {
+                    return Err(anyhow!(
+                        "callHook `{}` is blocked because in-app hooks are disabled (set `tapwing.allowHooks: true` in config.yaml or pass `--allow-hooks`)",
+                        c.name
+                    ));
+                }
+                let first_time = !self.graybox.hooks_used.iter().any(|h| h == &c.name);
+                self.graybox.record_hook(&c.name);
+                if first_time {
+                    eprintln!("{}[tapwing] gray-box: invoking in-app hook `{}`", self.opts.log_prefix, c.name);
+                }
+                let timeout_ms =
+                    c.timeout.as_deref().map(|raw| parse_hook_ms_field(raw, "timeout", 1, 86_400_000)).transpose()?;
+                let settle_timeout_ms = c
+                    .wait_to_settle_timeout_ms
+                    .as_deref()
+                    .map(|raw| parse_hook_ms_field(raw, "waitToSettleTimeoutMs", 0, 86_400_000))
+                    .transpose()?;
+                if let Some(var) = &c.output_variable
+                    && !crate::flow::commands::is_valid_js_identifier(var)
+                {
+                    return Err(MaestroError::invalid_command(format!(
+                        "`outputVariable` must be a valid JS identifier, got `{var}`"
+                    ))
+                    .into());
+                }
+                let req = CallHookRequest {
+                    name: c.name.clone(),
+                    args: c.args.clone(),
+                    timeout_ms,
+                    settle: c.settle,
+                    settle_timeout_ms,
+                };
+                let res = self.driver.call_hook(&req)?;
+                if let Some(var) = &c.output_variable {
+                    let value = res.get("value").unwrap_or(&Value::Null);
+                    self.js.set_output_json(var, value)?;
+                }
+                Ok((true, res))
             }
             MaestroCommand::AssertWithAi(_)
             | MaestroCommand::AssertNoDefectsWithAi(_)

@@ -8,3 +8,4 @@
 library;
 
 export 'src/binding.dart' show TapwingBinding, TapwingBindingMixin;
+export 'src/hooks/hook_registry.dart' show TapwingHookHandler;

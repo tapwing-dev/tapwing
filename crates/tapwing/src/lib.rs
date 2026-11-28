@@ -12,6 +12,7 @@ pub mod failure;
 #[cfg(any(test, feature = "test-support"))]
 pub mod fake_driver;
 pub mod flow;
+pub mod graybox;
 pub mod init;
 pub mod interrupt;
 pub mod ios_native_lane;

@@ -112,6 +112,8 @@ pub enum MaestroCommand {
     AssertLightMode(Basic),
     #[serde(rename = "retryCommand")]
     Retry(Retry),
+    #[serde(rename = "callHookCommand")]
+    CallHook(CallHook),
 }
 
 impl MaestroCommand {
@@ -162,6 +164,7 @@ impl MaestroCommand {
             AddMedia(c) => (&c.label, c.optional),
             SetAirplaneMode(c) | SetDarkMode(c) => (&c.label, c.optional),
             Retry(c) => (&c.label, c.optional),
+            CallHook(c) => (&c.label, c.optional),
             Scroll(c)
             | BackPress(c)
             | HideKeyboard(c)
@@ -735,6 +738,26 @@ pub struct Retry {
     pub source_description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<MaestroConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub optional: bool,
+}
+
+/// Tapwing-only gray-box command invoking an in-app registered Dart test hook.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CallHook {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub args: Option<ValueMap>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settle: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wait_to_settle_timeout_ms: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_variable: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     pub optional: bool,

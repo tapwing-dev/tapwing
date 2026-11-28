@@ -457,6 +457,9 @@ pub fn render_html_for_path(summary: &TestExecutionSummary, detailed: bool, repo
             escape_html(&crate::interrupt::signal_name(signal))
         ));
     }
+    if summary.suites.iter().any(|s| s.flows.iter().any(|f| f.graybox.is_active())) {
+        sub.push("<span class=\"warn\">contains gray-box runs</span>".to_string());
+    }
     let sub = sub.join(dot);
 
     let _ = write!(
@@ -553,8 +556,11 @@ pub fn render_html_for_path(summary: &TestExecutionSummary, detailed: bool, repo
             let mark = Mark::for_flow(flow);
             // F7: a passing flow with app issues stays open, so it never looks clean.
             let issue_count: usize = flow.steps.iter().map(|s| s.app_issues.len()).sum();
-            let open_attr = if flow.failed() || issue_count > 0 { " open" } else { "" };
+            let open_attr = if flow.failed() || issue_count > 0 || flow.graybox.is_active() { " open" } else { "" };
             let mut flow_sub = vec![escape_html(&flow.lane)];
+            if flow.graybox.is_active() {
+                flow_sub.push(format!("<span class=\"warn\">{}</span>", escape_html(&flow.graybox.short_badge())));
+            }
             if flow.blackbox {
                 flow_sub.push("blackbox".into());
                 if let Some(reason) = &flow.blackbox_reason {
@@ -616,6 +622,10 @@ pub fn render_html_for_path(summary: &TestExecutionSummary, detailed: bool, repo
                     .collect::<Vec<_>>()
                     .join(", ");
                 let _ = write!(out, "<dt>Properties</dt><dd><code>{props_str}</code></dd>");
+            }
+            if flow.graybox.is_active() {
+                let reasons = escape_html(&flow.graybox.reasons().join("; "));
+                let _ = write!(out, "<dt>Gray-box</dt><dd><span class=\"warn\">{reasons}</span></dd>");
             }
             out.push_str("</dl>\n");
 
@@ -730,6 +740,7 @@ mod tests {
             }),
             raw_json: json!({}),
             trace: None,
+            graybox: Default::default(),
         };
 
         let summary = TestExecutionSummary {

@@ -50,6 +50,9 @@ abstract final class DriverTimeouts {
 
   /// Maximum wait for `tapOn` with `waitUntilVisible: true` (`Maestro.kt:511-520`).
   static const Duration waitUntilVisibleTimeout = Duration(seconds: 10);
+
+  /// Default execution timeout for `callHook` handlers.
+  static const int hookMs = 15000;
 }
 
 /// Incoming JSON-RPC request envelope sent by the Rust CLI.

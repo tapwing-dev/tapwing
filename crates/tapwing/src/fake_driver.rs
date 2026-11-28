@@ -3,7 +3,7 @@
 //! ported Maestro `IntegrationTest.kt` suite without an Android device.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -12,9 +12,10 @@ use image::{DynamicImage, Rgba, RgbaImage};
 use serde_json::{Value, json};
 
 use crate::backend::{
-    DeviceInfo, FlowDriver, LaunchRequest, MaestroError, ScrollUntilVisibleRequest, SwipeRequest, TapElementRequest,
-    TapPointRequest, TransportError, parse_point,
+    CallHookRequest, DeviceInfo, FlowDriver, LaunchRequest, MaestroError, ScrollUntilVisibleRequest, SwipeRequest,
+    TapElementRequest, TapPointRequest, TransportError, parse_point,
 };
+use crate::driver::DriverError;
 use crate::flow::ir::{Direction, ElementSelector, KeyCode, Platform, ValueMap};
 use crate::screenshot;
 pub use crate::ui_tree::Bounds;
@@ -196,7 +197,12 @@ pub enum FakeEvent {
     AddMedia(String),
     StartRecording,
     StopRecording,
+    CallHook { name: String, args: Option<ValueMap> },
+    WarmAttach(String),
 }
+
+/// Optional hook handler callback for `FakeDriver` unit/integration tests.
+pub type FakeHookHandler = Box<dyn FnMut(Option<&ValueMap>) -> Result<Value>>;
 
 /// Optional hook called before reading the hierarchy (allows tests to simulate
 /// deferred elements, transient hierarchy flips, or scrolling momentum).
@@ -244,6 +250,10 @@ pub struct FakeDriver {
     pub trace_calls: usize,
     /// Test seam (F8b): reported by `trace_http_status()`.
     pub trace_http: &'static str,
+    /// Registered fake hooks for `callHook`.
+    pub registered_hooks: HashMap<String, FakeHookHandler>,
+    /// Test seam: optional error returned by `warm_attach()`.
+    pub warm_attach_error: Option<String>,
 }
 
 impl Default for FakeDriver {
@@ -289,7 +299,18 @@ impl FakeDriver {
             trailing_trace: crate::trace::TraceBatch::default(),
             trace_calls: 0,
             trace_http: "enabled",
+            registered_hooks: HashMap::new(),
+            warm_attach_error: None,
         }
+    }
+
+    /// Registers an in-memory hook handler on this fake driver.
+    pub fn register_hook(
+        &mut self,
+        name: impl Into<String>,
+        handler: impl FnMut(Option<&ValueMap>) -> Result<Value> + 'static,
+    ) {
+        self.registered_hooks.insert(name.into(), Box::new(handler));
     }
 
     pub fn with_platform(mut self, platform: Platform) -> Self {
@@ -807,6 +828,30 @@ impl FlowDriver for FakeDriver {
     fn set_dark_mode(&mut self, enabled: bool) -> Result<Value> {
         self.dark_mode = enabled;
         Ok(json!({ "darkMode": enabled }))
+    }
+
+    fn call_hook(&mut self, req: &CallHookRequest) -> Result<Value> {
+        self.events.push(FakeEvent::CallHook { name: req.name.clone(), args: req.args.clone() });
+        let Some(handler) = self.registered_hooks.get_mut(&req.name) else {
+            let mut available: Vec<String> = self.registered_hooks.keys().cloned().collect();
+            available.sort();
+            return Err(DriverError {
+                code: "HOOK_NOT_FOUND".to_string(),
+                message: format!("Unknown hook `{}`", req.name),
+                details: json!({ "hook": req.name, "availableHooks": available }),
+            }
+            .into());
+        };
+        let value = handler(req.args.as_ref())?;
+        Ok(json!({ "hook": req.name, "value": value, "settle": "idle" }))
+    }
+
+    fn warm_attach(&mut self, app_id: &str) -> Result<Value> {
+        if let Some(err) = &self.warm_attach_error {
+            return Err(anyhow::anyhow!("{err}"));
+        }
+        self.events.push(FakeEvent::WarmAttach(app_id.to_string()));
+        Ok(json!({ "attached": true, "appId": app_id }))
     }
 
     fn capture_failure_hierarchy(&mut self) -> Option<(String, TreeNode)> {

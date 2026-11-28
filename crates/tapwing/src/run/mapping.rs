@@ -188,14 +188,24 @@ pub fn driver_selector(sel: &ElementSelector) -> Result<Value> {
 }
 
 pub fn explain(e: &anyhow::Error) -> String {
-    if let Some(d) = e.downcast_ref::<DriverError>()
-        && d.code == "ELEMENT_NOT_FOUND"
-    {
-        let seen: Vec<String> = d.details["visibleTexts"]
-            .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| format!("\"{s}\""))).take(12).collect())
-            .unwrap_or_default();
-        return format!("{}\n      on screen: {}", d.message, seen.join(", "));
+    if let Some(d) = e.downcast_ref::<DriverError>() {
+        if d.code == "ELEMENT_NOT_FOUND" {
+            let seen: Vec<String> = d.details["visibleTexts"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| format!("\"{s}\""))).take(12).collect())
+                .unwrap_or_default();
+            return format!("{}\n      on screen: {}", d.message, seen.join(", "));
+        }
+        if d.code == "HOOK_NOT_FOUND" {
+            let hooks: Vec<String> = d.details["availableHooks"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+                .unwrap_or_default();
+            if hooks.is_empty() {
+                return format!("{}\n      registered hooks: (none)", d.message);
+            }
+            return format!("{}\n      registered hooks: {}", d.message, hooks.join(", "));
+        }
     }
     format!("{e:#}")
 }

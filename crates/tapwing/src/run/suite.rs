@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
 use crate::backend::{FlowDriver, LOOKUP_TIMEOUT_MS, OPTIONAL_LOOKUP_TIMEOUT_MS};
@@ -61,6 +61,12 @@ pub struct SuiteRunConfig {
     pub app_health: crate::app_health::AppHealthOpts,
     /// F8b `--trace`: writes `trace.json` + `trace.html` per shard.
     pub trace: Option<crate::trace::TraceOpts>,
+    /// Permit in-app `callHook` commands (policy resolved from config.yaml + CLI).
+    pub allow_hooks: bool,
+    /// Attach to an already-running app instead of cold-relaunching on leading `launchApp`.
+    pub attach: bool,
+    /// Resume flow from this 1-based step index or exact top-level `label`.
+    pub start_from: Option<String>,
 }
 
 fn now_epoch_ms() -> u64 {
@@ -388,6 +394,7 @@ pub(crate) fn build_flow_record(
         failure_diagnostics,
         raw_json,
         trace,
+        graybox: result.graybox,
     }
 }
 
@@ -400,6 +407,14 @@ pub(crate) fn build_flow_record(
 /// see [`shard_outcome::conclude_run`] for how the run then ends.
 pub fn run_test_suite(cfg: SuiteRunConfig) -> Result<bool> {
     let total_flows = cfg.plan.sequence.len() + cfg.plan.flows.len();
+    if let Some(start_from) = &cfg.start_from {
+        if total_flows != 1 {
+            bail!("--start-from requires a single flow, but {total_flows} flows were matched");
+        }
+        if let Some(flow) = cfg.plan.sequence.first().or_else(|| cfg.plan.flows.first()) {
+            crate::orchestra::validate_start_from_static(flow, start_from)?;
+        }
+    }
     let shard_req = shard::resolve_shard_request(
         cfg.shard_split,
         cfg.shard_all,
@@ -452,6 +467,9 @@ pub fn run_test_suite(cfg: SuiteRunConfig) -> Result<bool> {
         disable_android_animations,
         app_health: &cfg.app_health,
         trace: cfg.trace,
+        allow_hooks: cfg.allow_hooks,
+        attach: cfg.attach,
+        start_from: cfg.start_from.as_deref(),
     };
 
     // Captured before the devices move into their shards, so a shard that
@@ -560,6 +578,9 @@ struct ShardSessionSettings<'a> {
     disable_android_animations: bool,
     app_health: &'a crate::app_health::AppHealthOpts,
     trace: Option<crate::trace::TraceOpts>,
+    allow_hooks: bool,
+    attach: bool,
+    start_from: Option<&'a str>,
 }
 
 fn run_device_shard(
@@ -666,6 +687,9 @@ fn run_device_shard(
         http_agent: Some(http_agent),
         app_health: settings.app_health.clone(),
         trace: settings.trace,
+        allow_hooks: settings.allow_hooks,
+        attach: settings.attach,
+        start_from: settings.start_from.map(str::to_string),
     };
 
     let mut session = Session {
@@ -827,6 +851,7 @@ mod tests {
                         "driver": { "phases": phases },
                     }],
                 })),
+                graybox: Default::default(),
             }
         };
 

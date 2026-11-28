@@ -3,9 +3,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart' show RendererBinding;
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
-import 'package:flutter/widgets.dart' show AppLifecycleState;
+import 'package:flutter/widgets.dart' show AppLifecycleState, BuildContext;
 
 import '../diagnostics/error_hooks.dart';
+import '../hooks/hook_registry.dart';
 import '../idle/idle_detector.dart';
 import '../input/back_signals.dart';
 import '../input/pointer_input.dart';
@@ -43,8 +44,12 @@ class DriverContext {
     this.strictHideKeyboard = false,
     this.appName,
     AppErrorHooks? errorHooks,
+    HookRegistry? hooks,
+    BuildContext? Function()? resolveHookContext,
   }) : idle = idle ?? IdleDetector.instance,
        errorHooks = errorHooks ?? AppErrorHooks.instance,
+       hooks = hooks ?? HookRegistry.instance,
+       resolveHookContext = resolveHookContext ?? resolveActiveHookContext,
        pointer = pointer ?? PointerInput.instance,
        textInput = textInput ?? TextInputController.instance,
        _captureOverride = captureSnapshot,
@@ -75,6 +80,12 @@ class DriverContext {
 
   /// App health hooks (F7); scanned for layout overflows after each settle.
   final AppErrorHooks errorHooks;
+
+  /// App-registered gray-box test hooks (`callHook`).
+  final HookRegistry hooks;
+
+  /// Resolves the live [BuildContext] passed to `callHook` handlers.
+  final BuildContext? Function() resolveHookContext;
 
   /// Engine-boundary pointer and navigation injector.
   final PointerInput pointer;

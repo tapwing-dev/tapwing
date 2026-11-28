@@ -66,6 +66,9 @@ pub struct TapwingConfig {
     /// `settleHttpIgnore`: regexes (single string or list) for request URLs
     /// that never block settle.
     pub settle_http_ignore: Vec<String>,
+    /// `allowHooks`: whether flows may invoke in-app `callHook` commands
+    /// (default `true`; `--allow-hooks` / `--no-hooks` override).
+    pub allow_hooks: Option<bool>,
 }
 
 /// Platform-specific workspace settings (`WorkspaceConfig.PlatformConfiguration`).
@@ -247,12 +250,13 @@ fn tapwing_config(node: &Node) -> Result<TapwingConfig, Problem> {
             "settleHttpIgnore" => {
                 cfg.settle_http_ignore = string_list(value, "settleHttpIgnore")?.unwrap_or_default();
             }
+            "allowHooks" => cfg.allow_hooks = boolean(value, "allowHooks")?,
             other => {
                 return Err(Problem::new(
                     "Unknown tapwing setting",
                     format!(
-                        "`{other}` (valid: appErrors, appErrorsIgnore, appErrorsScreenshot, nativeDriver, \
-                         settleLoadTimeoutMs, settleHttpIgnore)"
+                        "`{other}` (valid: allowHooks, appErrors, appErrorsIgnore, appErrorsScreenshot, \
+                         nativeDriver, settleLoadTimeoutMs, settleHttpIgnore)"
                     ),
                     value.pos(),
                 ));
@@ -375,8 +379,13 @@ mod tests {
                 native_driver: Some("Tapwing".into()),
                 settle_load_timeout_ms: None,
                 settle_http_ignore: Vec::new(),
+                allow_hooks: None,
             }
         );
+        let hooks_cfg = parse("tapwing:\n  allowHooks: false\n").unwrap();
+        assert!(hooks_cfg.unknown_keys.is_empty());
+        assert_eq!(hooks_cfg.config.tapwing.allow_hooks, Some(false));
+        assert!(parse("tapwing:\n  allowHooks: maybe\n").is_err());
         let settle = parse(
             "tapwing:\n  settleLoadTimeoutMs: 2500\n  settleHttpIgnore:\n    - '^https://analytics\\.'\n    - /poll\n",
         )

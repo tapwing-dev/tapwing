@@ -113,6 +113,7 @@ const OBJECT_COMMANDS: &[&str] = &[
     "assertDarkMode",
     "assertLightMode",
     "retry",
+    "callHook",
 ];
 
 /// Every command name (for "did you mean" suggestions).
@@ -860,6 +861,7 @@ fn object_command(name: &str, v: &Node, ctx: &Ctx) -> Result<Vec<MaestroCommand>
             one(MaestroCommand::SetAirplaneMode(set_toggle(v, "setAirplaneMode", "airplane mode").map_err(here)?))
         }
         "setDarkMode" => one(MaestroCommand::SetDarkMode(set_toggle(v, "setDarkMode", "dark mode").map_err(here)?)),
+        "callHook" => one(MaestroCommand::CallHook(call_hook(v).map_err(here)?)),
         _ => Err(here(Problem::failed(format!("Invalid command: No mapping provided for {name}"), v.pos()))),
     }
 }
@@ -1654,6 +1656,103 @@ fn add_media(v: &Node, ctx: &Ctx) -> Result<AddMedia, FlowFailure> {
 /// Hook command lists (`onFlowStart` / `onFlowComplete`).
 pub fn hook(n: &Node, field: &str, ctx: &Ctx) -> Result<Hook, FlowFailure> {
     Ok(Hook { commands: command_list(n, field, ctx, None)? })
+}
+
+const MAX_HOOK_TIMEOUT_MS: i64 = 86_400_000;
+
+/// Checks whether `name` is a valid JS identifier on `output.<name>`.
+pub fn is_valid_js_identifier(name: &str) -> bool {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_' || first == '$')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+}
+
+fn validate_ms_literal(raw: &str, field: &str, min: i64, max: i64, pos: Pos) -> DResult<()> {
+    if raw.contains("${") {
+        return Ok(());
+    }
+    let clean = raw.trim().replace('_', "");
+    let parsed = clean.parse::<i64>().ok().filter(|v| (min..=max).contains(v));
+    if parsed.is_none() {
+        return Err(Problem::new(
+            "Invalid Command: callHook",
+            format!("`{field}` must be an integer in {min}..={max} ms, got `{raw}`"),
+            pos,
+        ));
+    }
+    Ok(())
+}
+
+fn call_hook(v: &Node) -> DResult<CallHook> {
+    match v {
+        Node::Scalar(_) => {
+            let name = delegated_string(v)?;
+            if !name.contains("${") && name.trim().is_empty() {
+                return Err(Problem::new("Invalid Command: callHook", "Hook `name` must not be empty.", v.pos()));
+            }
+            Ok(CallHook {
+                name,
+                args: None,
+                timeout: None,
+                settle: None,
+                wait_to_settle_timeout_ms: None,
+                output_variable: None,
+                label: None,
+                optional: false,
+            })
+        }
+        Node::Seq(..) => Err(shape(v.pos())),
+        Node::Map(..) => {
+            let o = Obj::bind(
+                v,
+                &["name", "args", "timeout", "settle", "waitToSettleTimeoutMs", "outputVariable", "label", "optional"],
+                "callHook",
+                Mode::Stream,
+            )?;
+            let name = o.req_string("name")?;
+            if !name.contains("${") && name.trim().is_empty() {
+                return Err(Problem::new("Invalid Command: callHook", "Hook `name` must not be empty.", o.pos));
+            }
+            let args = o.any_map("args")?;
+            let timeout = o.string("timeout")?;
+            if let Some(t) = &timeout {
+                let pos = o.get("timeout").map_or(o.pos, Node::pos);
+                validate_ms_literal(t, "timeout", 1, MAX_HOOK_TIMEOUT_MS, pos)?;
+            }
+            let settle = o.bool("settle")?;
+            let wait_to_settle_timeout_ms = o.string("waitToSettleTimeoutMs")?;
+            if let Some(t) = &wait_to_settle_timeout_ms {
+                let pos = o.get("waitToSettleTimeoutMs").map_or(o.pos, Node::pos);
+                validate_ms_literal(t, "waitToSettleTimeoutMs", 0, MAX_HOOK_TIMEOUT_MS, pos)?;
+            }
+            let output_variable = o.string("outputVariable")?;
+            if let Some(var) = &output_variable
+                && !var.contains("${")
+                && !is_valid_js_identifier(var)
+            {
+                let pos = o.get("outputVariable").map_or(o.pos, Node::pos);
+                return Err(Problem::new(
+                    "Invalid Command: callHook",
+                    format!("`outputVariable` must be a valid JS identifier, got `{var}`"),
+                    pos,
+                ));
+            }
+            let c = common(&o, false)?;
+            Ok(CallHook {
+                name,
+                args,
+                timeout,
+                settle,
+                wait_to_settle_timeout_ms,
+                output_variable,
+                label: c.label,
+                optional: c.optional,
+            })
+        }
+    }
 }
 
 /// Bind-time check used for config values that must be strings.

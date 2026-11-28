@@ -20,6 +20,15 @@ abstract final class DriverErrorCode {
   /// Target element carried no text attribute to copy (`copyTextFrom`).
   static const String unableToCopyText = 'UNABLE_TO_COPY_TEXT';
 
+  /// Requested `callHook` name is not registered in the app.
+  static const String hookNotFound = 'HOOK_NOT_FOUND';
+
+  /// Registered `callHook` handler threw an error or returned a non-JSON value.
+  static const String hookFailed = 'HOOK_FAILED';
+
+  /// Registered `callHook` handler did not finish within its bounded timeout.
+  static const String hookTimeout = 'HOOK_TIMEOUT';
+
   /// Unrecognized RPC method name.
   static const String unknownMethod = 'UNKNOWN_METHOD';
 
@@ -83,6 +92,39 @@ class DriverError implements Exception {
   /// Creates an `UNABLE_TO_COPY_TEXT` error when `copyTextFrom` finds no text.
   factory DriverError.unableToCopyText(String message) =>
       DriverError(DriverErrorCode.unableToCopyText, message);
+
+  /// Creates a `HOOK_NOT_FOUND` error when a requested `callHook` name is not
+  /// registered in the app.
+  factory DriverError.hookNotFound(String name, List<String> available) {
+    final String hint = available.isEmpty
+        ? 'No hooks are registered. Register one with TapwingBinding.registerHook().'
+        : 'Registered hooks: ${available.join(', ')}';
+    return DriverError(
+      DriverErrorCode.hookNotFound,
+      'Hook "$name" is not registered. $hint',
+      <String, Object?>{'hook': name, 'availableHooks': available},
+    );
+  }
+
+  /// Creates a `HOOK_FAILED` error when a `callHook` handler throws or returns
+  /// a non-JSON-encodable value.
+  factory DriverError.hookFailed(
+    String name,
+    Object error,
+    StackTrace stackTrace,
+  ) => DriverError(
+    DriverErrorCode.hookFailed,
+    'Hook "$name" failed: $error',
+    <String, Object?>{'hook': name, 'stack': '$stackTrace'},
+  );
+
+  /// Creates a `HOOK_TIMEOUT` error when a `callHook` handler exceeds its
+  /// bounded timeout.
+  factory DriverError.hookTimeout(String name, Duration timeout) => DriverError(
+    DriverErrorCode.hookTimeout,
+    'Hook "$name" timed out after ${timeout.inMilliseconds} ms',
+    <String, Object?>{'hook': name, 'timeoutMs': timeout.inMilliseconds},
+  );
 
   /// Creates an `UNKNOWN_METHOD` error for an unrecognized RPC method.
   factory DriverError.unknownMethod(String method) =>
