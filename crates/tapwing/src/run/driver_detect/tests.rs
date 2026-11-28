@@ -11,8 +11,8 @@ use crate::driver_probe::{Verdict, VerdictSource};
 use crate::run::hybrid::tests::{serve_static_native, test_opts};
 use crate::run::{IosNativeSlot, Opts, Session};
 
-const APP: &str = "dev.example.app";
-const LAUNCHER: &str = r#"<hierarchy rotation="0">
+pub(super) const APP: &str = "dev.example.app";
+pub(super) const LAUNCHER: &str = r#"<hierarchy rotation="0">
   <node text="Phone" package="com.android.launcher3" enabled="true" bounds="[0,0][1080,2400]"/>
 </hierarchy>"#;
 
@@ -29,13 +29,13 @@ fn report(presence: Presence, dials: bool, fingerprint: Option<&str>) -> Report 
     }
 }
 
-fn finished(report: Report) -> LaunchProbe {
+pub(super) fn finished(report: Report) -> LaunchProbe {
     let probe = LaunchProbe::start_with(None, move |_| report).unwrap();
     wait_for(&probe);
     probe
 }
 
-fn wait_for(probe: &LaunchProbe) {
+pub(super) fn wait_for(probe: &LaunchProbe) {
     let deadline = Instant::now() + Duration::from_secs(5);
     while probe.report().is_none() {
         assert!(Instant::now() < deadline, "the probe never finished");
@@ -43,7 +43,7 @@ fn wait_for(probe: &LaunchProbe) {
     }
 }
 
-fn metrics() -> LaunchMetrics {
+pub(super) fn metrics() -> LaunchMetrics {
     LaunchMetrics {
         pid: Some(123),
         old_pids: vec![],
@@ -56,13 +56,13 @@ fn metrics() -> LaunchMetrics {
     }
 }
 
-fn temp_cache(tag: &str) -> (DriverCache, PathBuf) {
+pub(super) fn temp_cache(tag: &str) -> (DriverCache, PathBuf) {
     let dir = std::env::temp_dir().join(format!("tapwing-driver-detect-{}-{tag}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     (DriverCache::at(dir.join("driver-probe.json")), dir)
 }
 
-fn android() -> Device {
+pub(super) fn android() -> Device {
     Device::Android(Android::new("unreachable".into()))
 }
 
@@ -80,7 +80,9 @@ fn knowledge_follows_the_probe_from_pending_to_a_decision() {
     wait_for(&pending);
     assert_eq!(pending.knowledge(), DriverKnowledge::Skip(SkipReason::NoDriver { cached: false }));
 
-    assert_eq!(finished(report(Presence::Present, true, None)).knowledge(), DriverKnowledge::Wait);
+    // Only a marker of the dial path proves the build will say hello.
+    assert_eq!(finished(report(Presence::Present, true, None)).knowledge(), DriverKnowledge::Proven);
+    assert_eq!(finished(report(Presence::Present, false, None)).knowledge(), DriverKnowledge::Wait);
     assert_eq!(finished(report(Presence::Unknown, false, None)).knowledge(), DriverKnowledge::Wait);
 }
 

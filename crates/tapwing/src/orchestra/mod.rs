@@ -816,6 +816,9 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                                 "ms": ms,
                                 "error": msg,
                             });
+                            if let Some(details) = self.driver.take_failed_step_details() {
+                                entry["driver"] = details;
+                            }
                             if let Some(d) = &diag
                                 && let Ok(v) = serde_json::to_value(d)
                             {
@@ -882,6 +885,9 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                             "ms": ms,
                             "error": e.to_string(),
                         });
+                        if let Some(details) = self.driver.take_failed_step_details() {
+                            entry["driver"] = details;
+                        }
                         if let Some(d) = &diag
                             && let Ok(v) = serde_json::to_value(d)
                         {

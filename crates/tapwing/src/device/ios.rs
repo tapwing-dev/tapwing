@@ -645,6 +645,12 @@ impl IosSim {
 
     /// The app's `CFBundleDisplayName` (falling back to `CFBundleName`), which
     /// XCUITest reports as the application element's label.
+    /// Seeds the display-name cache, so [`Self::display_name`] does not ask `simctl` (tests).
+    #[cfg(test)]
+    pub(crate) fn remember_display_name(&mut self, bundle: &str, name: Option<&str>) {
+        self.display_names.insert(bundle.to_string(), name.map(str::to_string));
+    }
+
     pub fn display_name(&mut self, bundle: &str) -> Option<String> {
         if let Some(n) = self.display_names.get(bundle) {
             return n.clone();

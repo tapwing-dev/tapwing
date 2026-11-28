@@ -369,6 +369,13 @@ pub trait FlowDriver {
         None
     }
 
+    /// What the backend knows about the step that just failed, for the step's
+    /// `driver` object in the reports (a passed step carries its result
+    /// there). Asked once per failed step that is recorded.
+    fn take_failed_step_details(&mut self) -> Option<Value> {
+        None
+    }
+
     /// F8: captures the current UI hierarchy for rich failure diagnostics
     /// (`(source_lane, root_node)`). Only called when a non-optional step fails.
     fn capture_failure_hierarchy(&mut self) -> Option<(String, crate::ui_tree::TreeNode)> {

@@ -466,6 +466,7 @@ impl DeviceFlutterBackend<'_> {
     pub(super) fn record_handshake_success(&mut self, app_id: &str) {
         self.clear_flow_blackbox(app_id);
         self.forget_learned_misses(app_id);
+        self.drv.restore_slow_start(app_id);
         match self.platform() {
             Platform::Android => {
                 if let Some(n) = self.native.as_deref_mut() {
