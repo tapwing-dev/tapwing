@@ -193,9 +193,18 @@ pub struct DeviceFlutterBackend<'a> {
     /// trying it (no driver in the installed build, or learned from earlier
     /// runs); `None` for a black-box fallback that waited and timed out.
     pub(super) blackbox_reason: Option<String>,
+    /// What the backend knows about a step it just failed, for the step's
+    /// `driver` object in the reports (see [`FlowDriver::take_failed_step_details`]).
+    pub(super) failed_step_details: Option<Value>,
     /// A probe for the next launch, instead of starting one (tests).
     #[cfg(test)]
     probe_override: Option<LaunchProbe>,
+    /// The result of the next host launch, instead of launching on a device (tests).
+    #[cfg(test)]
+    launch_override: Option<crate::device::LaunchMetrics>,
+    /// The handshake deadlines to use instead of the production ones (tests).
+    #[cfg(test)]
+    timing_override: Option<launch::HandshakeTiming>,
     /// The cache to use instead of the user's (tests).
     #[cfg(test)]
     cache_override: Option<crate::driver_probe::cache::DriverCache>,
@@ -233,8 +242,13 @@ impl<'a> DeviceFlutterBackend<'a> {
             cold_app: None,
             flow_blackbox_apps: HashSet::new(),
             blackbox_reason: None,
+            failed_step_details: None,
             #[cfg(test)]
             probe_override: None,
+            #[cfg(test)]
+            launch_override: None,
+            #[cfg(test)]
+            timing_override: None,
             #[cfg(test)]
             cache_override: None,
             native_at_issue_take: 0,
@@ -243,6 +257,22 @@ impl<'a> DeviceFlutterBackend<'a> {
             trace_lanes: LaneStats::default(),
             trace_http_seen: false,
         }
+    }
+
+    /// The host side of `launchApp`: stop, clear, permissions and start.
+    fn prepare_and_launch(&mut self, req: &LaunchRequest, host_port: u16) -> Result<crate::device::LaunchMetrics> {
+        #[cfg(test)]
+        if let Some(launch) = self.launch_override.take() {
+            return Ok(launch);
+        }
+        self.dev.prepare_and_launch(
+            &req.app_id,
+            req.clear_state,
+            req.stop_app,
+            &req.permissions,
+            &req.launch_arguments,
+            host_port,
+        )
     }
 
     fn mark_intentionally_stopped(&mut self, app_id: &str) {
@@ -380,6 +410,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
         // the fast Flutter path again unless the app missed twice in a row.
         self.clear_flow_blackbox(&req.app_id);
         self.blackbox_reason = None;
+        self.failed_step_details = None;
 
         let was_connected = self.drv.is_connected();
         let restarting = req.stop_app || req.clear_state || app_changed || !was_connected;
@@ -398,14 +429,7 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
             sim.clear_keychain()?;
         }
         let host_port = self.drv.port()?;
-        let launch = self.dev.prepare_and_launch(
-            &req.app_id,
-            req.clear_state,
-            req.stop_app,
-            &req.permissions,
-            &req.launch_arguments,
-            host_port,
-        )?;
+        let launch = self.prepare_and_launch(req, host_port)?;
 
         let plan = decide_launch_plan(&LaunchPlanInput {
             lane_mode: self.lane_mode(),
@@ -442,7 +466,10 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
                     self.drv.disconnect();
                 }
 
+                // In production this is `accept_timeout`; tests shorten it.
+                let accept_timeout = if can_fall_back { self.handshake_timing().base } else { accept_timeout };
                 let t_accept = Instant::now();
+                let mut late = None;
                 // While the probe still reads, the wait gives up the moment it proves there is no driver.
                 let watching = probe.as_ref().filter(|_| can_fall_back);
                 let accepted = self.drv.accept_with_pid_or_abort(accept_timeout, expected_pid, &reject_pids, || {
@@ -457,17 +484,31 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
                         return self.launch_without_handshake(&launch, probe.as_ref(), reason);
                     }
                     Err(e) if can_fall_back && !crate::interrupt::is_interrupted_error(&e) => {
-                        self.learn_missed_handshake(&req.app_id, launch.pid, probe.as_ref());
-                        let demotion = self.record_handshake_miss(&req.app_id);
-                        self.drv.disconnect();
-                        let reason = format!("{e:#}");
-                        let warning =
-                            format_blackbox_demotion_warning(&self.opts.log_prefix, &req.app_id, &reason, demotion);
-                        eprintln!("{warning}");
-                        let why = format!(
-                            "no tapwing_driver handshake ({reason}); driving the app black-box via the native lane"
-                        );
-                        return self.finish_native_launch(&launch, &why);
+                        // A build the probe proved to dial is never driven black-box: it gets
+                        // a longer, bounded wait, and then the step fails and says why.
+                        let proven = self.wait_for_proven_driver(
+                            &req.app_id,
+                            &launch,
+                            probe.as_ref(),
+                            t_accept,
+                            expected_pid,
+                            &reject_pids,
+                        )?;
+                        let Some(connected) = proven else {
+                            self.learn_missed_handshake(&req.app_id, launch.pid, probe.as_ref());
+                            let demotion = self.record_handshake_miss(&req.app_id);
+                            self.drv.disconnect();
+                            let reason = format!("{e:#}");
+                            let warning =
+                                format_blackbox_demotion_warning(&self.opts.log_prefix, &req.app_id, &reason, demotion);
+                            eprintln!("{warning}");
+                            let why = format!(
+                                "no tapwing_driver handshake ({reason}); driving the app black-box via the native lane"
+                            );
+                            return self.finish_native_launch(&launch, &why);
+                        };
+                        late = Some((connected.probe, connected.note));
+                        connected.outcome
                     }
                     Err(e) => return Err(e),
                 };
@@ -496,6 +537,13 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
                     res["phases"]["handshakeRetries"] = json!(hs.retries);
                 }
                 add_launch_warnings(&mut res, &launch);
+                if let Some((probe, note)) = late {
+                    res["driverProbe"] = probe;
+                    res["warning"] = match res["warning"].as_str() {
+                        Some(earlier) => Value::from(format!("{earlier}; {note}")),
+                        None => Value::from(note),
+                    };
+                }
                 Ok(res)
             }
             LaunchPlan::ReuseConnection => {
@@ -956,6 +1004,10 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
 
     fn capture_failure_hierarchy(&mut self) -> Option<(String, crate::ui_tree::TreeNode)> {
         self.capture_failure_hierarchy_impl()
+    }
+
+    fn take_failed_step_details(&mut self) -> Option<Value> {
+        self.failed_step_details.take()
     }
 }
 

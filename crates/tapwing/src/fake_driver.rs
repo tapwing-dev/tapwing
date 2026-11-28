@@ -217,6 +217,8 @@ pub struct FakeDriver {
     pub command_error: Option<Box<dyn FnMut() -> anyhow::Error>>,
     /// Test seam: error thrown by `launch_app()`.
     pub launch_error: Option<Box<dyn FnMut() -> anyhow::Error>>,
+    /// Test seam: what `take_failed_step_details()` hands out, once.
+    pub failed_step_details: Option<Value>,
     /// Test seam: error thrown by `start_recording()`.
     pub start_recording_error: Option<String>,
     /// Test seam: invoked on every hierarchy read (`read_count`, `&root`).
@@ -272,6 +274,7 @@ impl FakeDriver {
             hide_keyboard_called: false,
             command_error: None,
             launch_error: None,
+            failed_step_details: None,
             start_recording_error: None,
             on_hierarchy_read: None,
             hierarchy_read_count: 0,
@@ -408,6 +411,10 @@ impl FlowDriver for FakeDriver {
 
     fn diagnose_crash(&mut self) -> Option<Value> {
         self.crash.take()
+    }
+
+    fn take_failed_step_details(&mut self) -> Option<Value> {
+        self.failed_step_details.take()
     }
 
     fn trace_step(&mut self) -> crate::trace::TraceBatch {

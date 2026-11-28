@@ -4,6 +4,7 @@
 use crate::backend::TransportError;
 use anyhow::{Context, Result, anyhow, bail};
 use serde_json::{Value, json};
+use std::collections::HashSet;
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
@@ -31,7 +32,7 @@ const RPC_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const LIVENESS_PROBE_AFTER: Duration = Duration::from_secs(1);
 
 /// Interval between liveness checks while the app stays silent.
-const LIVENESS_PROBE_EVERY: Duration = Duration::from_secs(1);
+pub(crate) const LIVENESS_PROBE_EVERY: Duration = Duration::from_secs(1);
 
 /// Checks whether the app process `pid` is alive: `Some(false)` only when it
 /// is certainly gone, `None` when the check itself failed.
@@ -76,6 +77,9 @@ pub struct Driver {
     /// The next accepted hello is the same process dialing in again: its issue and
     /// request-log sequence numbers continue, so the host watermarks must survive.
     keep_watermarks: bool,
+    /// Apps whose launch already waited the long slow-start wait for a hello and got
+    /// none (see [`Driver::spend_slow_start`]).
+    slow_start_spent: HashSet<String>,
     /// Test seam: runs the instant `disconnect()` has closed the old connection, standing in
     /// for a peer that redials the moment it sees EOF.
     #[cfg(test)]
@@ -100,6 +104,16 @@ struct ReceivedIssue {
 pub struct AcceptOutcome {
     pub hello: Value,
     pub rejected_connections: usize,
+}
+
+/// How [`Driver::accept_while_alive`] ended.
+#[derive(Debug, Clone)]
+pub enum SlowAccept {
+    Connected(AcceptOutcome),
+    /// The liveness probe says the process is certainly gone.
+    ProcessDied,
+    /// The time ran out and the process was not known to be dead.
+    TimedOut,
 }
 
 /// Error reported by the driver (e.g. ELEMENT_NOT_FOUND).
@@ -183,9 +197,29 @@ impl Driver {
             http_log: false,
             silence_timeout: RPC_READ_TIMEOUT,
             keep_watermarks: false,
+            slow_start_spent: HashSet::new(),
             #[cfg(test)]
             on_conn_closed: None,
         })
+    }
+
+    /// Records that a launch of `app_id` waited the long slow-start wait with the
+    /// process running and no hello came. Until a hello from that app arrives
+    /// ([`Self::restore_slow_start`]), later launches on this listener wait the
+    /// short time only, so a setup that cannot connect does not pay the long wait
+    /// on every launch.
+    pub fn spend_slow_start(&mut self, app_id: &str) {
+        self.slow_start_spent.insert(app_id.to_string());
+    }
+
+    /// Whether [`Self::spend_slow_start`] was recorded for `app_id` and no hello has cleared it.
+    pub fn slow_start_spent(&self, app_id: &str) -> bool {
+        self.slow_start_spent.contains(app_id)
+    }
+
+    /// A hello from `app_id` arrived: its next slow start gets the long wait again.
+    pub fn restore_slow_start(&mut self, app_id: &str) {
+        self.slow_start_spent.remove(app_id);
     }
 
     /// Overrides the 10 s silence window of [`Driver::call`] (tests).
@@ -428,6 +462,49 @@ impl Driver {
             };
             std::thread::sleep(step.min(deadline.saturating_duration_since(Instant::now())));
         }
+    }
+
+    /// [`Self::accept_with_pid`] for a process that is known to hold the driver
+    /// and may only be slow to start it. Every `every`, the installed liveness
+    /// probe is asked about `pid`, and the wait ends with
+    /// [`SlowAccept::ProcessDied`] the moment the process is certainly gone. A
+    /// probe that cannot tell keeps the wait going until `timeout`, which ends
+    /// it with [`SlowAccept::TimedOut`]. A hello that arrives first wins.
+    pub fn accept_while_alive(
+        &mut self,
+        timeout: Duration,
+        expected_pid: Option<i64>,
+        reject_pids: &[i64],
+        pid: Option<i64>,
+        every: Duration,
+    ) -> Result<SlowAccept> {
+        let deadline = Instant::now() + timeout;
+        let mut next_check = Instant::now() + every;
+        let mut died = false;
+        // The probe moves out while `self` is borrowed by the accept loop.
+        let mut liveness = self.liveness.take();
+        // The closure ends the wait at `deadline`; the loop's own, later one never fires first.
+        let res = self.accept_with_pid_or_abort(timeout + Duration::from_secs(5), expected_pid, reject_pids, || {
+            if Instant::now() >= deadline {
+                return true;
+            }
+            if Instant::now() >= next_check {
+                if let (Some(probe), Some(pid)) = (liveness.as_mut(), pid)
+                    && probe(pid) == Some(false)
+                {
+                    died = true;
+                    return true;
+                }
+                next_check = Instant::now() + every;
+            }
+            false
+        });
+        self.liveness = liveness;
+        Ok(match res? {
+            Some(outcome) => SlowAccept::Connected(outcome),
+            None if died => SlowAccept::ProcessDied,
+            None => SlowAccept::TimedOut,
+        })
     }
 
     /// Re-reads app health issues the driver buffered since the last one
@@ -1181,5 +1258,68 @@ mod tests {
         assert_eq!(http.current[0]["url"], "http://h/resumed");
         drop(drv);
         handle.join().unwrap();
+    }
+
+    #[test]
+    fn a_slow_accept_takes_a_late_hello_and_ends_at_once_when_the_process_dies() {
+        // A hello that arrives late, with the process alive at every check, is accepted.
+        let mut drv = Driver::listen(0).unwrap();
+        let port = drv.port().unwrap();
+        let checks = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = checks.clone();
+        drv.set_liveness_probe(Box::new(move |pid| {
+            assert_eq!(pid, 55);
+            seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Some(true)
+        }));
+        let app = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(250));
+            let mut app = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            writeln!(app, r#"{{"event":"hello","params":{{"protocol":1,"pid":55}}}}"#).unwrap();
+            let _ = BufReader::new(app).read_line(&mut String::new());
+        });
+        let every = Duration::from_millis(50);
+        let got = drv.accept_while_alive(Duration::from_secs(10), Some(55), &[], Some(55), every).unwrap();
+        assert!(matches!(&got, SlowAccept::Connected(o) if o.hello["pid"] == 55), "{got:?}");
+        assert!(checks.load(std::sync::atomic::Ordering::SeqCst) >= 2, "liveness is checked while waiting");
+        drv.disconnect();
+        app.join().unwrap();
+
+        // The process dies: the wait ends at the next check, long before the timeout.
+        let mut drv = Driver::listen(0).unwrap();
+        let checks = std::sync::atomic::AtomicUsize::new(0);
+        drv.set_liveness_probe(Box::new(move |_| Some(checks.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 2)));
+        let t0 = Instant::now();
+        let got = drv.accept_while_alive(Duration::from_secs(30), None, &[], Some(55), every).unwrap();
+        assert!(matches!(got, SlowAccept::ProcessDied), "{got:?}");
+        assert!(t0.elapsed() < Duration::from_secs(5), "{:?}", t0.elapsed());
+        // The probe is back in place for the calls that follow.
+        assert_eq!(drv.process_alive(55), Some(false));
+    }
+
+    #[test]
+    fn a_slow_accept_keeps_its_deadline_when_liveness_is_unknown() {
+        for (probe, pid) in [(Some(None), Some(55)), (Some(Some(true)), None), (None, Some(55))] {
+            let mut drv = Driver::listen(0).unwrap();
+            if let Some(answer) = probe {
+                drv.set_liveness_probe(Box::new(move |_| answer));
+            }
+            let t0 = Instant::now();
+            let got =
+                drv.accept_while_alive(Duration::from_millis(200), None, &[], pid, Duration::from_millis(20)).unwrap();
+            assert!(matches!(got, SlowAccept::TimedOut), "{got:?}");
+            let waited = t0.elapsed();
+            assert!(waited >= Duration::from_millis(200) && waited < Duration::from_secs(3), "{waited:?}");
+        }
+    }
+
+    #[test]
+    fn the_slow_start_wait_is_spent_per_app_until_a_hello_restores_it() {
+        let mut drv = Driver::listen(0).unwrap();
+        assert!(!drv.slow_start_spent("a"));
+        drv.spend_slow_start("a");
+        assert!(drv.slow_start_spent("a") && !drv.slow_start_spent("b"));
+        drv.restore_slow_start("a");
+        assert!(!drv.slow_start_spent("a"));
     }
 }
