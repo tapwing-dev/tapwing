@@ -115,6 +115,7 @@ pub fn settles_for_platform(cmd: &MaestroCommand, platform: Platform) -> bool {
         | MaestroCommand::RunFlow(_)
         | MaestroCommand::Repeat(_)
         | MaestroCommand::Retry(_) => false,
+        MaestroCommand::CallHook(c) if c.settle == Some(false) => false,
         MaestroCommand::PressKey(c) => crate::run::is_in_app_key(c.code),
         _ => true,
     }
@@ -175,6 +176,7 @@ pub fn kind(cmd: &MaestroCommand) -> &'static str {
         AssertDarkMode(_) => "assertDarkMode",
         AssertLightMode(_) => "assertLightMode",
         Retry(_) => "retry",
+        CallHook(_) => "callHook",
     }
 }
 
@@ -226,6 +228,7 @@ pub fn describe_command(cmd: &MaestroCommand) -> String {
         },
         MaestroCommand::RunScript(c) => format!("runScript {}", c.source_description),
         MaestroCommand::EvalScript(c) => format!("evalScript {}", c.script_string),
+        MaestroCommand::CallHook(c) => format!("callHook {}", c.name),
         _ => k.to_string(),
     }
 }

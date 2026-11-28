@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
+
+import 'package:flutter/widgets.dart' show BuildContext;
 
 import '../diagnostics/app_issues.dart';
 import '../diagnostics/http_log.dart';
+import '../hooks/hook_registry.dart';
 import '../idle/http_tracker.dart';
 import '../protocol/rpc_error.dart';
 import '../protocol/rpc_messages.dart';
@@ -47,6 +52,7 @@ class CommandDispatcher {
       'darkMode': _handleDarkMode,
       'appIssues': _handleAppIssues,
       'httpLog': _handleHttpLog,
+      'callHook': _handleCallHook,
     };
   }
 
@@ -249,6 +255,117 @@ class CommandDispatcher {
   Future<Object?> _handleDarkMode(Map<String, Object?> _) async {
     final ui.Brightness brightness = _context.readPlatformBrightness();
     return DarkModeResult(darkMode: brightness == ui.Brightness.dark).toJson();
+  }
+
+  Future<Object?> _handleCallHook(Map<String, Object?> raw) async {
+    final CallHookParams params = CallHookParams.fromJson(raw);
+    final TapwingHookHandler? handler = _context.hooks.lookup(params.name);
+    if (handler == null) {
+      throw DriverError.hookNotFound(params.name, _context.hooks.names);
+    }
+    final BuildContext? hookContext = _context.resolveHookContext();
+    if (hookContext == null) {
+      throw DriverError.hookFailed(
+        params.name,
+        'No mounted BuildContext is available yet; ensure runApp() has run before calling hooks',
+        StackTrace.current,
+      );
+    }
+
+    final Stopwatch hookSw = Stopwatch()..start();
+    final Object? value = await _runHookWithTimeout(
+      params.name,
+      handler,
+      hookContext,
+      params.args,
+      params.timeout,
+    );
+    hookSw.stop();
+    if (_context.isCancelled()) return null;
+
+    try {
+      jsonEncode(value);
+    } on Object catch (error, stackTrace) {
+      throw DriverError.hookFailed(
+        params.name,
+        'Hook returned a non-JSON-encodable value (${value.runtimeType}): $error',
+        stackTrace,
+      );
+    }
+
+    _context.invalidateSemanticsCache();
+    String settleState = 'skipped';
+    int settleUs = 0;
+    if (params.settle) {
+      // Yield a microtask so any scheduled navigation or state change queues
+      // its frame before reactive idle detection runs.
+      await Future<void>.microtask(() {});
+      if (_context.isCancelled()) return null;
+      final Stopwatch settleSw = Stopwatch()..start();
+      settleState = await _context.settle(params.settleTimeout);
+      settleSw.stop();
+      settleUs = settleSw.elapsedMicroseconds;
+    }
+
+    return CallHookResult(
+      hook: params.name,
+      value: value,
+      settle: settleState,
+      hookUs: hookSw.elapsedMicroseconds,
+      settleUs: settleUs,
+    ).toJson();
+  }
+
+  Future<Object?> _runHookWithTimeout(
+    String name,
+    TapwingHookHandler handler,
+    BuildContext context,
+    Map<String, Object?> args,
+    Duration timeout,
+  ) {
+    final Completer<Object?> completer = Completer<Object?>();
+    final Timer timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(DriverError.hookTimeout(name, timeout));
+      }
+    });
+
+    Future<Object?> invocation;
+    try {
+      invocation = Future<Object?>.sync(
+        () => handler(context, Map<String, Object?>.unmodifiable(args)),
+      );
+    } on Object catch (error, stackTrace) {
+      timer.cancel();
+      return Future<Object?>.error(
+        error is DriverError
+            ? error
+            : DriverError.hookFailed(name, error, stackTrace),
+        stackTrace,
+      );
+    }
+
+    invocation.then(
+      (Object? value) {
+        timer.cancel();
+        if (!completer.isCompleted) {
+          completer.complete(value);
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        timer.cancel();
+        if (!completer.isCompleted) {
+          completer.completeError(
+            error is DriverError
+                ? error
+                : DriverError.hookFailed(name, error, stackTrace),
+            stackTrace,
+          );
+        }
+      },
+    );
+
+    return completer.future;
   }
 
   /// Port of `Orchestra.resolveText` (`Orchestra.kt:1854-1867`).

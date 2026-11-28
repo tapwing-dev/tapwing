@@ -54,6 +54,58 @@ Tapwing supports the standard Maestro command set and selectors. If a flow works
 - **`onFlowStart`, `onFlowComplete`:** setup and teardown hooks (`onFlowComplete` runs even when the flow fails).
 - **Variables:** set in flow `env:` or passed via `-e KEY=VALUE` (CLI `-e` takes precedence).
 
+## Fast inner-loop extensions (gray-box)
+
+Tapwing adds opt-in gray-box primitives for fast dev/AI iteration. Any run using hooks, `--attach`, or `--start-from` prints a `[tapwing] gray-box:` notice to `stderr` and flags all JSON, HTML, JUnit, and Trace reports so it never masquerades as a clean end-to-end run.
+
+### `callHook`, `TapwingBinding.ensureInitialized(hooks: ...)`, and `registerHooks`
+
+Register named sync or async Dart hooks in your test entrypoint (for example `lib/main_tapwing.dart`). Handlers receive a live `BuildContext` from the active visible route and the evaluated `args` map, so `Navigator.of(context)`, `GoRouter.of(context)`, `Provider`, `Bloc`, and `Theme` work directly without modifying `lib/main.dart`:
+
+```dart
+TapwingBinding.ensureInitialized(
+  hooks: {
+    'seed_logged_in': (context, args) {
+      // Push with zero duration to skip the 300 ms route animation on inner loops.
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        PageRouteBuilder(
+          pageBuilder: (_, _, _) => const ProductsScreen(),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+        ),
+        (_) => false,
+      );
+      return {'screen': 'products'};
+    },
+  },
+);
+```
+
+You can also register or manage hooks dynamically with `TapwingBinding.registerHooks({...})`, `TapwingBinding.registerHook(name, handler)`, `TapwingBinding.unregisterHook(name)`, or read `TapwingBinding.activeContext` / `TapwingBinding.contextOf<MyWidget>()` inside async hooks.
+
+Invoke the hook from YAML (`callHook: name` shorthand or full map syntax):
+
+```yaml
+- callHook:
+    name: seed_logged_in
+    args:
+      email: dev@example.com
+    timeout: 15000              # optional, ms (1..=86400000; default 15000)
+    settle: true                # optional, wait for UI idle after hook (default true)
+    waitToSettleTimeoutMs: 3000 # optional post-hook settle budget in ms
+    outputVariable: seed        # optional, stores return value on `output.seed`
+    label: Seed logged-in state
+    optional: false
+```
+
+- **Policy gate:** Blocked by default (`error`). Enable per-workspace via `tapwing.allowHooks: true` in `config.yaml` or per-run with `--allow-hooks`; pass `--no-hooks` to force-disable hooks even when `config.yaml` allows them. `optional: true` never bypasses policy.
+- **Error mapping:** `HOOK_NOT_FOUND`, `HOOK_FAILED`, and `HOOK_TIMEOUT` honor `optional: true` and `retry`.
+
+### `--attach` and `--start-from <step|label>`
+
+- **`--attach`:** Attaches to an already-running app process instead of cold-relaunching on a leading `launchApp` (skipping `clearState`/`clearKeychain` with a warning). Drains stale buffered app issues and HTTP trace entries from before the attach.
+- **`--start-from <STEP_OR_LABEL>`:** Starts a single-flow run at a 1-based top-level step index (e.g. `3`) or exact top-level `label:` string (e.g. `"Add product dialog"`). Top-level `env:` (`defineVariables`) still evaluates, original 1-based step numbers are kept in reports, `onFlowStart` is skipped if leading steps were skipped, and `--attach` is implied automatically unless the target step itself is `launchApp`.
+
 ## Selectors
 
 All Maestro selectors and relative matchers are supported:

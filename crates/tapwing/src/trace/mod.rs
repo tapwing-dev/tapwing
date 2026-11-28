@@ -361,6 +361,7 @@ fn flow_trace(record: &FlowRunRecord) -> Value {
     if let Some(summary) = record.raw_json.get("appIssueSummary") {
         flow["appIssueSummary"] = summary.clone();
     }
+    record.graybox.apply_to_json(&mut flow);
     flow
 }
 

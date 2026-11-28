@@ -192,6 +192,33 @@ impl DeviceFlutterBackend<'_> {
         LaunchProbe::start(target, app_id, self.probe_cache(), runner)
     }
 
+    /// Starts probing `app_id` before warm-attaching (`restarting` is false).
+    pub(super) fn start_attach_probe(&mut self, app_id: &str) -> Option<LaunchProbe> {
+        #[cfg(test)]
+        if let Some(probe) = self.probe_override.take() {
+            return Some(probe);
+        }
+        if !(self.opts.driver_probe
+            && self.lane_mode() == InputMode::Auto
+            && self.native_usable()
+            && !self.is_blackbox_app(app_id))
+        {
+            return None;
+        }
+        let target = match &*self.dev {
+            Device::Android(a) => Target::Android { serial: a.serial.clone(), adb: a.adb_client().clone() },
+            Device::Ios(sim) => Target::Ios { udid: sim.udid.clone() },
+        };
+        let runner: Option<RunnerStarter> = match (&target, self.ios_native.as_deref()) {
+            (Target::Ios { udid }, Some(slot)) if !slot.is_started() => {
+                let udid = udid.clone();
+                Some(Box::new(move || IosNativeLaneHandle::spawn(&udid)))
+            }
+            _ => None,
+        };
+        LaunchProbe::start(target, app_id, self.probe_cache(), runner)
+    }
+
     /// Hands the runner the probe started to the iOS native slot.
     pub(super) fn adopt_probe_runner(&mut self, probe: &LaunchProbe) {
         if let (Some(slot), Some(runner)) = (self.ios_native.as_deref_mut(), probe.take_runner()) {

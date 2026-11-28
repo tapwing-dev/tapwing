@@ -183,7 +183,14 @@ pub fn is_maestro_error(e: &anyhow::Error) -> bool {
     if let Some(d) = e.downcast_ref::<DriverError>() {
         return matches!(
             d.code.as_str(),
-            "ELEMENT_NOT_FOUND" | "ASSERTION" | "NO_FOCUS" | "UNABLE_TO_COPY_TEXT" | "INVALID_COMMAND"
+            "ELEMENT_NOT_FOUND"
+                | "ASSERTION"
+                | "NO_FOCUS"
+                | "UNABLE_TO_COPY_TEXT"
+                | "INVALID_COMMAND"
+                | "HOOK_NOT_FOUND"
+                | "HOOK_FAILED"
+                | "HOOK_TIMEOUT"
         );
     }
     false
@@ -291,6 +298,16 @@ pub struct ScrollUntilVisibleRequest {
     pub wait_to_settle_timeout_ms: Option<i32>,
 }
 
+/// Evaluated parameters for `callHook`.
+#[derive(Clone, Debug)]
+pub struct CallHookRequest {
+    pub name: String,
+    pub args: Option<serde_json::Map<String, Value>>,
+    pub timeout_ms: Option<u64>,
+    pub settle: Option<bool>,
+    pub settle_timeout_ms: Option<u64>,
+}
+
 /// Backend contract implemented by both real device sessions and `FakeDriver`.
 pub trait FlowDriver {
     fn platform(&self) -> Platform;
@@ -343,6 +360,16 @@ pub trait FlowDriver {
     fn set_airplane_mode(&mut self, enabled: bool) -> Result<Value>;
     fn is_dark_mode_enabled(&mut self) -> Result<bool>;
     fn set_dark_mode(&mut self, enabled: bool) -> Result<Value>;
+
+    /// Invokes a named in-app test hook registered via `TapwingBinding.registerHook`.
+    fn call_hook(&mut self, _req: &CallHookRequest) -> Result<Value> {
+        anyhow::bail!("callHook is not supported by this driver")
+    }
+
+    /// Attaches to an already-running app (used by `--attach` and `--start-from`).
+    fn warm_attach(&mut self, _app_id: &str) -> Result<Value> {
+        Ok(Value::Null)
+    }
 
     /// Optional hook for `--check-settle` diagnostics on real Flutter drivers.
     fn check_busy_after(&mut self) -> Option<Value> {

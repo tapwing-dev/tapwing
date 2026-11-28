@@ -7,6 +7,7 @@ mod f6_sharding_and_reports;
 mod f7_app_health;
 mod f8_failure_reports;
 mod f8_trace;
+mod fast_inner_loop;
 mod init;
 mod integration_core;
 mod integration_orchestrator;

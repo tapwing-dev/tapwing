@@ -6,8 +6,10 @@ use std::time::{Duration, Instant};
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
-use crate::backend::{AssertionError, ScrollUntilVisibleRequest, SwipeRequest, TapElementRequest, TapPointRequest};
-use crate::device::{LaunchMetrics, Platform};
+use crate::backend::{
+    AssertionError, CallHookRequest, ScrollUntilVisibleRequest, SwipeRequest, TapElementRequest, TapPointRequest,
+};
+use crate::device::{Device, LaunchMetrics, Platform};
 use crate::flow::ir::{ElementSelector, KeyCode};
 use crate::native_lane::InputMode;
 
@@ -489,6 +491,179 @@ impl DeviceFlutterBackend<'_> {
         self.ensure_connected()?;
         self.drv.call("waitIdle", json!({ "timeoutMs": timeout_ms.unwrap_or(15_000) }))
     }
+
+    pub(super) fn flutter_call_hook(&mut self, req: &CallHookRequest) -> Result<Value> {
+        self.ensure_connected()?;
+        let mut params = serde_json::Map::new();
+        params.insert("name".to_string(), Value::String(req.name.clone()));
+        if let Some(args) = &req.args {
+            params.insert("args".to_string(), Value::Object(args.clone()));
+        }
+        if let Some(t) = req.timeout_ms {
+            params.insert("timeoutMs".to_string(), json!(t));
+        }
+        if let Some(s) = req.settle {
+            params.insert("settle".to_string(), Value::Bool(s));
+        }
+        if let Some(st) = req.settle_timeout_ms {
+            params.insert("settleTimeoutMs".to_string(), json!(st));
+        }
+        self.drv.call("callHook", Value::Object(params)).map_err(|e| {
+            if is_unknown_method(&e) {
+                anyhow!("the app's tapwing_driver does not support `callHook`; update `tapwing_driver` in pubspec.yaml")
+            } else {
+                e
+            }
+        })
+    }
+
+    pub(super) fn flutter_warm_attach(&mut self, app_id: &str) -> Result<Value> {
+        if app_id.trim().is_empty() {
+            bail!("Cannot attach to a running app: no `appId` is set in flow config or steps");
+        }
+        let app_changed = !self.flow_app.is_empty() && self.flow_app != app_id;
+        self.flow_app = app_id.to_string();
+        self.cold_app = None;
+        self.invalidate_focus_cache();
+        if app_changed && self.drv.is_connected() {
+            self.drv.disconnect();
+        }
+
+        if self.drv.is_connected() {
+            match self.drv.call("waitIdle", json!({ "timeoutMs": 3000 })) {
+                Ok(idle) => {
+                    self.drain_stale_telemetry_after_attach();
+                    return Ok(json!({ "attached": true, "reusedConnection": true, "appId": app_id, "idle": idle }));
+                }
+                Err(e) if crate::interrupt::is_interrupted_error(&e) => return Err(e),
+                Err(_) => {
+                    self.drv.disconnect();
+                }
+            }
+        }
+
+        let expected_pid = match &mut *self.dev {
+            Device::Android(android) => match android.pid_of(app_id)? {
+                Some(pid) => Some(pid),
+                None => bail!("{app_id} is not running on {}; launch the app first or omit `--attach`", android.serial),
+            },
+            Device::Ios(sim) => {
+                if let Ok(running) = sim.running_apps()
+                    && !running.iter().any(|b| b == app_id)
+                {
+                    bail!("{app_id} is not running on {}; launch the app first or omit `--attach`", sim.name);
+                }
+                None
+            }
+        };
+
+        if self.lane_mode() == InputMode::Native || self.is_blackbox_app(app_id) {
+            return self.finish_native_warm_attach(app_id, "reusing running app via native lane");
+        }
+
+        let probe = self.start_attach_probe(app_id);
+        let port = self.drv.port()?;
+        self.dev.prepare_attach(app_id, port)?;
+
+        if self.platform() == Platform::Ios {
+            let _ = self.dev.app_display_name(app_id);
+        }
+
+        self.flutter_warm_attach_accept(app_id, expected_pid, probe)
+    }
+
+    pub(super) fn flutter_warm_attach_accept(
+        &mut self,
+        app_id: &str,
+        expected_pid: Option<i64>,
+        probe: Option<super::LaunchProbe>,
+    ) -> Result<Value> {
+        let can_fall_back = self.lane_mode() == InputMode::Auto && self.native_usable();
+        // TapwingServer re-dials every 150 ms for the first 60 s and every 1000 ms
+        // after 60 s of idle uptime; 2500 ms covers at least two slow-mode ticks.
+        let timeout = if can_fall_back { Duration::from_millis(2500) } else { Duration::from_secs(5) };
+        let t_accept = Instant::now();
+        let outcome = match self.drv.accept_with_pid_or_abort(timeout, expected_pid, &[], || {
+            can_fall_back && probe.as_ref().is_some_and(|p| p.skip_reason().is_some())
+        }) {
+            Ok(Some(o)) => o,
+            Ok(None) => {
+                if let Some(p) = probe.as_ref() {
+                    self.adopt_probe_runner(p);
+                }
+                self.mark_flow_blackbox(app_id);
+                if let Some(reason) = probe.as_ref().and_then(super::LaunchProbe::skip_reason) {
+                    let report = probe.as_ref().and_then(super::LaunchProbe::report);
+                    let evidence = report.map_or("", |r| r.verdict.evidence.as_str());
+                    self.blackbox_reason = Some(super::launch::driver_skip_report_reason(reason, evidence));
+                }
+                return self.finish_native_warm_attach(app_id, "no tapwing_driver detected; attached via native lane");
+            }
+            Err(e)
+                if can_fall_back
+                    && !probe.as_ref().is_some_and(|p| p.knowledge() == super::launch::DriverKnowledge::Proven)
+                    && !crate::interrupt::is_interrupted_error(&e) =>
+            {
+                self.drv.disconnect();
+                self.mark_flow_blackbox(app_id);
+                let reason = format!("no tapwing_driver handshake ({e:#})");
+                self.blackbox_reason = Some(reason.clone());
+                eprintln!(
+                    "{}warning: warm attach {app_id}: {reason}; falling back to native black-box lane",
+                    self.opts.log_prefix
+                );
+                return self.finish_native_warm_attach(app_id, &format!("{reason}; attached via native lane"));
+            }
+            Err(e) => return Err(e),
+        };
+        let accept_ms = t_accept.elapsed().as_secs_f64() * 1000.0;
+        let t_cfg = Instant::now();
+        self.configure_driver(app_id)?;
+        let configure_ms = t_cfg.elapsed().as_secs_f64() * 1000.0;
+        self.drain_stale_telemetry_after_attach();
+        let t_idle = Instant::now();
+        let idle = self.drv.call("waitIdle", json!({ "timeoutMs": 5000 }))?;
+        let wait_idle_ms = t_idle.elapsed().as_secs_f64() * 1000.0;
+        self.record_handshake_success(app_id);
+        self.lanes.flutter += 1;
+
+        Ok(json!({
+            "attached": true,
+            "appId": app_id,
+            "pid": outcome.hello["pid"],
+            "idle": idle,
+            "phases": {
+                "acceptMs": accept_ms,
+                "configureMs": configure_ms,
+                "waitIdleMs": wait_idle_ms,
+            }
+        }))
+    }
+
+    fn drain_stale_telemetry_after_attach(&mut self) {
+        self.drv.poll_issues();
+        let _ = self.drv.take_issue_batch();
+        if self.opts.trace {
+            let _ = self.drv.poll_http();
+            let _ = self.drv.take_http_batch();
+        }
+    }
+
+    fn finish_native_warm_attach(&mut self, app_id: &str, note: &str) -> Result<Value> {
+        let t = Instant::now();
+        self.run_native(|ops| ops.settle_launch(app_id))?;
+        self.lanes.native += 1;
+        Ok(json!({
+            "attached": true,
+            "lane": "native",
+            "blackbox": true,
+            "appId": app_id,
+            "note": note,
+            "phases": {
+                "nativeSettleMs": t.elapsed().as_secs_f64() * 1000.0,
+            }
+        }))
+    }
 }
 
 #[cfg(test)]
@@ -956,6 +1131,110 @@ mod tests {
         assert!(res.is_err());
         // Native lane records cold_start_retries=1 when a retry was attempted and failed; Flutter lane omits it.
         assert_eq!(backend.lane_stats().cold_start_retries, 1);
+        drop(backend);
+        drop(drv);
+        app.join().unwrap();
+    }
+
+    #[test]
+    fn flutter_call_hook_forwards_params_and_warm_attach_drains_stale_telemetry() {
+        let mut dev = Device::Android(crate::device::Android::new("unreachable".into()));
+        let mut drv = Driver::listen(0).unwrap();
+        let port = drv.port().unwrap();
+        let seen = Arc::new(Mutex::new(Vec::<(String, Value)>::new()));
+        let seen_clone = Arc::clone(&seen);
+
+        let app = std::thread::spawn(move || {
+            let Ok(mut sock) = TcpStream::connect(("127.0.0.1", port)) else { return };
+            writeln!(sock, r#"{{"event":"hello","params":{{"protocol":1,"pid":777,"platform":"android"}}}}"#).unwrap();
+            let mut reader = BufReader::new(sock.try_clone().unwrap());
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    break;
+                }
+                let req: Value = serde_json::from_str(&line).unwrap();
+                let id = req["id"].as_u64().unwrap();
+                let method = req["method"].as_str().unwrap().to_string();
+                seen_clone.lock().unwrap().push((method.clone(), req["params"].clone()));
+                let reply = match method.as_str() {
+                    "configure" => {
+                        serde_json::json!({"id": id, "result": {"pixelsPerUnit": 2, "httpLog": true}, "us": 1})
+                    }
+                    "appIssues" => serde_json::json!({
+                        "id": id,
+                        "result": {
+                            "issues": [{"id": 1, "seq": 5, "kind": "flutterError", "message": "stale", "summary": "stale"}],
+                            "latestSeq": 5,
+                            "dropped": 0
+                        },
+                        "us": 1
+                    }),
+                    "httpLog" => serde_json::json!({
+                        "id": id,
+                        "result": {
+                            "entries": [{"seq": 9, "method": "GET", "url": "https://old.example"}],
+                            "latestSeq": 9,
+                            "dropped": 0,
+                            "inFlight": []
+                        },
+                        "us": 1
+                    }),
+                    "callHook" => serde_json::json!({
+                        "id": id,
+                        "result": {
+                            "hook": req["params"]["name"],
+                            "value": {"seeded": true},
+                            "settle": "idle",
+                            "t": {"hookUs": 100, "settleUs": 50}
+                        },
+                        "us": 150
+                    }),
+                    _ => serde_json::json!({"id": id, "result": {"idle": true}, "us": 1}),
+                };
+                if writeln!(sock, "{reply}").is_err() {
+                    break;
+                }
+            }
+        });
+
+        let mut opts = opts();
+        opts.trace = true;
+        opts.input_mode = InputMode::Flutter;
+        let mut session =
+            Session { dev: &mut dev, drv: &mut drv, opts: &opts, units_scale: 1.0, native: None, ios_native: None };
+        let mut backend = DeviceFlutterBackend::new(&mut session, "com.example.warm".into());
+
+        // Accept over TCP loopback (no external adb/xcrun calls) -> configure -> stale telemetry drain -> waitIdle.
+        let attach_res = backend.flutter_warm_attach_accept("com.example.warm", Some(777), None).unwrap();
+        assert_eq!(attach_res["attached"], true);
+        assert_eq!(attach_res["pid"], 777);
+
+        let batch = backend.drv.take_issue_batch();
+        assert!(batch.current.is_empty() && batch.late.is_empty(), "stale issues must be drained on warm attach");
+        let http = backend.drv.take_http_batch();
+        assert!(http.current.is_empty() && http.late.is_empty(), "stale http trace must be drained on warm attach");
+
+        // Second warm attach on the same already-connected app reuses the live connection without adb/simctl.
+        let reuse_res = backend.flutter_warm_attach("com.example.warm").unwrap();
+        assert_eq!(reuse_res["attached"], true);
+        assert_eq!(reuse_res["reusedConnection"], true);
+
+        let mut args = serde_json::Map::new();
+        args.insert("email".into(), Value::String("dev@example.com".into()));
+        let hook_res = backend
+            .flutter_call_hook(&crate::backend::CallHookRequest {
+                name: "seed_user".into(),
+                args: Some(args),
+                timeout_ms: Some(5000),
+                settle: Some(true),
+                settle_timeout_ms: Some(1000),
+            })
+            .unwrap();
+        assert_eq!(hook_res["value"]["seeded"], true);
+        assert_eq!(seen.lock().unwrap().last().unwrap().0, "callHook");
+        assert_eq!(seen.lock().unwrap().last().unwrap().1["args"]["email"], "dev@example.com");
+
         drop(backend);
         drop(drv);
         app.join().unwrap();

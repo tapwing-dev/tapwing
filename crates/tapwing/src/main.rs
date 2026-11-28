@@ -163,6 +163,18 @@ struct TestArgs {
     /// With `--trace`: capture a screenshot and UI tree after every step (`steps`) or only on failures.
     #[arg(long, value_enum, default_value = "failures", requires = "trace")]
     trace_screenshots: TraceScreenshots,
+    /// Attach to an already-running app instead of cold-relaunching on leading `launchApp` (gray-box).
+    #[arg(long)]
+    attach: bool,
+    /// Start from a 1-based top-level step index or exact top-level `label:` (gray-box).
+    #[arg(long, value_name = "STEP_OR_LABEL")]
+    start_from: Option<String>,
+    /// Permit in-app `callHook` commands (overrides `config.yaml` `tapwing.allowHooks: false`).
+    #[arg(long, conflicts_with = "no_hooks")]
+    allow_hooks: bool,
+    /// Forbid in-app `callHook` commands (overrides `config.yaml` `tapwing.allowHooks: true`).
+    #[arg(long, conflicts_with = "allow_hooks")]
+    no_hooks: bool,
     /// Maestro CLI compatibility no-op: continuous watch mode (not implemented).
     #[arg(short = 'c', long, hide = true)]
     continuous: bool,
@@ -369,6 +381,13 @@ fn run(cli: Cli) -> Result<bool> {
             )?;
             let settle_load =
                 run::SettleLoadOpts::resolve(args.settle_load_timeout_ms, &args.settle_http_ignore, tapwing_cfg)?;
+            let allow_hooks = if args.allow_hooks {
+                true
+            } else if args.no_hooks {
+                false
+            } else {
+                tapwing_cfg.allow_hooks.unwrap_or(false)
+            };
             run_test_suite(SuiteRunConfig {
                 plan,
                 shard_split: args.shard_split,
@@ -393,6 +412,9 @@ fn run(cli: Cli) -> Result<bool> {
                 input_mode: args.input,
                 app_health,
                 trace: args.trace.then_some(TraceOpts { screenshots: args.trace_screenshots }),
+                allow_hooks,
+                attach: args.attach,
+                start_from: args.start_from,
             })
         }
         Cmd::Check { paths, dump_ir } => check(&paths, dump_ir),

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'diagnostics/error_hooks.dart';
+import 'hooks/hook_registry.dart';
 import 'idle/idle_detector.dart';
 import 'input/text_input.dart';
 import 'server/tapwing_server.dart';
@@ -84,8 +85,55 @@ class TapwingBinding extends WidgetsFlutterBinding with TapwingBindingMixin {
   ///
   /// Must be called before `app.main()` so the binding singleton is registered
   /// prior to `runApp()` or `WidgetsFlutterBinding.ensureInitialized()`.
-  static WidgetsBinding ensureInitialized() {
+  /// Optional [hooks] are registered via [registerHooks] when the driver is
+  /// enabled.
+  static WidgetsBinding ensureInitialized({
+    Map<String, TapwingHookHandler>? hooks,
+  }) {
     _instance ??= TapwingBinding._();
+    if (hooks != null) {
+      registerHooks(hooks);
+    }
     return WidgetsBinding.instance;
   }
+
+  /// Registers a gray-box in-app test hook callable via `callHook` in a
+  /// Tapwing flow.
+  ///
+  /// Does nothing in release builds unless `TAPWING_ALLOW_RELEASE=true` was
+  /// passed, so shipped binaries never expose test hooks.
+  static void registerHook(String name, TapwingHookHandler handler) {
+    if (!isDriverEnabled()) return;
+    HookRegistry.instance.register(name, handler);
+  }
+
+  /// Registers all gray-box in-app test hooks in [hooks] at once.
+  ///
+  /// Does nothing in release builds unless `TAPWING_ALLOW_RELEASE=true` was
+  /// passed.
+  static void registerHooks(Map<String, TapwingHookHandler> hooks) {
+    if (!isDriverEnabled()) return;
+    HookRegistry.instance.registerAll(hooks);
+  }
+
+  /// Removes a previously registered in-app hook, returning `true` if one was
+  /// registered.
+  static bool unregisterHook(String name) {
+    if (!isDriverEnabled()) return false;
+    return HookRegistry.instance.unregister(name);
+  }
+
+  /// Clears all registered in-app hooks.
+  static void clearHooks() {
+    HookRegistry.instance.clear();
+  }
+
+  /// Returns a live [BuildContext] from the active visible route, or `null` if
+  /// no widget tree is mounted yet.
+  static BuildContext? get activeContext => resolveActiveHookContext();
+
+  /// Returns a live [BuildContext] for the top-most visible widget of type [W],
+  /// or `null` if none is currently mounted and visible.
+  static BuildContext? contextOf<W extends Widget>() =>
+      resolveHookContextOf<W>();
 }

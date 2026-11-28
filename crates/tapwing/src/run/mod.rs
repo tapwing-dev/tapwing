@@ -23,7 +23,8 @@ pub use crate::backend::{
     is_optional_downgradable, scroll_timeout_ms, speed_to_duration,
 };
 use crate::backend::{
-    FlowDriver, LaunchRequest, ScrollUntilVisibleRequest, SwipeRequest, TapElementRequest, TapPointRequest,
+    CallHookRequest, FlowDriver, LaunchRequest, ScrollUntilVisibleRequest, SwipeRequest, TapElementRequest,
+    TapPointRequest,
 };
 use crate::device::{Device, Platform};
 use crate::driver::Driver;
@@ -914,6 +915,19 @@ impl FlowDriver for DeviceFlutterBackend<'_> {
 
     fn check_busy_after(&mut self) -> Option<Value> {
         if self.drv.is_connected() { self.drv.call("busy", json!({})).ok() } else { None }
+    }
+
+    fn call_hook(&mut self, req: &CallHookRequest) -> Result<Value> {
+        if self.lane_mode() == InputMode::Native {
+            anyhow::bail!("callHook requires Flutter tapwing_driver and cannot run with `--input native`");
+        }
+        self.invalidate_focus_cache();
+        self.lanes.flutter += 1;
+        self.flutter_call_hook(req)
+    }
+
+    fn warm_attach(&mut self, app_id: &str) -> Result<Value> {
+        self.flutter_warm_attach(app_id)
     }
 
     fn take_app_issues(&mut self) -> crate::app_health::IssueBatch {

@@ -128,6 +128,8 @@ pub struct FlowRunRecord {
     pub raw_json: Value,
     /// F8b trace (`--trace` only), see [`crate::orchestra::FlowResult::trace`].
     pub trace: Option<Value>,
+    /// Gray-box shortcuts used during this flow (hooks, `--start-from`, `--attach`).
+    pub graybox: crate::graybox::GrayboxInfo,
 }
 
 impl FlowRunRecord {
@@ -443,6 +445,9 @@ pub fn render_json_report(summary: &TestExecutionSummary) -> Result<String> {
 /// Top-level markers of a run that did not finish normally. Absent on a
 /// normal run, so its JSON is unchanged.
 fn add_abnormal_run_fields(doc: &mut Value, summary: &TestExecutionSummary) {
+    if summary.suites.iter().any(|suite| suite.flows.iter().any(|flow| flow.graybox.is_active())) {
+        doc["graybox"] = json!(true);
+    }
     if let Some(signal) = summary.interrupted {
         doc["interrupted"] = json!(true);
         doc["interruptSignal"] = json!(crate::interrupt::signal_name(signal));

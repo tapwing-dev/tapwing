@@ -1,0 +1,39 @@
+appId: dev.tapwing.sample_app
+name: Fast inner loop (hooks)
+tags:
+  - hooks
+---
+- launchApp:
+    label: Launch app
+- callHook:
+    name: seed_logged_in
+    args:
+      email: "fast@tapwing.dev"
+    outputVariable: seed
+    label: Seed logged-in state
+- assertTrue: ${output.seed.screen == 'products'}
+- assertVisible: "Products"
+- callHook:
+    name: open_product
+    args:
+      index: 40
+    outputVariable: product
+    label: Jump to Product 40
+- assertTrue: ${output.product.screen == 'detail' && output.product.index == 40}
+- assertVisible: "Details of Product 40"
+- tapOn:
+    id: "favorite_switch"
+- assertVisible:
+    text: "Favorite"
+    checked: true
+- back
+- assertVisible: "Products"
+- tapOn:
+    text: "Add product"
+    label: Add product dialog
+- assertVisible: "New product"
+- tapOn: "Name"
+- inputText: "Tapwing"
+- tapOn: "Add"
+- assertVisible: "Added Tapwing"
+- assertNotVisible: "New product"

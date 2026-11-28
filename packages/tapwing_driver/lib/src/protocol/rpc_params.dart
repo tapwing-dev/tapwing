@@ -455,6 +455,98 @@ class PressKeyParams {
   final Duration settleTimeout;
 }
 
+/// Parameters for `callHook`.
+class CallHookParams {
+  /// Creates `callHook` parameters.
+  const CallHookParams({
+    required this.name,
+    required this.args,
+    required this.timeout,
+    required this.settle,
+    required this.settleTimeout,
+  });
+
+  /// Parses and validates `callHook` parameters from JSON.
+  factory CallHookParams.fromJson(Map<String, Object?> json) {
+    final Object? rawName = json['name'];
+    if (rawName is! String || rawName.trim().isEmpty) {
+      throw DriverError.invalidCommand(
+        'callHook requires a non-empty string "name"',
+      );
+    }
+    final Object? rawArgs = json['args'];
+    final Map<String, Object?> args;
+    if (rawArgs == null) {
+      args = const <String, Object?>{};
+    } else if (rawArgs is Map<Object?, Object?>) {
+      args = rawArgs.cast<String, Object?>();
+    } else {
+      throw DriverError.invalidCommand('callHook "args" must be a JSON object');
+    }
+    final Object? rawTimeout = json['timeoutMs'];
+    final int timeoutMs;
+    if (rawTimeout == null) {
+      timeoutMs = DriverTimeouts.hookMs;
+    } else if (rawTimeout is num &&
+        rawTimeout.isFinite &&
+        rawTimeout >= 1 &&
+        rawTimeout <= ConfigureParams.maxSettleLoadTimeoutMs) {
+      timeoutMs = rawTimeout.toInt();
+    } else {
+      throw DriverError.invalidCommand(
+        'callHook timeoutMs must be between 1 and '
+        '${ConfigureParams.maxSettleLoadTimeoutMs}: $rawTimeout',
+      );
+    }
+    final Object? rawSettle = json['settle'];
+    final bool settle;
+    if (rawSettle == null) {
+      settle = true;
+    } else if (rawSettle is bool) {
+      settle = rawSettle;
+    } else {
+      throw DriverError.invalidCommand('callHook "settle" must be a boolean');
+    }
+    final Object? rawSettleTimeout = json['settleTimeoutMs'];
+    final int settleTimeoutMs;
+    if (rawSettleTimeout == null) {
+      settleTimeoutMs = DriverTimeouts.settleMs;
+    } else if (rawSettleTimeout is num &&
+        rawSettleTimeout.isFinite &&
+        rawSettleTimeout >= 0 &&
+        rawSettleTimeout <= ConfigureParams.maxSettleLoadTimeoutMs) {
+      settleTimeoutMs = rawSettleTimeout.toInt();
+    } else {
+      throw DriverError.invalidCommand(
+        'callHook settleTimeoutMs must be between 0 and '
+        '${ConfigureParams.maxSettleLoadTimeoutMs}: $rawSettleTimeout',
+      );
+    }
+    return CallHookParams(
+      name: rawName,
+      args: args,
+      timeout: Duration(milliseconds: timeoutMs),
+      settle: settle,
+      settleTimeout: Duration(milliseconds: settleTimeoutMs),
+    );
+  }
+
+  /// Registered hook name.
+  final String name;
+
+  /// Evaluated argument map passed to the hook handler.
+  final Map<String, Object?> args;
+
+  /// Maximum time allowed for the hook handler future to resolve.
+  final Duration timeout;
+
+  /// Whether to run reactive UI settle after the hook completes.
+  final bool settle;
+
+  /// Settle timeout when [settle] is `true`.
+  final Duration settleTimeout;
+}
+
 Selector _requireSelector(Map<String, Object?> json) => Selector.fromJson(
   (json['selector']! as Map<Object?, Object?>).cast<String, Object?>(),
 );

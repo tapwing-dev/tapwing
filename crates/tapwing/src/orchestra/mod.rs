@@ -10,10 +10,12 @@ mod describe;
 mod diagnostics;
 mod dispatch;
 mod eval;
+pub mod start_from;
 
 pub use describe::{describe_command, is_optional, kind, settle_timeout_note, settles, settles_for_platform};
 pub use dispatch::{adjusted_timeout, is_condition_truthy};
 pub use eval::evaluate_command_scripts;
+pub use start_from::validate_start_from_static;
 
 use std::collections::HashMap;
 use std::io::Write;
@@ -104,6 +106,12 @@ pub struct OrchestraOpts {
     pub app_health: AppHealthOpts,
     /// F8b `--trace`: per-step trace extras (`None` = off, no extra calls).
     pub trace: Option<crate::trace::TraceOpts>,
+    /// Whether `callHook` commands are permitted by policy (false by default).
+    pub allow_hooks: bool,
+    /// Attach to an already-running app instead of cold-relaunching on leading `launchApp`.
+    pub attach: bool,
+    /// Optional 1-based step index or exact top-level `label` to resume from.
+    pub start_from: Option<String>,
 }
 
 impl Default for OrchestraOpts {
@@ -124,6 +132,9 @@ impl Default for OrchestraOpts {
             http_agent: None,
             app_health: AppHealthOpts::default(),
             trace: None,
+            allow_hooks: false,
+            attach: false,
+            start_from: None,
         }
     }
 }
@@ -157,11 +168,13 @@ pub struct FlowResult {
     /// F8b trace (`--trace` only): `{http, httpDropped, steps}` where steps are
     /// the step entries plus trace extras, in start order.
     pub trace: Option<Value>,
+    /// Gray-box shortcuts active during this flow (hooks, `--start-from`, `--attach`).
+    pub graybox: crate::graybox::GrayboxInfo,
 }
 
 impl FlowResult {
     pub fn to_report_json(&self, flow_name: &str, path: &Path, settle_policy: &str) -> Value {
-        json!({
+        let mut out = json!({
             "flow": flow_name,
             "path": path,
             "status": if self.success { "passed" } else { "failed" },
@@ -179,7 +192,9 @@ impl FlowResult {
             },
             "steps": self.steps,
         })
-        .tap_app_issue_summary(&self.steps, self.dropped_app_issues)
+        .tap_app_issue_summary(&self.steps, self.dropped_app_issues);
+        self.graybox.apply_to_json(&mut out);
+        out
     }
 }
 
@@ -255,6 +270,10 @@ pub struct Orchestra<'a, D: FlowDriver + ?Sized> {
     trace_http_dropped: u64,
     /// F8b: per-run flow ordinal for unique asset names.
     trace_ordinal: usize,
+    /// Gray-box shortcuts recorded during the active flow.
+    graybox: crate::graybox::GrayboxInfo,
+    /// True when the first executed `launchApp` should warm-attach instead of restarting.
+    warm_attach_pending_launch: bool,
 }
 
 impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
@@ -294,6 +313,8 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
             retry_attempts: Vec::new(),
             trace_http_dropped: 0,
             trace_ordinal: 0,
+            graybox: crate::graybox::GrayboxInfo::default(),
+            warm_attach_pending_launch: false,
         }
     }
 
@@ -319,6 +340,9 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
         self.pending_trace = None;
         self.retry_attempts.clear();
         self.trace_http_dropped = 0;
+        self.step_index = 0;
+        self.graybox = crate::graybox::GrayboxInfo::default();
+        self.warm_attach_pending_launch = false;
         if self.opts.trace.is_some() {
             self.trace_ordinal = crate::trace::next_flow_ordinal();
         }
@@ -341,6 +365,7 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                 js_closed: true,
                 dropped_app_issues: 0,
                 trace: None,
+                graybox: crate::graybox::GrayboxInfo::default(),
             };
         }
 
@@ -368,39 +393,117 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                 if let Some(app) = &eval_app_id {
                     self.flow_app_id = Some(app.clone());
                     self.driver.set_flow_app_id(app);
+                } else if let Some(raw_app) = commands.iter().find_map(|c| match c {
+                    MaestroCommand::LaunchApp(la) => Some(la.app_id.as_str()),
+                    _ => None,
+                }) && let Ok(app) = self.js.evaluate_scripts(raw_app)
+                {
+                    self.flow_app_id = Some(app.clone());
+                    self.driver.set_flow_app_id(&app);
                 }
 
                 // Filter out top-level `DefineVariables` so they don't run twice (`Orchestra.kt:249`).
                 let filtered: Vec<MaestroCommand> =
                     commands.iter().filter(|c| !matches!(c, MaestroCommand::DefineVariables(_))).cloned().collect();
 
-                // 2. Execute `onFlowStart` hook (`Orchestra.kt:251-257`).
-                let on_start_res = if let Some(hook) = config.as_ref().and_then(|c| c.on_flow_start.as_ref()) {
-                    self.execute_command_list(&hook.commands, config.as_ref(), false)
+                let flow_label = if self.opts.flow_path.as_os_str().is_empty() {
+                    "<flow>".to_string()
                 } else {
-                    Ok(true)
+                    self.opts.flow_path.display().to_string()
                 };
+                match start_from::resolve_start_from(
+                    &filtered,
+                    config.as_ref(),
+                    self.opts.start_from.as_deref(),
+                    self.opts.attach,
+                    &flow_label,
+                ) {
+                    Ok(resolved) => {
+                        self.step_index = resolved.skipped_steps;
+                        if resolved.skipped_steps > 0 {
+                            self.graybox.partial_run = Some(crate::graybox::PartialRunInfo {
+                                start_from: resolved.start_from.clone().unwrap_or_default(),
+                                resolved_step: resolved.start_index_1_based,
+                                skipped_steps: resolved.skipped_steps,
+                                skipped_on_flow_start: resolved.skipped_on_flow_start,
+                            });
+                        }
+                        if resolved.warm_attach_active {
+                            self.graybox.warm_attach = true;
+                        }
+                        self.warm_attach_pending_launch = resolved.warm_attach_leading_launch;
 
-                match on_start_res {
-                    Ok(true) => {
-                        // 3. Execute main flow commands (`Orchestra.kt:260-267`).
-                        match self.execute_command_list(&filtered, config.as_ref(), false) {
-                            Ok(ok) => {
-                                flow_success = ok;
+                        if let Some(p) = &self.graybox.partial_run {
+                            let on_start = if p.skipped_on_flow_start { ", skipped onFlowStart" } else { "" };
+                            eprintln!(
+                                "{}[tapwing] gray-box: --start-from `{}` -> starting at step {} (skipped {} step(s){on_start})",
+                                self.opts.log_prefix, p.start_from, p.resolved_step, p.skipped_steps
+                            );
+                            if self.opts.print_progress {
+                                print_prefixed(
+                                    &self.opts.log_prefix,
+                                    &format!(
+                                        "  ↷ skipped {} leading step(s); starting at step {}",
+                                        p.skipped_steps, p.resolved_step
+                                    ),
+                                );
+                            }
+                        }
+                        if resolved.warm_attach_active {
+                            eprintln!(
+                                "{}[tapwing] gray-box: warm attach active (reusing running app)",
+                                self.opts.log_prefix
+                            );
+                        }
+
+                        let pre_attach_res = if resolved.needs_pre_attach {
+                            let target_app = self.flow_app_id.as_deref().unwrap_or("").to_string();
+                            self.driver.warm_attach(&target_app).map(|_| ())
+                        } else {
+                            Ok(())
+                        };
+
+                        match pre_attach_res {
+                            Ok(()) => {
+                                // 2. Execute `onFlowStart` hook (`Orchestra.kt:251-257`).
+                                let on_start_res = if resolved.skipped_on_flow_start {
+                                    Ok(true)
+                                } else if let Some(hook) = config.as_ref().and_then(|c| c.on_flow_start.as_ref()) {
+                                    self.execute_command_list(&hook.commands, config.as_ref(), false)
+                                } else {
+                                    Ok(true)
+                                };
+
+                                match on_start_res {
+                                    Ok(true) => {
+                                        // 3. Execute main flow commands (`Orchestra.kt:260-267`).
+                                        match self.execute_command_list(resolved.commands, config.as_ref(), false) {
+                                            Ok(ok) => {
+                                                flow_success = ok;
+                                            }
+                                            Err(e) => {
+                                                primary_error = Some(e);
+                                            }
+                                        }
+                                        if self.recording_open {
+                                            if !crate::interrupt::is_interrupted() {
+                                                let _ = self.driver.stop_recording();
+                                            }
+                                            self.recording_open = false;
+                                        }
+                                    }
+                                    Ok(false) => {
+                                        flow_success = false;
+                                    }
+                                    Err(e) => {
+                                        primary_error = Some(e);
+                                    }
+                                }
                             }
                             Err(e) => {
                                 primary_error = Some(e);
                             }
                         }
-                        if self.recording_open {
-                            if !crate::interrupt::is_interrupted() {
-                                let _ = self.driver.stop_recording();
-                            }
-                            self.recording_open = false;
-                        }
-                    }
-                    Ok(false) => {
-                        flow_success = false;
                     }
                     Err(e) => {
                         primary_error = Some(e);
@@ -431,6 +534,7 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                 js_closed,
                 dropped_app_issues: self.dropped_app_issues,
                 trace: None,
+                graybox: std::mem::take(&mut self.graybox),
             };
         }
 
@@ -490,6 +594,7 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
             js_closed,
             dropped_app_issues: self.dropped_app_issues,
             trace,
+            graybox: std::mem::take(&mut self.graybox),
         }
     }
 

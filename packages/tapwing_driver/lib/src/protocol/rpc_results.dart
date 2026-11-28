@@ -264,3 +264,38 @@ class DarkModeResult {
     'brightness': darkMode ? 'dark' : 'light',
   };
 }
+
+/// Result payload for `callHook`.
+class CallHookResult {
+  /// Creates a `callHook` result.
+  const CallHookResult({
+    required this.hook,
+    required this.value,
+    required this.settle,
+    required this.hookUs,
+    required this.settleUs,
+  });
+
+  /// Invoked hook name.
+  final String hook;
+
+  /// JSON-encodable return value produced by the hook handler.
+  final Object? value;
+
+  /// Post-hook settle state (`'idle'`, `'stable'`, `'timeout'`, or `'skipped'`).
+  final String settle;
+
+  /// Microseconds spent executing the hook callback itself.
+  final int hookUs;
+
+  /// Microseconds spent waiting for post-hook UI settle (`0` if skipped).
+  final int settleUs;
+
+  /// Serializes to `{"hook": ..., "value": ..., "settle": ..., "t": ...}`.
+  Map<String, Object?> toJson() => <String, Object?>{
+    'hook': hook,
+    'value': value,
+    'settle': settle,
+    't': <String, int>{'hookUs': hookUs, 'settleUs': settleUs},
+  };
+}
