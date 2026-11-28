@@ -19,12 +19,33 @@ Add `export ADB_MDNS=0` to your shell profile (and run `launchctl setenv ADB_MDN
 
 ## App Fails to Connect to `tapwing_driver`
 
-If `launchApp` runs for 15 seconds with no driver connection, Tapwing switches that `appId` to black-box native mode (or fails immediately if `--input flutter` was passed). Check:
+What happens when `launchApp` gets no driver connection depends on what Tapwing could read in the installed build ([native-lanes.md](native-lanes.md#skipping-the-handshake-wait-for-a-build-without-the-driver)):
+
+| The installed build | In `--input auto` |
+|---|---|
+| has no driver | No wait. The app is driven black-box through the native lane, with a warning. |
+| could not be read, or links the driver without its dial path | After 15 seconds the flow drives the app black-box. Two misses in a row make that last for the rest of the run. |
+| contains a driver that dials the host | Never black-box. While the app process is running the wait goes on until 60 seconds after the launch, then `launchApp` fails with `the installed build contains tapwing_driver (...) but the driver never connected`. A process that died fails the step at once as a crash. |
+
+`--input flutter` waits 20 seconds and fails in every case. `--input native` never waits for the driver.
+
+### `the installed build contains tapwing_driver (...) but the driver never connected`
+
+The build is right, so look at the connection and at the start of the app:
+
+1. **The `adb reverse` tunnel is gone (Android):** An `adb` server restart drops every tunnel, see [Android `adb` Connection Drops](#android-adb-connection-drops). `adb -s <serial> reverse --list` shows what is left. Tapwing sets the tunnel up once when a run starts, so start the run again.
+2. **The app starts too slowly:** On a busy host or a software-rendered emulator a cold start can take longer than 60 seconds. Lower the load, use fewer shards, or give the emulator more cores. The error says whether the app process was still running. Android also ends a process that takes too long: on an Android 15 emulator it killed one that had not completed its startup after about 25 seconds (`failed to complete startup` in `adb logcat`), which Tapwing reports as an app crash at `launchApp`.
+3. **The app hangs before `main()` finishes:** `TapwingBinding.ensureInitialized()` in `lib/main_tapwing.dart` starts the driver. Code that blocks before it delays the handshake. `adb logcat` (Android) or the simulator log shows where the app stops.
+4. **Another simulator/device responded first:** Tapwing rejects handshakes from a different platform, and you can inspect port/driver selection with `TAPWING_DEBUG=1`.
+5. **Screen is PIN-locked:** Tapwing wakes Android screens automatically, but a PIN-locked device fails immediately.
+
+A later error that says `was not repeated` means an earlier launch of the same app already waited the 60 seconds in this run. Tapwing then waits 15 seconds per launch until a handshake arrives, so a broken setup does not cost a minute per flow. To drive the app black-box on purpose, pass `--input native`.
+
+### The app went black-box and you expected the driver
 
 1. **Right entrypoint built:** Verify the APK or `.app` was built with `-t lib/main_tapwing.dart` (not production `lib/main.dart`).
 2. **Release build guard:** In release builds `tapwing_driver` stays off by default. Use `--profile` (Android) / `--debug` (iOS Simulator), or pass `--dart-define=TAPWING_ALLOW_RELEASE=true` when testing a release build intentionally ([setup.md](setup.md)).
-3. **Another simulator/device responded first:** Tapwing rejects handshakes from a different platform, and you can inspect port/driver selection with `TAPWING_DEBUG=1`.
-4. **Screen is PIN-locked:** Tapwing wakes Android screens automatically, but a PIN-locked device fails immediately.
+3. **The build could not be read:** `TAPWING_DEBUG=1` prints the probe's verdict and what it rests on. With an unknown verdict a slow start still ends in black-box mode after 15 seconds.
 
 ## `setupWarning`: Flutter `"Zone mismatch."`
 

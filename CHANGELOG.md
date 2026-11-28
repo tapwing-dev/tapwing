@@ -5,6 +5,7 @@ All notable changes to Tapwing (`tapwing` CLI, native drivers, and `tapwing_driv
 ## Unreleased
 
 * Driver probe (`tapwing_driver_hello_v1` + `~/.tapwing/driver-probe.json` cache) skips the 15 s handshake wait for installed builds that do not include `tapwing_driver`.
+* `--input auto` no longer drives a build that provably contains `tapwing_driver` black-box or demotes it after missed handshakes: a slow start gets up to 60 s while the app process is alive, then `launchApp` fails with the probe evidence (once per run and app, later launches wait 15 s).
 * `scrollUntilVisible` starts the next swipe once scrolling coasts below 300 logical px/s instead of waiting out the full coast settle on `BouncingScrollPhysics`.
 * iOS Simulator `clearState` empties the app's data container first and falls back to reinstalling (pass `--maestro-compat strict` to always reinstall like Maestro).
 * Settle no longer waits without limit for a single HTTP request or pending image: each counts as busy for at most 5 s (`--settle-load-timeout-ms` / `config.yaml` `tapwing.settleLoadTimeoutMs`, `0` = unbounded), and requests matching `--settle-http-ignore` / `tapwing.settleHttpIgnore` never block settle while still appearing in HTTP trace logs.
