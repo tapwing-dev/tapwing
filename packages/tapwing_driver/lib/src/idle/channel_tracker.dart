@@ -26,15 +26,29 @@ class ChannelTracker {
   /// Maximum duration a single pending channel reply can block idleness.
   final Duration safetyTimeout;
 
-  int _pending = 0;
+  int _started = 0;
+
+  /// Start numbers (see [started]) of the calls still awaiting a reply.
+  final Set<int> _open = <int>{};
   final Set<Timer> _safetyTimers = <Timer>{};
   final Set<Completer<void>> _idleWaiters = <Completer<void>>{};
 
   /// Number of non-system platform-channel calls currently awaiting a reply.
-  int get pending => _pending;
+  int get pending => _open.length;
 
   /// Whether no tracked platform-channel replies are currently pending.
-  bool get isIdle => _pending == 0;
+  bool get isIdle => _open.isEmpty;
+
+  /// Number of tracked calls started so far. Read it before an action and
+  /// pass it to [hasPendingSince] afterwards.
+  int get started => _started;
+
+  /// Whether a tracked call that started after [mark] (an earlier value of
+  /// [started]) still awaits its reply.
+  ///
+  /// Calls that were already pending at [mark], calls on `flutter/*`
+  /// channels, and calls released by [safetyTimeout] never count.
+  bool hasPendingSince(int mark) => _open.any((int call) => call > mark);
 
   /// Whether [channel] is a non-system channel whose replies should block
   /// idleness.
@@ -45,17 +59,17 @@ class ChannelTracker {
   /// [channel] until it completes, errors, or [safetyTimeout] elapses.
   void track(String channel, Future<ByteData?> reply) {
     if (!tracks(channel)) return;
-    _pending++;
-    bool released = false;
+    final int call = ++_started;
+    _open.add(call);
     Timer? timer;
     void release() {
-      if (released) return;
-      released = true;
+      // Also false after [reset], so a late reply cannot touch newer calls.
+      if (!_open.remove(call)) return;
       if (timer != null) {
         timer.cancel();
         _safetyTimers.remove(timer);
       }
-      _onCallFinished();
+      if (_open.isEmpty) _wakeWaiters();
     }
 
     if (safetyTimeout > Duration.zero) {
@@ -77,7 +91,7 @@ class ChannelTracker {
     bool Function()? isCancelled,
     Future<void>? cancelSignal,
   }) {
-    if (_pending == 0 ||
+    if (_open.isEmpty ||
         maxWait <= Duration.zero ||
         (isCancelled != null && isCancelled())) {
       return Future<void>.value();
@@ -120,16 +134,8 @@ class ChannelTracker {
       timer.cancel();
     }
     _safetyTimers.clear();
-    _pending = 0;
+    _open.clear();
     _wakeWaiters();
-  }
-
-  void _onCallFinished() {
-    _pending--;
-    if (_pending <= 0) {
-      _pending = 0;
-      _wakeWaiters();
-    }
   }
 
   void _wakeWaiters() {

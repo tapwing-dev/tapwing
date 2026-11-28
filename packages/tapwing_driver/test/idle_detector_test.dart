@@ -810,6 +810,54 @@ void main() {
         expect(tracker.isIdle, isTrue);
       },
     );
+
+    test('hasPendingSince counts only tracked calls that started after the '
+        'mark and still await their reply', () async {
+      final ChannelTracker tracker = ChannelTracker(
+        safetyTimeout: const Duration(milliseconds: 40),
+      );
+      final Completer<ByteData?> before = Completer<ByteData?>();
+      tracker.track('dev.tapwing/poll', before.future);
+      final int mark = tracker.started;
+      expect(tracker.hasPendingSince(mark), isFalse);
+
+      // System channels are not tracked, so they never count.
+      tracker.track('flutter/platform', Completer<ByteData?>().future);
+      expect(tracker.started, mark);
+      expect(tracker.hasPendingSince(mark), isFalse);
+
+      final Completer<ByteData?> after = Completer<ByteData?>();
+      tracker.track('dev.tapwing/permissions', after.future);
+      expect(tracker.hasPendingSince(mark), isTrue);
+
+      // The older call getting its reply changes nothing.
+      before.complete(null);
+      await Future<void>.delayed(Duration.zero);
+      expect(tracker.hasPendingSince(mark), isTrue);
+
+      after.complete(null);
+      await Future<void>.delayed(Duration.zero);
+      expect(tracker.hasPendingSince(mark), isFalse);
+
+      // A call released by the safety cap no longer counts either.
+      final int second = tracker.started;
+      tracker.track('dev.tapwing/hanging', Completer<ByteData?>().future);
+      expect(tracker.hasPendingSince(second), isTrue);
+      await tracker.waitForIdle(const Duration(milliseconds: 200));
+      expect(tracker.hasPendingSince(second), isFalse);
+
+      // A reply that arrives after reset() does not release a newer call.
+      final Completer<ByteData?> stale = Completer<ByteData?>();
+      tracker.track('dev.tapwing/stale', stale.future);
+      tracker.reset();
+      final int third = tracker.started;
+      tracker.track('dev.tapwing/fresh', Completer<ByteData?>().future);
+      stale.complete(null);
+      await Future<void>.delayed(Duration.zero);
+      expect(tracker.pending, 1);
+      expect(tracker.hasPendingSince(third), isTrue);
+      tracker.reset();
+    });
   });
 }
 
