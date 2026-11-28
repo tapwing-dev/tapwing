@@ -344,6 +344,88 @@ class IdleDetector {
     animations: _animationScanner.scan(treeHash: _computeSemanticsHash()),
   );
 
+  /// Most entries of one kind [busySources] lists before it sums up the rest.
+  static const int maxBusyEntries = 8;
+
+  /// Names what keeps the UI from counting as settled right now, for the
+  /// reply of a step whose settle ended with `'timeout'`. Empty when nothing
+  /// does.
+  ///
+  /// Each entry has a `source`:
+  /// - `channel`: a platform channel with calls awaiting a reply (`channel`,
+  ///   `pendingMs` of the oldest call, `calls` when more than one). The
+  ///   tracker never decodes messages, so there is no method name and no
+  ///   argument.
+  /// - `http`: `count` requests that block settle.
+  /// - `images`: `count` pending images that block settle.
+  /// - `keyboard`: a soft keyboard show or hide that has not finished.
+  /// - `animation`: a running animation that blocks settle (`widget`,
+  ///   `fraction`, `status`).
+  /// - `frames`: frames keep being scheduled and the semantics tree has not
+  ///   held still (`transientCallbacks`). Listed only when nothing else above
+  ///   explains the wait, because a spinner next to a pending load would not
+  ///   have held the settle by itself.
+  ///
+  /// A kind with more than [maxBusyEntries] entries ends with one that
+  /// carries only `source` and `more`.
+  List<Map<String, Object?>> busySources() {
+    final List<Map<String, Object?>> busy = <Map<String, Object?>>[];
+    void addCapped(String source, Iterable<Map<String, Object?>> entries) {
+      int listed = 0;
+      for (final Map<String, Object?> entry in entries) {
+        if (listed == maxBusyEntries) {
+          busy.add(<String, Object?>{
+            'source': source,
+            'more': entries.length - listed,
+          });
+          return;
+        }
+        busy.add(<String, Object?>{'source': source, ...entry});
+        listed++;
+      }
+    }
+
+    addCapped('channel', <Map<String, Object?>>[
+      for (final PendingChannel c in _channelTracker.pendingByChannel())
+        <String, Object?>{
+          'channel': c.channel,
+          'pendingMs': c.pendingFor.inMilliseconds,
+          if (c.calls > 1) 'calls': c.calls,
+        },
+    ]);
+    if (!_httpTracker.isIdle) {
+      busy.add(<String, Object?>{
+        'source': 'http',
+        'count': _httpTracker.inFlight,
+      });
+    }
+    if (!_imagesIdle) {
+      busy.add(<String, Object?>{
+        'source': 'images',
+        'count': _readPendingImages() - _imagesStale,
+      });
+    }
+    if (_keyboardWaiter.hasPendingChange()) {
+      busy.add(<String, Object?>{'source': 'keyboard'});
+    }
+    if (!framesIdle) {
+      addCapped('animation', <Map<String, Object?>>[
+        for (final SignificantAnimation a in _animationScanner.scan(
+          treeHash: _computeSemanticsHash(),
+        ))
+          if (!a.infinite) a.toJson(),
+      ]);
+      if (busy.isEmpty) {
+        busy.add(<String, Object?>{
+          'source': 'frames',
+          'transientCallbacks':
+              SchedulerBinding.instance.transientCallbackCount,
+        });
+      }
+    }
+    return busy;
+  }
+
   /// Waits until the UI settles or [timeout] elapses.
   ///
   /// Returns `'idle'`, `'stable'`, `'calm'`, `'background'` (when the OS

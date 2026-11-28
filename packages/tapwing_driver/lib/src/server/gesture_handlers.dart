@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 
+import '../idle/channel_tracker.dart';
 import '../protocol/rpc_error.dart';
 import '../protocol/rpc_messages.dart';
 import '../selector/selector.dart';
@@ -372,6 +373,16 @@ class GestureHandlers {
 
   /// Executes tap(s) with Maestro's `hierarchyBasedTap` retry and repeat delay
   /// semantics (`Maestro.kt:379-381, 414-440`).
+  ///
+  /// Maestro repeats a tap when the hierarchy looks the same before and
+  /// after it. Here a tap also counts as having had an effect, and is not
+  /// repeated, when a platform channel call that started after its pointer
+  /// down still awaits its reply: the app's handler ran and is waiting for
+  /// the platform (a system alert or sheet that Flutter cannot see, and that
+  /// on iOS does not always deactivate the app). A second tap would reach the
+  /// widget under that alert. Calls already pending before the tap, calls
+  /// that got their reply, and `flutter/*` channels do not count, so a tap
+  /// that changed nothing and started nothing is repeated as before.
   Future<({String settle, bool changed, int actUs, int settleUs})> _performTap(
     ui.Offset point, {
     required int beforeHash,
@@ -392,6 +403,12 @@ class GestureHandlers {
     bool changed = false;
     int totalActUs = 0;
     int totalSettleUs = 0;
+
+    final ChannelTracker channels = _context.idle.channelTracker;
+    final int callsBeforeTap = channels.started;
+    bool unchanged() =>
+        _context.computeHash() == beforeHash &&
+        !channels.hasPendingSince(callsBeforeTap);
 
     for (int attempt = 0; attempt < retries; attempt++) {
       if (_context.isCancelled()) break;
@@ -432,7 +449,8 @@ class GestureHandlers {
       // Leaving the foreground (e.g. OS permission dialog or external sheet)
       // proves the tap took effect even when Flutter's semantics tree hasn't
       // changed yet; never burn kDoubleTapTimeout or re-tap over the dialog.
-      changed = settle == 'background' || _context.computeHash() != beforeHash;
+      // So does a channel call the tap started that is still unanswered.
+      changed = settle == 'background' || !unchanged();
       if (changed) break;
 
       // Before retrying a single tap under `retryIfNoChange`, ensure at least
@@ -448,7 +466,9 @@ class GestureHandlers {
             const Duration(milliseconds: 32),
           );
         }
-        changed = _context.computeHash() != beforeHash;
+        // A tap resolved only now may have started its channel call only
+        // now, after the settle above.
+        changed = !unchanged();
         if (changed) break;
       }
     }

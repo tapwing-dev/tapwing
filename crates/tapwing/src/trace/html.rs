@@ -213,6 +213,42 @@ const SCRIPT: &str = r#"
     return add(wrap, add(table, body));
   }
 
+  // Same wording as `settle_timeout_note` in `orchestra/describe.rs`.
+  function busySource(e) {
+    if (!e || typeof e.source !== 'string') return null;
+    function counted(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+    var count = typeof e.count === 'number' ? e.count : 1;
+    if (typeof e.more === 'number') {
+      if (e.source === 'channel') return counted(e.more, 'more platform channel', 'more platform channels');
+      if (e.source === 'animation') return counted(e.more, 'more animation', 'more animations');
+      return e.more + ' more ' + e.source;
+    }
+    switch (e.source) {
+      case 'channel':
+        var details = [];
+        if (typeof e.pendingMs === 'number') details.push('pending ' + e.pendingMs + ' ms');
+        if (typeof e.calls === 'number') details.push(e.calls + ' calls');
+        return 'platform channel ' + (e.channel || '?') + (details.length ? ' (' + details.join(', ') + ')' : '');
+      case 'http': return counted(count, 'HTTP request', 'HTTP requests');
+      case 'images': return counted(count, 'image load', 'image loads');
+      case 'keyboard': return 'the soft keyboard';
+      case 'animation':
+        return ['animation', e.widget || '?', Math.round((e.fraction || 0) * 100) + '%', e.status || ''].join(' ').trim();
+      case 'frames': return 'a UI that keeps changing';
+      default: return e.source;
+    }
+  }
+
+  function settleTimeoutNote(driver) {
+    if (!driver || typeof driver !== 'object') return null;
+    var reply = [driver, driver.idle].filter(function (r) {
+      return r && typeof r === 'object' && (r.settle === 'timeout' || r.state === 'timeout');
+    })[0];
+    if (!reply || !Array.isArray(reply.settleBusy)) return null;
+    var waitedFor = reply.settleBusy.map(busySource).filter(Boolean);
+    return waitedFor.length ? 'settle timed out, still waiting for ' + waitedFor.join(', ') : null;
+  }
+
   function renderStep(flowIdx, s) {
     var mark = statusMark(s.status);
     var det = el('details', 'step');
@@ -243,6 +279,8 @@ const SCRIPT: &str = r#"
     add(body, el('div', 'muted mono', meta.join(' · ')));
     if (s.error) add(body, el('pre', 'box err', s.error));
     if (s.warning) add(body, el('div', 'warn', '⚠ ' + s.warning));
+    var settleNote = settleTimeoutNote(s.driver);
+    if (settleNote) add(body, el('div', 'warn', '⚠ ' + settleNote));
     var failure = s.failure && typeof s.failure === 'object' ? s.failure : null;
     if (failure && Array.isArray(failure.suggestions) && failure.suggestions.length) {
       var sec = el('div');
@@ -305,7 +343,7 @@ const SCRIPT: &str = r#"
       failed: s.status === 'failed',
       health: issues.length > 0,
       httpErr: httpErrors > 0,
-      text: [s.description, s.command, s.error, s.warning].concat(http.map(function (h) { return h.url; }))
+      text: [s.description, s.command, s.error, s.warning, settleNote].concat(http.map(function (h) { return h.url; }))
         .concat(issues.map(function (i) { return i.message; })).join('\n').toLowerCase()
     });
     return det;
@@ -527,6 +565,16 @@ mod tests {
         let end = start + html[start..].find("</script>").unwrap();
         let parsed: Value = serde_json::from_str(&html[start..end]).unwrap();
         assert_eq!(parsed["trace"], hostile_trace());
+    }
+
+    #[test]
+    fn the_viewer_words_a_settle_timeout_like_the_console_does() {
+        let reply = json!({ "settle": "timeout", "settleBusy": [{ "source": "keyboard" }] });
+        let console = crate::orchestra::settle_timeout_note(&reply).unwrap();
+        let lead = console.strip_suffix("the soft keyboard").unwrap();
+        assert!(SCRIPT.contains(&format!("'{lead}'")), "viewer lead text differs from {lead:?}");
+        assert!(SCRIPT.contains("'the soft keyboard'"));
+        assert!(SCRIPT.contains("settleTimeoutNote(s.driver)"));
     }
 
     #[test]

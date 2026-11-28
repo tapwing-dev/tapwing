@@ -802,6 +802,42 @@ mod tests {
     }
 
     #[test]
+    fn fields_this_host_does_not_know_are_tolerated_and_reach_the_step_result() {
+        let mut drv = Driver::listen(0).unwrap();
+        let port = drv.port().unwrap();
+        let app = std::thread::spawn(move || {
+            // A newer driver: extra keys in the hello, the envelope and the result.
+            let mut app = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            writeln!(app, r#"{{"event":"hello","later":1,"params":{{"protocol":1,"pid":9,"later":true}}}}"#).unwrap();
+            let mut reader = BufReader::new(app.try_clone().unwrap());
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            let req: Value = serde_json::from_str(&line).unwrap();
+            let id = req["id"].as_u64().unwrap();
+            writeln!(
+                app,
+                r#"{{"id":{id},"us":5,"later":[],"result":{{"settle":"timeout","later":1,"settleBusy":[{{"source":"channel","channel":"dev.example/permissions","pendingMs":3012}}]}}}}"#
+            )
+            .unwrap();
+            // Stay connected until the host hangs up.
+            let _ = reader.read_line(&mut String::new());
+        });
+
+        drv.accept_with_pid(Duration::from_secs(2), Some(9), &[]).unwrap();
+        let res = drv.call("tapOn", json!({})).unwrap();
+        assert_eq!(
+            res,
+            json!({
+                "settle": "timeout",
+                "later": 1,
+                "settleBusy": [{ "source": "channel", "channel": "dev.example/permissions", "pendingMs": 3012 }]
+            })
+        );
+        drop(drv);
+        app.join().unwrap();
+    }
+
+    #[test]
     fn accept_rejects_hello_from_another_platform() {
         let mut drv = Driver::listen(0).unwrap();
         drv.expect_platform("android");

@@ -76,6 +76,7 @@ A few places where Tapwing goes slightly beyond Maestro by default:
   - Not checked: preference domains other than the app's own bundle id (a `UserDefaults(suiteName:)` suite) and app extension containers.
 
   Pass `--maestro-compat strict` to reinstall exactly like Maestro. Android is unchanged. `examples/sample_app/.maestro/ios/f9_clear_state.yaml` shows a preference and a file gone after `clearState`.
+- **`retryTapIfNoChange` and pending plugin calls.** Maestro repeats a tap when the screen looks the same before and after it, and it sees a system alert as a change. The in-app driver compares the Flutter semantics tree, which a system alert or sheet does not change. So it also counts a tap as effective, and does not repeat it, when a platform channel call that started after the tap still awaits its reply. A second tap would otherwise reach the widget under the alert. If the app starts such a call by itself right after a tap that had no effect, Tapwing taps once where Maestro would tap twice.
 - **AI commands.** `assertWithAI`, `assertNoDefectsWithAI`, and `extractTextWithAI` parse cleanly but fail at runtime with a clear message, since they rely on Maestro Cloud.
 - **Workspace `tapwing:` config.** `config.yaml` supports an optional `tapwing:` block for defaults like `appErrors`. Maestro warns about the unknown key and ignores it.
 

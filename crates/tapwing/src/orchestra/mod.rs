@@ -11,7 +11,7 @@ mod diagnostics;
 mod dispatch;
 mod eval;
 
-pub use describe::{describe_command, is_optional, kind, settles, settles_for_platform};
+pub use describe::{describe_command, is_optional, kind, settle_timeout_note, settles, settles_for_platform};
 pub use dispatch::{adjusted_timeout, is_condition_truthy};
 pub use eval::evaluate_command_scripts;
 
@@ -708,6 +708,9 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                             print_prefixed(&self.opts.log_prefix, &format!("  ✓ {ms:>7.1} ms  {desc}"));
                             if let Some(w) = extra.get("warning").and_then(Value::as_str) {
                                 print_prefixed(&self.opts.log_prefix, &format!("      ⚠ {w}"));
+                            }
+                            if let Some(note) = settle_timeout_note(&extra) {
+                                print_prefixed(&self.opts.log_prefix, &format!("      ⚠ {note}"));
                             }
                         }
                         if !matches!(cmd, MaestroCommand::ApplyConfiguration(_) | MaestroCommand::DefineVariables(_)) {
