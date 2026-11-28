@@ -122,6 +122,75 @@ void main() {
     },
   );
 
+  group('browser login flows', () {
+    // The login pages and their one account live in bench/web-login.
+    final File server = File('../../bench/web-login/server.py');
+    List<File> webFlows() => _flowFiles()
+        .where((File f) => f.uri.pathSegments.contains('web'))
+        .toList();
+
+    test('exist for every page variant on both platforms', () {
+      final List<String> paths = webFlows()
+          .map((File f) => f.uri.pathSegments.join('/'))
+          .toList();
+      for (final String variant in <String>['plain', 'two_step', 'controlled']) {
+        expect(paths, contains('.maestro/web/web_login_$variant.yaml'));
+        expect(paths, contains('.maestro/ios/web/web_login_$variant.yaml'));
+        expect(source, contains("identifier: 'browser_login_$variant'"));
+      }
+    });
+
+    test('are not top-level, so a workspace run without the server skips them', () {
+      final Iterable<File> topLevel = Directory('.maestro')
+          .listSync()
+          .whereType<File>()
+          .where((File f) => f.path.endsWith('.yaml'));
+      for (final File flow in topLevel) {
+        expect(
+          flow.readAsStringSync(),
+          isNot(contains('browser_login_')),
+          reason: flow.path,
+        );
+      }
+    });
+
+    test('type the account the login server accepts and assert the app\'s result', () {
+      expect(server.existsSync(), isTrue, reason: server.path);
+      final String py = server.readAsStringSync();
+      final String email = RegExp(r'^EMAIL = "(.+)"$', multiLine: true)
+          .firstMatch(py)!
+          .group(1)!;
+      final String password = RegExp(r'^PASSWORD = "(.+)"$', multiLine: true)
+          .firstMatch(py)!
+          .group(1)!;
+      expect(source, contains("'Signed in as \$email'"));
+      for (final File flow in webFlows()) {
+        final String text = flow.readAsStringSync();
+        expect(text, contains('- inputText: "$email"'), reason: flow.path);
+        expect(text, contains('- inputText: "$password"'), reason: flow.path);
+        expect(
+          text,
+          contains('- assertVisible: "Signed in as $email"'),
+          reason: flow.path,
+        );
+      }
+    });
+
+    test('use the callback scheme the Android manifest declares', () {
+      final String scheme = RegExp(
+        r"const String webLoginCallbackScheme = '([a-z][a-z0-9+.-]*)';",
+      ).firstMatch(source)!.group(1)!;
+      expect(
+        File('android/app/src/main/AndroidManifest.xml').readAsStringSync(),
+        contains('<data android:scheme="$scheme"/>'),
+      );
+      expect(
+        server.readAsStringSync(),
+        contains('redirect_scheme = "$scheme"'),
+      );
+    });
+  });
+
   test(
     'the instrumented entrypoint wires the driver around the unchanged app',
     () {

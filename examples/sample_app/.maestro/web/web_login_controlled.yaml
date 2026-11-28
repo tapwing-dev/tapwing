@@ -1,0 +1,35 @@
+# Browser login through a Chrome Custom Tab, `controlled` page:
+# inputs mirrored into JavaScript state on `input` events,
+# submit disabled until that state is valid.
+# Needs bench/web-login/server.py on the device's 127.0.0.1:8765
+# (`adb reverse tcp:8765 tcp:8765`); bench/web-login/run_bench.sh sets that up.
+# Chrome's first-run screens must be out of the way, see bench/web-login/README.md.
+# Kept out of the top level on purpose: a workspace run of `.maestro/` has no
+# server, while `tapwing check` still validates sub-folders.
+#   tapwing test .maestro/web/web_login_controlled.yaml
+appId: dev.tapwing.sample_app
+name: Web login (controlled)
+tags:
+  - web-login
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "browser_login_button"
+- tapOn:
+    id: "browser_login_controlled"
+# Chrome (com.android.chrome) is on top from here to the submit button.
+- assertVisible: "Tapwing Bench sign-in"
+- tapOn: "Email address"
+- inputText: "qa.pilot@tapwing.dev"
+- tapOn: "Password"
+- inputText: "Tw!ng-Pass2026"
+# The page counts the events its inputs received. No `input` event means the
+# JavaScript state never saw the text and the button stays disabled.
+- assertVisible: "Events: keydown [0-9]+, input [1-9][0-9]*, change [0-9]+"
+- assertVisible:
+    text: "Sign in"
+    enabled: true
+- tapOn: "Sign in"
+# The page redirects to tapwingsample://callback and the app is back on top.
+- assertVisible: "Signed in as qa.pilot@tapwing.dev"

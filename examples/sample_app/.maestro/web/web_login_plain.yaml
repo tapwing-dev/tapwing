@@ -1,0 +1,28 @@
+# Browser login through a Chrome Custom Tab, `plain` page:
+# email and password on one page.
+# Needs bench/web-login/server.py on the device's 127.0.0.1:8765
+# (`adb reverse tcp:8765 tcp:8765`); bench/web-login/run_bench.sh sets that up.
+# Chrome's first-run screens must be out of the way, see bench/web-login/README.md.
+# Kept out of the top level on purpose: a workspace run of `.maestro/` has no
+# server, while `tapwing check` still validates sub-folders.
+#   tapwing test .maestro/web/web_login_plain.yaml
+appId: dev.tapwing.sample_app
+name: Web login (plain)
+tags:
+  - web-login
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "browser_login_button"
+- tapOn:
+    id: "browser_login_plain"
+# Chrome (com.android.chrome) is on top from here to the submit button.
+- assertVisible: "Tapwing Bench sign-in"
+- tapOn: "Email address"
+- inputText: "qa.pilot@tapwing.dev"
+- tapOn: "Password"
+- inputText: "Tw!ng-Pass2026"
+- tapOn: "Sign in"
+# The page redirects to tapwingsample://callback and the app is back on top.
+- assertVisible: "Signed in as qa.pilot@tapwing.dev"
