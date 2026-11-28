@@ -211,6 +211,12 @@ class DriverContext {
       ? _computeSemanticsHash()
       : captureSnapshot().hash;
 
+  /// What was still busy when the latest [settle] gave up with `'timeout'`
+  /// (see [IdleDetector.busySources]); `null` when that settle ended any
+  /// other way, when nothing was busy, or when the current command has not
+  /// settled yet.
+  List<Map<String, Object?>>? lastSettleBusy;
+
   /// Waits for the UI to settle under the current [settlePolicy], then
   /// records layout overflows visible on the settled screen (profile and
   /// release builds; debug builds report them through `FlutterError`).
@@ -231,6 +237,11 @@ class DriverContext {
       maxContentVelocity: maxContentVelocity,
       isCancelled: isCancelled,
     );
+    // Read at once, before anything can change what is pending.
+    final List<Map<String, Object?>> busy = result == 'timeout'
+        ? idle.busySources()
+        : const <Map<String, Object?>>[];
+    lastSettleBusy = busy.isEmpty ? null : busy;
     errorHooks.scanOverflows();
     return result;
   }

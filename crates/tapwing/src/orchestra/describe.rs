@@ -1,5 +1,7 @@
 //! Pure command metadata, optionality, settle classification, and human-readable formatting.
 
+use serde_json::Value;
+
 use crate::flow::ir::{Condition, ElementSelector, MaestroCommand, Platform};
 
 /// Effective optional flag matching `Orchestra.kt:378` and `MaestroCommand.elementSelector()`.
@@ -18,6 +20,66 @@ pub fn is_optional(cmd: &MaestroCommand) -> bool {
         }
         _ => false,
     }
+}
+
+/// One line for a step whose settle ran into its timeout: what the driver was
+/// still waiting for when it gave up, read from `settleBusy` in the reply.
+///
+/// `None` when the settle did not time out, or when the reply names nothing
+/// (an older driver, or nothing was busy). The reply is the step's own or, for
+/// steps that end with a plain `waitIdle` such as `launchApp`, the one under
+/// `idle`. A `source` this version does not know is printed as it is.
+pub fn settle_timeout_note(driver: &Value) -> Option<String> {
+    let timed_out = |reply: &&Value| reply["settle"] == "timeout" || reply["state"] == "timeout";
+    let reply = [driver, &driver["idle"]].into_iter().find(timed_out)?;
+    let waited_for: Vec<String> = reply["settleBusy"].as_array()?.iter().filter_map(busy_source).collect();
+    if waited_for.is_empty() {
+        return None;
+    }
+    Some(format!("settle timed out, still waiting for {}", waited_for.join(", ")))
+}
+
+fn busy_source(entry: &Value) -> Option<String> {
+    let source = entry["source"].as_str()?;
+    let number = |key: &str| entry[key].as_u64();
+    let counted = |n: u64, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+    if let Some(more) = number("more") {
+        return Some(match source {
+            "channel" => counted(more, "more platform channel", "more platform channels"),
+            "animation" => counted(more, "more animation", "more animations"),
+            other => format!("{more} more {other}"),
+        });
+    }
+    Some(match source {
+        "channel" => {
+            let mut details = Vec::new();
+            if let Some(ms) = number("pendingMs") {
+                details.push(format!("pending {ms} ms"));
+            }
+            if let Some(calls) = number("calls") {
+                details.push(format!("{calls} calls"));
+            }
+            let name = entry["channel"].as_str().unwrap_or("?");
+            if details.is_empty() {
+                format!("platform channel {name}")
+            } else {
+                format!("platform channel {name} ({})", details.join(", "))
+            }
+        }
+        "http" => counted(number("count").unwrap_or(1), "HTTP request", "HTTP requests"),
+        "images" => counted(number("count").unwrap_or(1), "image load", "image loads"),
+        "keyboard" => "the soft keyboard".to_string(),
+        "animation" => format!(
+            "animation {} {:.0}% {}",
+            entry["widget"].as_str().unwrap_or("?"),
+            entry["fraction"].as_f64().unwrap_or(0.0) * 100.0,
+            entry["status"].as_str().unwrap_or("")
+        )
+        .trim_end()
+        .to_string(),
+        "frames" => "a UI that keeps changing".to_string(),
+        other => other.to_string(),
+    })
 }
 
 /// Commands after which the UI is expected to be settled (used by `--check-settle`).
@@ -165,5 +227,78 @@ pub fn describe_command(cmd: &MaestroCommand) -> String {
         MaestroCommand::RunScript(c) => format!("runScript {}", c.source_description),
         MaestroCommand::EvalScript(c) => format!("evalScript {}", c.script_string),
         _ => k.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod settle_timeout_note_tests {
+    use serde_json::json;
+
+    use super::settle_timeout_note;
+
+    #[test]
+    fn names_the_pending_channel_and_how_long_it_has_waited() {
+        let reply = json!({
+            "settle": "timeout",
+            "t": { "settleUs": 3_003_000 },
+            "settleBusy": [
+                { "source": "channel", "channel": "dev.tapwing.sample_app/permissions", "pendingMs": 3012 }
+            ]
+        });
+        assert_eq!(
+            settle_timeout_note(&reply).as_deref(),
+            Some(
+                "settle timed out, still waiting for platform channel dev.tapwing.sample_app/permissions \
+                 (pending 3012 ms)"
+            )
+        );
+    }
+
+    #[test]
+    fn lists_every_source_and_prints_an_unknown_one_as_it_is() {
+        let reply = json!({
+            "settle": "timeout",
+            "settleBusy": [
+                { "source": "channel", "channel": "a/b", "pendingMs": 40, "calls": 2 },
+                { "source": "channel", "more": 3 },
+                { "source": "http", "count": 2 },
+                { "source": "images", "count": 1 },
+                { "source": "keyboard" },
+                { "source": "animation", "widget": "FadeTransition", "fraction": 0.354, "status": "forward" },
+                { "source": "frames", "transientCallbacks": 1 },
+                { "source": "nativeView" },
+                { "noSource": true }
+            ]
+        });
+        assert_eq!(
+            settle_timeout_note(&reply).as_deref(),
+            Some(
+                "settle timed out, still waiting for platform channel a/b (pending 40 ms, 2 calls), \
+                 3 more platform channels, 2 HTTP requests, 1 image load, the soft keyboard, \
+                 animation FadeTransition 35% forward, a UI that keeps changing, nativeView"
+            )
+        );
+    }
+
+    #[test]
+    fn reads_the_wait_idle_reply_of_a_launch() {
+        let reply = json!({
+            "pid": 7,
+            "idle": { "state": "timeout", "settleBusy": [{ "source": "http", "count": 1 }] }
+        });
+        assert_eq!(settle_timeout_note(&reply).as_deref(), Some("settle timed out, still waiting for 1 HTTP request"));
+    }
+
+    #[test]
+    fn says_nothing_without_a_timeout_or_without_named_sources() {
+        // A settle that ended normally, even if a driver sent the field.
+        assert_eq!(settle_timeout_note(&json!({ "settle": "idle", "settleBusy": [{ "source": "keyboard" }] })), None);
+        // An older driver: a timeout without the field.
+        assert_eq!(settle_timeout_note(&json!({ "settle": "timeout" })), None);
+        assert_eq!(settle_timeout_note(&json!({ "settle": "timeout", "settleBusy": [] })), None);
+        assert_eq!(settle_timeout_note(&json!({ "settle": "timeout", "settleBusy": "soon" })), None);
+        // Replies that are not objects (`ping`, `assertNotVisible`).
+        assert_eq!(settle_timeout_note(&json!(true)), None);
+        assert_eq!(settle_timeout_note(&json!(null)), None);
     }
 }

@@ -168,6 +168,16 @@ void main() {
         expect(taps, 1, reason: 'the retry would land under the alert');
         expect(rawMessenger.channels, <String>[permissionsChannel]);
         expect(channelTracker.pending, 1);
+
+        // The reply names what the settle waited for: the channel and how
+        // long its call has been pending, never the method or its arguments.
+        final List<Object?> busy = result['settleBusy']! as List<Object?>;
+        expect(busy, hasLength(1));
+        final Map<String, Object?> entry = busy.single! as Map<String, Object?>;
+        expect(entry.keys, <String>['source', 'channel', 'pendingMs']);
+        expect(entry['source'], 'channel');
+        expect(entry['channel'], permissionsChannel);
+        expect(entry['pendingMs'], greaterThanOrEqualTo(150));
       } finally {
         handle.dispose();
       }
@@ -221,6 +231,7 @@ void main() {
         );
 
         expect(result['settle'], 'idle');
+        expect(result.containsKey('settleBusy'), isFalse);
         expect(taps, 2);
         expect(channelTracker.pending, 0);
       } finally {
@@ -256,6 +267,50 @@ void main() {
         expect(result['settle'], 'idle');
         expect(taps, 1);
         expect(channelTracker.pending, 1);
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets('waitIdle that times out names the pending channel too', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(buttonApp(onTap: () {}));
+        unawaited(permissions.invokeMethod<void>('longPoll'));
+        unawaited(permissions.invokeMethod<void>('longPoll'));
+
+        final Map<String, Object?> result = await runDriver(
+          tester,
+          makeDispatcher().dispatch('waitIdle', <String, Object?>{
+            'timeoutMs': 100,
+          }),
+        );
+
+        expect(result['state'], 'timeout');
+        final Map<String, Object?> entry =
+            (result['settleBusy']! as List<Object?>).single!
+                as Map<String, Object?>;
+        expect(entry['channel'], permissionsChannel);
+        expect(entry['calls'], 2);
+        expect(entry['pendingMs'], greaterThanOrEqualTo(100));
+
+        // The next command starts clean: no stale diagnostics on a result
+        // that did not time out.
+        for (final Completer<ByteData?> reply in rawMessenger.replies) {
+          reply.complete(
+            const StandardMethodCodec().encodeSuccessEnvelope(null),
+          );
+        }
+        final Map<String, Object?> idle = await runDriver(
+          tester,
+          makeDispatcher().dispatch('waitIdle', <String, Object?>{
+            'timeoutMs': 100,
+          }),
+        );
+        expect(idle['state'], 'idle');
+        expect(idle.containsKey('settleBusy'), isFalse);
       } finally {
         handle.dispose();
       }

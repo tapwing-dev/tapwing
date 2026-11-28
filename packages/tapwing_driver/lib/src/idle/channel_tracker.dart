@@ -2,6 +2,26 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
+/// Calls on one platform channel that still await their reply, for the
+/// settle timeout report (see [ChannelTracker.pendingByChannel]).
+class PendingChannel {
+  /// Creates a summary of the open calls on [channel].
+  const PendingChannel({
+    required this.channel,
+    required this.calls,
+    required this.pendingFor,
+  });
+
+  /// Channel name as passed to `BinaryMessenger.send`.
+  final String channel;
+
+  /// Number of calls on [channel] awaiting a reply.
+  final int calls;
+
+  /// How long the oldest of them has been waiting.
+  final Duration pendingFor;
+}
+
 /// Tracks pending outgoing [BinaryMessenger.send] replies on non-system
 /// platform channels so [IdleDetector] does not declare the UI idle while an
 /// action is awaiting an async plugin reply (for example before `setState` or
@@ -12,8 +32,12 @@ import 'package:flutter/services.dart';
 /// and each tracked call is bounded by [safetyTimeout] so a plugin call that
 /// never replies cannot wedge settling forever.
 class ChannelTracker {
-  /// Creates a platform-channel reply tracker.
-  ChannelTracker({this.safetyTimeout = defaultSafetyTimeout});
+  /// Creates a platform-channel reply tracker. [clock] is a monotonic time
+  /// source for call ages (defaults to a wall-clock [Stopwatch]).
+  ChannelTracker({
+    this.safetyTimeout = defaultSafetyTimeout,
+    Duration Function()? clock,
+  }) : _readNow = clock;
 
   /// Shared singleton wired into [ObservingBinaryMessenger] by default.
   static final ChannelTracker instance = ChannelTracker();
@@ -26,10 +50,18 @@ class ChannelTracker {
   /// Maximum duration a single pending channel reply can block idleness.
   final Duration safetyTimeout;
 
+  final Duration Function()? _readNow;
+  final Stopwatch _stopwatch = Stopwatch()..start();
+
+  Duration get _now => _readNow?.call() ?? _stopwatch.elapsed;
+
   int _started = 0;
 
-  /// Start numbers (see [started]) of the calls still awaiting a reply.
-  final Set<int> _open = <int>{};
+  /// Calls still awaiting a reply, by start number (see [started]), in the
+  /// order they started. Only the channel name and the start time are kept;
+  /// the message is never decoded, so no method name or argument is known.
+  final Map<int, ({String channel, Duration startedAt})> _open =
+      <int, ({String channel, Duration startedAt})>{};
   final Set<Timer> _safetyTimers = <Timer>{};
   final Set<Completer<void>> _idleWaiters = <Completer<void>>{};
 
@@ -48,7 +80,25 @@ class ChannelTracker {
   ///
   /// Calls that were already pending at [mark], calls on `flutter/*`
   /// channels, and calls released by [safetyTimeout] never count.
-  bool hasPendingSince(int mark) => _open.any((int call) => call > mark);
+  bool hasPendingSince(int mark) => _open.keys.any((int call) => call > mark);
+
+  /// The channels with calls awaiting a reply, the one that has waited
+  /// longest first.
+  List<PendingChannel> pendingByChannel() {
+    final Duration now = _now;
+    final Map<String, PendingChannel> byChannel = <String, PendingChannel>{};
+    // Insertion order is start order, so the first call seen on a channel is
+    // its oldest.
+    for (final ({String channel, Duration startedAt}) call in _open.values) {
+      final PendingChannel? seen = byChannel[call.channel];
+      byChannel[call.channel] = PendingChannel(
+        channel: call.channel,
+        calls: (seen?.calls ?? 0) + 1,
+        pendingFor: seen?.pendingFor ?? now - call.startedAt,
+      );
+    }
+    return byChannel.values.toList();
+  }
 
   /// Whether [channel] is a non-system channel whose replies should block
   /// idleness.
@@ -60,11 +110,11 @@ class ChannelTracker {
   void track(String channel, Future<ByteData?> reply) {
     if (!tracks(channel)) return;
     final int call = ++_started;
-    _open.add(call);
+    _open[call] = (channel: channel, startedAt: _now);
     Timer? timer;
     void release() {
       // Also false after [reset], so a late reply cannot touch newer calls.
-      if (!_open.remove(call)) return;
+      if (_open.remove(call) == null) return;
       if (timer != null) {
         timer.cancel();
         _safetyTimers.remove(timer);
