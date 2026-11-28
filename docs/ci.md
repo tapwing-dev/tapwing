@@ -77,3 +77,29 @@ The iOS Simulator has no Flutter profile mode, so build `--simulator --debug -t 
 ## Tapwing's Own Repository Workflows
 
 For contributors modifying Tapwing itself, CI lives under [`.github/workflows/`](../.github/workflows/ci.yml) (`rust`, `dart`, `android-driver`, `scripts`, gated by `CI Gate`). See [CONTRIBUTING.md](../CONTRIBUTING.md#continuous-integration) and [install.md](install.md#releasing) for full details.
+
+### Android emulator end-to-end run
+
+[`ci-android-e2e.yml`](../.github/workflows/ci-android-e2e.yml) is the only workflow that runs the CLI, the in-app Dart driver and the native driver APK together on a device. It boots an API 35 x86_64 emulator (`google_apis`, `pixel_6_pro` profile, KVM) on `ubuntu-latest` and calls [`scripts/ci-android-e2e.sh`](../scripts/ci-android-e2e.sh), which works the same on a developer machine:
+
+```sh
+scripts/ci-android-e2e.sh --serial emulator-5554
+```
+
+The script builds the release `tapwing` binary, the driver APK and the sample app profile APK (`-t lib/main_tapwing.dart`, for the device's ABI), installs the app, and then calls `tapwing test` with `--trace`, a JUnit and a JSON report for each of these runs:
+
+| Run | Flows | Must exit with |
+|---|---|---|
+| `positive` | Every top-level flow of `examples/sample_app/.maestro`, in one call | `0` |
+| `night/<flow>` | `f2_dark_mode`, after the script switched the device to night mode | `0` |
+| `negative/<flow>` | Each flow of `.maestro/negative/`, one call per flow | `1` (`2` is a runner or device error and fails the job) |
+
+`f2_dark_mode` has its own run because the app follows the system theme and the flow does not switch it, so it cannot share a run with the flows that assert the light theme. The script passes flow files, not the directory, so a `config.yaml` cannot widen the selection. `ios/` (iOS Simulator) and `web/` (needs a web server on the host) do not run here. A flow that cannot pass on the CI emulator goes into `EXCLUDED_FLOWS` at the top of the script with its reason, and the log and the summary print every entry. The list is empty today.
+
+The script sets what the flows depend on and restores it on exit: the display density (560 dpi, the density the reference screenshots were recorded at) and night mode. It fails before the first flow when the system locale is not English, because `f5_permission_dialog` taps the English labels of the system permission dialog.
+
+Every build, every `tapwing test` call and every workflow step has a time limit. A build or run that exceeds its limit fails the job with `TIMEOUT: <step>`.
+
+The workflow runs on every push to `main`, on pull requests that touch `crates/`, `packages/`, `drivers/android/`, `examples/sample_app/`, the script or the workflow, and on demand (`workflow_dispatch`). It uploads `build/android-e2e/` as the `android-e2e-<run id>-<attempt>` artifact after a passing and after a failing run: per run `trace.html`, `trace.json`, `junit.xml`, `report.json` and failure screenshots, plus `summary.md`, `device.txt` and `logcat.txt`.
+
+**Not required yet.** The job is not in the `CI Gate` needs list. It becomes required after a week of stable runs on `main` ([issue #3](https://github.com/tapwing-dev/tapwing/issues/3)). A required check must report on every pull request and this workflow skips pull requests outside its paths, so requiring it means calling it from `ci.yml` behind a changed-paths job and letting `CI Gate` accept a skipped result for it.
