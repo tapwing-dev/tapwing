@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tapwing Bench login pages</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+<h1>Tapwing Bench login pages</h1>
+<p>Opened by the sample app's Browser login screen. Each link redirects to <code>{{scheme}}://callback</code> after a correct login.</p>
+<ul>
+<li><a href="/plain/login?redirect_uri={{scheme}}://callback&amp;state=manual">plain</a></li>
+<li><a href="/two-step/login?redirect_uri={{scheme}}://callback&amp;state=manual">two-step</a></li>
+<li><a href="/controlled/login?redirect_uri={{scheme}}://callback&amp;state=manual">controlled</a></li>
+</ul>
+</main>
+</body>
+</html>

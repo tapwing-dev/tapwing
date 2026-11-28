@@ -31,8 +31,9 @@
 # Simulator, web/ needs a web server on the host.
 #
 # The script sets what the flows depend on and restores it on exit: display density
-# (TAPWING_E2E_DENSITY, default 560, empty keeps the device's own) and night mode. It
-# checks the system locale and fails when it is not English.
+# (TAPWING_E2E_DENSITY, default 560, empty keeps the device's own), night mode and the
+# system's error dialogs, which it hides (see "System error dialogs" below). It checks
+# the system locale and fails when it is not English.
 #
 # Every build and run has a time limit and fails with "TIMEOUT: <step>". Exit code: 0
 # when every run ended as expected, 1 otherwise, 2 for a usage error.
@@ -105,6 +106,7 @@ child=
 logcat_pid=
 restore_night=
 restore_density=
+restore_error_dialogs=
 timeout_marker="$out/.timeout"
 
 # run_step <seconds> <label> <command...>
@@ -163,6 +165,11 @@ cleanup() {
   if [[ -n "$restore_density" ]]; then
     # shellcheck disable=SC2086 # "reset" or a number, one word either way
     dev_sh wm density $restore_density >/dev/null 2>&1 || true
+  fi
+  if [[ "$restore_error_dialogs" == null ]]; then
+    dev_sh settings delete global hide_error_dialogs >/dev/null 2>&1 || true
+  elif [[ -n "$restore_error_dialogs" ]]; then
+    dev_sh settings put global hide_error_dialogs "$restore_error_dialogs" >/dev/null 2>&1 || true
   fi
   if [[ -n "$logcat_pid" ]]; then kill "$logcat_pid" 2>/dev/null || true; fi
   rm -f "$timeout_marker"
@@ -331,6 +338,27 @@ if [[ -n "$DENSITY" && "$current_density" != "$DENSITY" ]]; then
   current_density=$DENSITY
 fi
 
+# System error dialogs. On a software-rendered emulator another app can stop responding
+# in the middle of a run: the first CI run of this script on a pull request lost 9 of 12
+# flows to a "Pixel Launcher isn't responding" dialog that covered the sample app. With
+# the dialogs hidden Android kills a process that stops responding instead of asking, so
+# nothing covers the screen, and an ANR of the sample app itself still fails its flow,
+# as a crash. Every ANR of the run is listed in the summary.
+error_dialogs_now=$(dev_sh settings get global hide_error_dialogs | tr -d '\r')
+if [[ "$error_dialogs_now" != 1 ]]; then
+  log "hiding system error dialogs for this run (restored on exit)"
+  restore_error_dialogs=${error_dialogs_now:-null}
+  dev_sh settings put global hide_error_dialogs 1 >/dev/null
+fi
+# The setting does not close a dialog that is already open.
+dev_sh am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null
+windows=$(dev_sh dumpsys window | tr -d '\r')
+focus=$(sed -n 's/^ *mCurrentFocus=//p' <<<"$windows")
+case "$focus" in
+  *"Application Not Responding"*|*"Application Error"*)
+    die "a system error dialog is still open on $serial and would cover the app: $focus" ;;
+esac
+
 {
   echo "serial: $serial"
   echo "api: $(dev_sh getprop ro.build.version.sdk | tr -d '\r')"
@@ -419,6 +447,10 @@ done
   echo
   echo "Device: $(tr '\n' ';' <"$out/device.txt" | sed 's/;$//; s/;/, /g')"
   echo "Runs took $((SECONDS - run_started))s."
+  echo
+  # Hidden error dialogs must not hide the ANR itself: name every process that stopped responding.
+  anrs=$(sed -n 's/.* ActivityManager: ANR in \([^ ]*\).*/\1/p' "$out/logcat.txt" | sort | uniq -c | sed 's/^ *\([0-9]*\) \(.*\)/\2 (\1x)/' | paste -sd, - | sed 's/,/, /g')
+  echo "ANRs during the run: ${anrs:-none}"
 } >"$out/summary.md"
 echo
 cat "$out/summary.md"

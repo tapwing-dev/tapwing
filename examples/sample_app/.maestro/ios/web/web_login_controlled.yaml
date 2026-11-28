@@ -1,0 +1,37 @@
+# Browser login through an ASWebAuthenticationSession, `controlled` page:
+# inputs mirrored into JavaScript state on `input` events,
+# submit disabled until that state is valid.
+# Needs bench/web-login/server.py on the Mac's 127.0.0.1:8765, which the
+# simulator shares; bench/web-login/run_bench.sh starts it.
+# Kept out of the top level on purpose: a workspace run of `.maestro/` has no
+# server, while `tapwing check` still validates sub-folders.
+#   tapwing test .maestro/ios/web/web_login_controlled.yaml
+appId: dev.tapwing.sampleApp
+name: Web login (controlled)
+tags:
+  - web-login
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "browser_login_button"
+- tapOn:
+    id: "browser_login_controlled"
+# SpringBoard asks whether the app may use the site to sign in. The labels are
+# localised, "Continue" is the English one.
+- tapOn: "Continue"
+# The Safari view (com.apple.SafariViewService) is on top from here to the submit button.
+- assertVisible: "Tapwing Bench sign-in"
+- tapOn: "Email address"
+- inputText: "qa.pilot@tapwing.dev"
+- tapOn: "Password"
+- inputText: "Tw!ng-Pass2026"
+# The page counts the events its inputs received. No `input` event means the
+# JavaScript state never saw the text and the button stays disabled.
+- assertVisible: "Events: keydown [0-9]+, input [1-9][0-9]*, change [0-9]+"
+- assertVisible:
+    text: "Sign in"
+    enabled: true
+- tapOn: "Sign in"
+# The page redirects to tapwingsample://callback and the app is back on top.
+- assertVisible: "Signed in as qa.pilot@tapwing.dev"

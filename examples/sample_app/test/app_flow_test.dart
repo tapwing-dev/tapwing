@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,6 +62,7 @@ void main() {
       expect(find.widgetWithText(TextField, 'Password'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Log in'), findsOneWidget);
       expect(find.widgetWithText(TextButton, 'F2 Playground'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Browser login'), findsOneWidget);
       expect(find.text('Email is required'), findsNothing);
     });
 
@@ -465,6 +468,139 @@ void main() {
       await openAppState(tester);
       expect(find.text('Preference: none'), findsOneWidget);
       expect(find.text('File: none'), findsOneWidget);
+    });
+  });
+
+  group('Browser login', () {
+    late BrowserAuthenticate original;
+    final List<Uri> opened = <Uri>[];
+
+    setUp(() {
+      original = browserAuthenticate;
+      opened.clear();
+    });
+    tearDown(() => browserAuthenticate = original);
+
+    /// Stands in for the browser: records the URL and answers with [reply].
+    void fakeBrowser(FutureOr<String> Function(Uri url) reply) {
+      browserAuthenticate = (Uri url, String callbackScheme) async {
+        expect(callbackScheme, webLoginCallbackScheme);
+        opened.add(url);
+        return reply(url);
+      };
+    }
+
+    Future<void> openBrowserLogin(WidgetTester tester) async {
+      await _pumpApp(tester);
+      await tester.tap(find.text('Browser login'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('opens from the login screen with one button per page variant', (
+      WidgetTester tester,
+    ) async {
+      await openBrowserLogin(tester);
+
+      expect(find.text('Not signed in'), findsOneWidget);
+      for (final String variant in <String>['plain', 'two-step', 'controlled']) {
+        expect(
+          find.widgetWithText(FilledButton, 'Sign in ($variant)'),
+          findsOneWidget,
+          reason: variant,
+        );
+      }
+    });
+
+    for (final String variant in <String>['plain', 'two-step', 'controlled']) {
+      testWidgets('the $variant button opens its page and shows who signed in', (
+        WidgetTester tester,
+      ) async {
+        fakeBrowser(
+          (Uri url) => Uri(
+            scheme: webLoginCallbackScheme,
+            host: 'callback',
+            queryParameters: <String, String>{
+              'email': 'qa.pilot@tapwing.dev',
+              'state': url.queryParameters['state']!,
+            },
+          ).toString(),
+        );
+        await openBrowserLogin(tester);
+        await tester.tap(find.text('Sign in ($variant)'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Signed in as qa.pilot@tapwing.dev'), findsOneWidget);
+        final Uri url = opened.single;
+        expect('${url.scheme}://${url.authority}', webLoginBaseUrl);
+        expect(url.path, '/$variant/login');
+        expect(
+          url.queryParameters['redirect_uri'],
+          '$webLoginCallbackScheme://callback',
+        );
+        expect(url.queryParameters['state'], isNotEmpty);
+      });
+    }
+
+    testWidgets('a callback with another state is not a sign-in', (
+      WidgetTester tester,
+    ) async {
+      fakeBrowser(
+        (Uri url) =>
+            '$webLoginCallbackScheme://callback?email=qa.pilot%40tapwing.dev&state=stale',
+      );
+      await openBrowserLogin(tester);
+      await tester.tap(find.text('Sign in (plain)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sign-in failed: state mismatch'), findsOneWidget);
+      expect(find.textContaining('Signed in as'), findsNothing);
+    });
+
+    testWidgets('closing the browser reports a cancelled sign-in', (
+      WidgetTester tester,
+    ) async {
+      fakeBrowser(
+        (Uri url) => throw PlatformException(
+          code: 'CANCELED',
+          message: 'User canceled login',
+        ),
+      );
+      await openBrowserLogin(tester);
+      await tester.tap(find.text('Sign in (two-step)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sign-in cancelled'), findsOneWidget);
+    });
+
+    testWidgets('the buttons are disabled while the browser is open', (
+      WidgetTester tester,
+    ) async {
+      final Completer<String> browser = Completer<String>();
+      fakeBrowser((Uri url) => browser.future);
+      await openBrowserLogin(tester);
+      await tester.tap(find.text('Sign in (controlled)'));
+      await tester.pump();
+
+      expect(find.text('Signing in'), findsOneWidget);
+      for (final FilledButton button in tester.widgetList<FilledButton>(
+        find.byType(FilledButton),
+      )) {
+        expect(button.onPressed, isNull);
+      }
+
+      browser.complete(
+        '$webLoginCallbackScheme://callback?email=a%40b.dev&state=${opened.single.queryParameters['state']}',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Signed in as a@b.dev'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Sign in (plain)'),
+            )
+            .onPressed,
+        isNotNull,
+      );
     });
   });
 }

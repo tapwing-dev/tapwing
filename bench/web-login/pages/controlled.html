@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tapwing Bench sign-in</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+<h1>Tapwing Bench sign-in</h1>
+{{error_block}}
+<!-- The visible inputs have no `name`. What is posted is the JavaScript state,
+     which changes only when an `input` event arrives, like a React controlled
+     input. A value written into the DOM without that event is never submitted
+     and is overwritten on the next render. -->
+<form id="login" method="post" action="/controlled/login" novalidate>
+<input type="hidden" name="redirect_uri" value="{{redirect_uri}}">
+<input type="hidden" name="state" value="{{state}}">
+<input type="hidden" name="email">
+<input type="hidden" name="password">
+<input type="hidden" name="keydown">
+<input type="hidden" name="input">
+<input type="hidden" name="change">
+<label for="email-field">Email address</label>
+<input id="email-field" type="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+<label for="password-field">Password</label>
+<input id="password-field" type="password" autocomplete="current-password">
+<p id="events" class="events">Events: keydown 0, input 0, change 0</p>
+<button id="submit" type="submit" disabled>Sign in</button>
+</form>
+</main>
+<script>
+(function () {
+  'use strict';
+  var form = document.getElementById('login');
+  var fields = {
+    email: document.getElementById('email-field'),
+    password: document.getElementById('password-field')
+  };
+  var state = { email: '', password: '' };
+  var counts = { keydown: 0, input: 0, change: 0 };
+
+  function valid() {
+    return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(state.email) && state.password.length >= 12;
+  }
+
+  function render() {
+    Object.keys(fields).forEach(function (key) {
+      if (fields[key].value !== state[key]) fields[key].value = state[key];
+    });
+    document.getElementById('events').textContent =
+      'Events: keydown ' + counts.keydown + ', input ' + counts.input + ', change ' + counts.change;
+    document.getElementById('submit').disabled = !valid();
+  }
+
+  Object.keys(fields).forEach(function (key) {
+    fields[key].addEventListener('keydown', function () {
+      counts.keydown += 1;
+      render();
+    });
+    fields[key].addEventListener('input', function (event) {
+      counts.input += 1;
+      state[key] = event.target.value;
+      render();
+    });
+    fields[key].addEventListener('change', function () {
+      counts.change += 1;
+      render();
+    });
+  });
+
+  form.addEventListener('submit', function (event) {
+    if (!valid()) {
+      event.preventDefault();
+      return;
+    }
+    form.elements.email.value = state.email;
+    form.elements.password.value = state.password;
+    Object.keys(counts).forEach(function (name) {
+      form.elements[name].value = String(counts[name]);
+    });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

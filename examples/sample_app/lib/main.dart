@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -139,6 +140,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     MaterialPageRoute<void>(builder: (_) => const PlaygroundScreen()),
                   ),
                   child: const Text('F2 Playground'),
+                ),
+              ),
+              Semantics(
+                identifier: 'browser_login_button',
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const BrowserLoginScreen()),
+                  ),
+                  child: const Text('Browser login'),
                 ),
               ),
             ],
@@ -1390,6 +1400,126 @@ class _AppStateScreenState extends State<AppStateScreen> {
             child: FilledButton(
               onPressed: _write,
               child: const Text('Write state'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Base URL of the local login page server (`bench/web-login/server.py`).
+/// Android reaches the host through `adb reverse`, the iOS Simulator shares the
+/// host's loopback. Override with `--dart-define=SAMPLE_WEB_LOGIN_URL=...`.
+const String webLoginBaseUrl = String.fromEnvironment(
+  'SAMPLE_WEB_LOGIN_URL',
+  defaultValue: 'http://127.0.0.1:8765',
+);
+
+/// Custom URL scheme the login page redirects to. Android declares it on
+/// `flutter_web_auth_2`'s `CallbackActivity` in `AndroidManifest.xml`. iOS needs
+/// no declaration, `ASWebAuthenticationSession` intercepts the redirect itself.
+const String webLoginCallbackScheme = 'tapwingsample';
+
+/// Opens [url] in the system browser session and completes with the callback
+/// URL the page redirected to.
+typedef BrowserAuthenticate = Future<String> Function(Uri url, String callbackScheme);
+
+/// A Chrome Custom Tab on Android and an `ASWebAuthenticationSession` on iOS.
+/// Widget tests replace [browserAuthenticate].
+BrowserAuthenticate browserAuthenticate = _pluginBrowserAuthenticate;
+
+Future<String> _pluginBrowserAuthenticate(Uri url, String callbackScheme) =>
+    FlutterWebAuth2.authenticate(
+      url: url.toString(),
+      callbackUrlScheme: callbackScheme,
+      // A regular Custom Tab, which is what Auth0 and AppAuth open. The plugin's
+      // default is a Chrome Auth Tab when the browser supports one.
+      options: const FlutterWebAuth2Options(preferAuthTabs: false),
+    );
+
+/// Signs in through a login page in the system browser, one button per page
+/// variant `bench/web-login/server.py` serves. Everything between the tap on a
+/// button and the result text is outside Flutter, so a flow drives it through
+/// the native lane.
+class BrowserLoginScreen extends StatefulWidget {
+  const BrowserLoginScreen({super.key});
+
+  @override
+  State<BrowserLoginScreen> createState() => _BrowserLoginScreenState();
+}
+
+class _BrowserLoginScreenState extends State<BrowserLoginScreen> {
+  String _status = 'Not signed in';
+  bool _busy = false;
+  int _attempt = 0;
+
+  Future<void> _signIn(String variant) async {
+    // Echoed back by the login page, like the OAuth `state` parameter.
+    final String state = 'sample-${DateTime.now().microsecondsSinceEpoch}-${_attempt++}';
+    final Uri url = Uri.parse('$webLoginBaseUrl/$variant/login').replace(
+      queryParameters: <String, String>{
+        'redirect_uri': '$webLoginCallbackScheme://callback',
+        'state': state,
+      },
+    );
+    setState(() {
+      _busy = true;
+      _status = 'Signing in';
+    });
+    String status;
+    try {
+      final Uri callback = Uri.parse(await browserAuthenticate(url, webLoginCallbackScheme));
+      final String email = callback.queryParameters['email'] ?? '';
+      if (callback.queryParameters['state'] != state) {
+        status = 'Sign-in failed: state mismatch';
+      } else if (email.isEmpty) {
+        status = 'Sign-in failed: no email';
+      } else {
+        status = 'Signed in as $email';
+      }
+    } on PlatformException catch (e) {
+      status = e.code == 'CANCELED' ? 'Sign-in cancelled' : 'Sign-in failed: ${e.code}';
+    } on MissingPluginException {
+      status = 'Sign-in failed: unsupported';
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _status = status;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Browser login')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: <Widget>[
+          Semantics(identifier: 'browser_login_status', child: Text(_status)),
+          const SizedBox(height: 16),
+          Semantics(
+            identifier: 'browser_login_plain',
+            child: FilledButton(
+              onPressed: _busy ? null : () => _signIn('plain'),
+              child: const Text('Sign in (plain)'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Semantics(
+            identifier: 'browser_login_two_step',
+            child: FilledButton(
+              onPressed: _busy ? null : () => _signIn('two-step'),
+              child: const Text('Sign in (two-step)'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Semantics(
+            identifier: 'browser_login_controlled',
+            child: FilledButton(
+              onPressed: _busy ? null : () => _signIn('controlled'),
+              child: const Text('Sign in (controlled)'),
             ),
           ),
         ],
