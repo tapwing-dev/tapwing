@@ -5,7 +5,9 @@ name: CI
 # `CI Gate` is the single required status check enforced on `main`.
 #
 # Nothing here boots an emulator or simulator, so runs stay deterministic and fast.
-# Device runs (`tapwing test` against a real app) are run manually, not in PR CI.
+# The Android emulator run of the sample app's flows is a separate workflow,
+# `ci-android-e2e.yml`. It is not in the `CI Gate` needs list until it has been stable
+# for a week (issue #3). iOS Simulator runs are still manual.
 
 on:
   push:
