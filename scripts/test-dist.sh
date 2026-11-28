@@ -31,6 +31,7 @@ bash -n "$ROOT/scripts/dist.sh" \
         "$ROOT/scripts/build-ios-driver.sh" \
         "$ROOT/scripts/generate-homebrew-formula.sh" \
         "$ROOT/scripts/release.sh" \
+        "$ROOT/scripts/ci-android-e2e.sh" \
         "$ROOT/scripts/test-dist.sh"
 sh -n "$ROOT/scripts/install.sh"
 pass "shell syntax checks (bash -n, sh -n)"

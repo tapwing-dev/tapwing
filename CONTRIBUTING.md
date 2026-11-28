@@ -12,7 +12,7 @@ Everything you need to build Tapwing from source and run its tests. For what Tap
 | `compat/` | Parser compatibility suite: 463 Maestro fixtures and 81 custom probes with their reference Maestro IR. See [compat/README.md](compat/README.md) |
 | `examples/sample_app` | A sample Flutter app (Android and iOS) with Maestro flows in `.maestro/` (iOS variants in `.maestro/ios/`) |
 | `bench/` | Benchmarks against Maestro, differential and hierarchy scripts, and recorded results |
-| `scripts/` | `dist.sh` (release tarball), `install.sh` (installer), `release.sh` (two-step release automation), `build-android-driver.sh`, `build-ios-driver.sh`, `test-dist.sh` (tests of release and dist scripts) |
+| `scripts/` | `dist.sh` (release tarball), `install.sh` (installer), `release.sh` (two-step release automation), `build-android-driver.sh`, `build-ios-driver.sh`, `test-dist.sh` (tests of release and dist scripts), `ci-android-e2e.sh` (the sample app's Android flows on one adb device, used by CI and locally) |
 | `docs/` | User guides linked from the README |
 | `.agents/skills/` | Workspace agent skills: Rust modularity, systems reliability, Dart driver invariants, Maestro parity, documentation curation |
 
@@ -62,6 +62,9 @@ scripts/build-ios-driver.sh            # macOS with Xcode: Swift unit tests + si
 
 # Release and installer scripts
 scripts/test-dist.sh
+
+# End to end on an Android emulator or device: builds the CLI, the driver APK and the sample app, runs the flows
+scripts/ci-android-e2e.sh --serial emulator-5554
 ```
 
 | Suite | Where | What it guards |
@@ -76,7 +79,7 @@ scripts/test-dist.sh
 
 Useful single Rust suites (inside `crates/tapwing/tests/integration`): `cargo test --test integration cli_e2e::`, `--test integration compat::` (parser parity with Maestro), `--test integration workspace::` (workspace planner parity), `--test integration f6_sharding_and_reports::`, `--test integration init::` (also keeps the CLI and driver versions in lockstep).
 
-Tests never need a device: anything that talks to an emulator, simulator or a real app (`tapwing test` against the sample app, the benchmarks) is run by hand, not in PR CI. Keep new tests deterministic: bind loopback servers once and pass the live listener, never sleep to wait for another thread, and prefer a test seam over timing (see `.agents/skills/rust-systems-reliability`).
+The suites above never need a device. The Android emulator run of the sample app's flows (`scripts/ci-android-e2e.sh`) has its own workflow, described under [Continuous integration](#continuous-integration). Everything else that talks to a device (the iOS Simulator flows, the benchmarks) is run by hand, not in PR CI. Keep new tests deterministic: bind loopback servers once and pass the live listener, never sleep to wait for another thread, and prefer a test seam over timing (see `.agents/skills/rust-systems-reliability`).
 
 ## Continuous integration
 
@@ -89,6 +92,8 @@ Tests never need a device: anything that talks to an emulator, simulator or a re
 | `Android driver` (`ubuntu-latest`, `drivers/android`) | [`ci-android-driver.yml`](.github/workflows/ci-android-driver.yml) | `scripts/build-android-driver.sh` (Kotlin unit tests, release APK, SHA-256) |
 | `Release scripts` (`ubuntu-latest`) | [`ci-scripts.yml`](.github/workflows/ci-scripts.yml) | `scripts/test-dist.sh` |
 | `CI Gate` (`ubuntu-latest`) | [`ci.yml`](.github/workflows/ci.yml) | Succeeds only when every job above succeeded; this is the one check `main` requires |
+
+[`ci-android-e2e.yml`](.github/workflows/ci-android-e2e.yml) is a separate workflow, the only one that runs the CLI, the Dart driver and the native driver APK together on a device. It boots an API 35 x86_64 emulator and calls `scripts/ci-android-e2e.sh`: the top-level flows of `examples/sample_app/.maestro` must pass and each flow in `.maestro/negative/` must exit with `1`. It runs on pushes to `main` and on pull requests that touch `crates/`, `packages/`, `drivers/android/`, `examples/sample_app/`, the script or the workflow, and uploads traces, reports and logcat. It is not part of `CI Gate` yet: it becomes required after a week of stable runs ([issue #3](https://github.com/tapwing-dev/tapwing/issues/3)). See [docs/ci.md](docs/ci.md#android-emulator-end-to-end-run) for the flow selection and the time limits.
 
 `scripts/build-ios-driver.sh` (Swift unit tests, iOS Simulator XCUITest runner build, and `.sha256` generation) runs on macOS runners during releases ([`.github/workflows/release.yml`](.github/workflows/release.yml)) and can be verified locally with Xcode.
 
