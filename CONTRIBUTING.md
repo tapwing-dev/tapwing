@@ -97,6 +97,7 @@ Tests never need a device: anything that talks to an emulator, simulator or a re
 ```sh
 bench/run_bench.sh 3 <serial>          # against Maestro, results in bench/results/<serial> or OUT=...
 bench/parse/run_parse_bench.sh         # parser against Maestro, no device required (bench/PARSE_RESULTS.md)
+bench/web-login/run_bench.sh android <serial>   # browser login through the native lane (bench/web-login/README.md)
 ```
 
 When you cite a timing, name the device, the build mode and the baseline (for example `emulator-5554`, profile APK, Maestro).
