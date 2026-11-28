@@ -93,6 +93,13 @@ impl Report {
         Self { verdict: Verdict::unknown(why), source: VerdictSource::Scan, fingerprint: None, learned_misses: None }
     }
 
+    /// Whether the build was shown to contain a driver that dials the host: a
+    /// marker of the dial path was found. Such a build will say hello, so a
+    /// missed handshake is a slow start or a fault, never a missing driver.
+    pub fn proves_dialing(&self) -> bool {
+        self.verdict.presence == Presence::Present && self.verdict.dials
+    }
+
     /// Whether a run may skip the handshake wait on this report, and why.
     pub fn skip_reason(&self) -> Option<SkipReason> {
         match self.verdict.presence {

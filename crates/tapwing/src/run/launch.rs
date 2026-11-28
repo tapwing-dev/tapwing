@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use crate::driver::human_duration;
 use crate::driver_probe::SkipReason;
 use crate::native_lane::{BlackboxDemotion, InputMode, STICKY_BLACKBOX_THRESHOLD};
 
@@ -9,6 +10,38 @@ use super::hybrid::HANDSHAKE_FALLBACK_TIMEOUT;
 
 /// Default handshake accept timeout when native fallback is unavailable or disabled.
 pub(super) const DEFAULT_ACCEPT_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// How long `--input auto` waits in total for the hello of a build the probe
+/// proved to contain a dialing driver, while its process is not known to be dead.
+///
+/// 60 s is the window in which the driver itself dials every 150 ms; after it
+/// the driver slows to one dial per second (`TapwingServer._fastRetryWindow`
+/// in `tapwing_driver`). It is four times [`HANDSHAKE_FALLBACK_TIMEOUT`], which
+/// two of twelve launches missed on a host with a load average near 300 while
+/// the other ten made it, and no longer than the longest startup the host
+/// already waits for (the iOS XCUITest runner, 60 s).
+pub(super) const SLOW_START_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// How long `launchApp` waits for the driver's hello when the native lane could take over.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct HandshakeTiming {
+    /// The wait every such launch gets first.
+    pub base: Duration,
+    /// The whole wait of a build proven to dial, `base` included.
+    pub slow_start: Duration,
+    /// How often the part after `base` checks that the app process is alive.
+    pub liveness_every: Duration,
+}
+
+impl Default for HandshakeTiming {
+    fn default() -> Self {
+        Self {
+            base: HANDSHAKE_FALLBACK_TIMEOUT,
+            slow_start: SLOW_START_HANDSHAKE_TIMEOUT,
+            liveness_every: crate::driver::LIVENESS_PROBE_EVERY,
+        }
+    }
+}
 
 /// What the pre-launch driver probe (see [`crate::driver_probe`]) knows when
 /// the launch is decided.
@@ -22,6 +55,10 @@ pub(super) enum DriverKnowledge {
     Pending,
     /// The probe finished and the build may still dial in: wait as usual.
     Wait,
+    /// The probe finished and found a marker only a dialing driver leaves. The
+    /// wait is the usual one, but running out of it is a slow start or a
+    /// fault, never a build without the driver (see [`decide_handshake_miss`]).
+    Proven,
     /// The probe finished and the wait would be pure loss.
     Skip(SkipReason),
 }
@@ -105,6 +142,165 @@ pub(super) fn decide_launch_plan(input: &LaunchPlanInput<'_>) -> LaunchPlan {
     }
     let accept_timeout = if can_fall_back { HANDSHAKE_FALLBACK_TIMEOUT } else { DEFAULT_ACCEPT_TIMEOUT };
     LaunchPlan::AcceptHandshake { relaunched, expected_pid, reject_pids, can_fall_back, accept_timeout }
+}
+
+/// Pure inputs to [`decide_handshake_miss`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct HandshakeMiss {
+    /// What the probe knows now that the wait has run out.
+    pub driver: DriverKnowledge,
+    /// Whether the launched process is alive: `Some(false)` only when it is certainly gone.
+    pub alive: Option<bool>,
+    /// An earlier launch of this app in this shard already waited
+    /// [`HandshakeTiming::slow_start`] and got no handshake.
+    pub slow_start_spent: bool,
+    /// How long this launch has waited for the hello so far.
+    pub waited: Duration,
+    pub timing: HandshakeTiming,
+}
+
+/// What a launch does once [`HandshakeTiming::base`] has passed without a hello.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum MissDecision {
+    /// The build is not proven to dial: drive it black-box and count the miss, as before the probe.
+    BlackBox,
+    /// The build is proven to dial and may only be slow: wait this much longer.
+    WaitLonger { more: Duration },
+    /// The build is proven to dial and did not: the step fails and says so.
+    Fail(MissFailure),
+}
+
+/// Why a launch of a build proven to dial fails.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum MissFailure {
+    /// The app process is gone: a crash, which the crash diagnosis reports.
+    ProcessDied,
+    /// [`HandshakeTiming::slow_start`] ran out.
+    NeverConnected,
+    /// [`HandshakeTiming::base`] ran out and the longer wait was already spent in this shard.
+    NeverConnectedShortWait,
+}
+
+/// Decides what a missed handshake means. Only a build the probe proved to
+/// dial leaves the old path: it is never driven black-box and never demoted. It
+/// gets the longer wait once per shard until a handshake restores it, so a
+/// setup that cannot connect pays that wait once and the short one afterwards.
+pub(super) fn decide_handshake_miss(miss: &HandshakeMiss) -> MissDecision {
+    if miss.driver != DriverKnowledge::Proven {
+        return MissDecision::BlackBox;
+    }
+    if miss.alive == Some(false) {
+        return MissDecision::Fail(MissFailure::ProcessDied);
+    }
+    if miss.slow_start_spent {
+        return MissDecision::Fail(MissFailure::NeverConnectedShortWait);
+    }
+    match miss.timing.slow_start.checked_sub(miss.waited).filter(|more| !more.is_zero()) {
+        Some(more) => MissDecision::WaitLonger { more },
+        None => MissDecision::Fail(MissFailure::NeverConnected),
+    }
+}
+
+/// What a message about a missed handshake of a build proven to dial names.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ProvenMiss<'a> {
+    pub app_id: &'a str,
+    /// What the probe found, in its own words.
+    pub evidence: &'a str,
+    pub pid: Option<i64>,
+    pub alive: Option<bool>,
+    pub timing: HandshakeTiming,
+}
+
+impl ProvenMiss<'_> {
+    fn process(&self) -> String {
+        match (self.pid, self.alive) {
+            (Some(pid), Some(true)) => format!("the app process {pid} is running"),
+            (Some(pid), Some(false)) => format!("the app process {pid} is gone"),
+            (Some(pid), None) => format!("the app process {pid} could not be checked"),
+            (None, _) => "the app's process id is unknown".to_string(),
+        }
+    }
+}
+
+const TROUBLESHOOTING_POINTER: &str = "See \"App Fails to Connect to tapwing_driver\" in docs/troubleshooting.md";
+
+/// Stderr warning when the longer wait for a slow start begins.
+pub(super) fn format_slow_start_warning(log_prefix: &str, miss: &ProvenMiss<'_>) -> String {
+    let (base, total) = (human_duration(miss.timing.base), human_duration(miss.timing.slow_start));
+    let more = miss.timing.slow_start.saturating_sub(miss.timing.base);
+    format!(
+        "{log_prefix}warning: launchApp {}: no tapwing_driver handshake after {base}, but the installed build \
+         contains the driver ({}) and {}; waiting up to {} more for a slow start ({total} in total), \
+         with no black-box fallback",
+        miss.app_id,
+        miss.evidence,
+        miss.process(),
+        human_duration(more),
+    )
+}
+
+/// The error of a `launchApp` whose build is proven to dial and did not.
+pub(super) fn format_driver_never_connected(miss: &ProvenMiss<'_>, failure: MissFailure) -> String {
+    let (app_id, evidence, process) = (miss.app_id, miss.evidence, miss.process());
+    let (base, total) = (human_duration(miss.timing.base), human_duration(miss.timing.slow_start));
+    let no_blackbox = "The app is not driven black-box, because a build with the driver belongs on the Flutter lane \
+                       (pass --input native to drive it black-box on purpose)";
+    match failure {
+        MissFailure::ProcessDied => {
+            let who = miss.pid.map_or_else(|| "the app process".to_string(), |pid| format!("the app process {pid}"));
+            format!(
+                "launchApp {app_id}: {who} died before tapwing_driver connected \
+                 (the installed build contains the driver: {evidence})"
+            )
+        }
+        MissFailure::NeverConnected => format!(
+            "launchApp {app_id}: the installed build contains tapwing_driver ({evidence}) but the driver never \
+             connected: no handshake within {total}, {process}. {no_blackbox}. {TROUBLESHOOTING_POINTER}"
+        ),
+        MissFailure::NeverConnectedShortWait => format!(
+            "launchApp {app_id}: the installed build contains tapwing_driver ({evidence}) but the driver never \
+             connected: no handshake within {base}, {process}. The longer wait for a slow start ({total}) was not \
+             repeated, because an earlier launchApp of this app in this run already waited that long and got no \
+             handshake (the next handshake restores it). {no_blackbox}. {TROUBLESHOOTING_POINTER}"
+        ),
+    }
+}
+
+/// The launch step's `warning` when the driver connected during the longer wait.
+pub(super) fn slow_start_note(evidence: &str, waited: Duration, timing: HandshakeTiming) -> String {
+    format!(
+        "tapwing_driver connected after {:.1} s, past the usual {}: the installed build contains the driver \
+         ({evidence}), so the launch waited for a slow start and did not drive the app black-box",
+        waited.as_secs_f64(),
+        human_duration(timing.base),
+    )
+}
+
+/// The launch step's `driverProbe` object for a build proven to dial whose
+/// handshake did not come in [`HandshakeTiming::base`]. `failure` is `None`
+/// when the driver connected during the longer wait.
+pub(super) fn driver_present_json(
+    report: &crate::driver_probe::Report,
+    waited: Duration,
+    alive: Option<bool>,
+    failure: Option<MissFailure>,
+) -> serde_json::Value {
+    let source = if report.source == crate::driver_probe::VerdictSource::Cache { "cache" } else { "scan" };
+    let slow_start = if failure == Some(MissFailure::NeverConnectedShortWait) { "notRepeated" } else { "used" };
+    let mut out = serde_json::json!({
+        "verdict": report.verdict.presence.as_str(),
+        "source": source,
+        "evidence": report.verdict.evidence,
+        "handshakeWaitedMs": waited.as_millis() as u64,
+        "slowStartWait": slow_start,
+    });
+    if let Some(failure) = failure {
+        out["connected"] = serde_json::json!(false);
+        // `null` when the liveness check could not tell.
+        out["processAlive"] = serde_json::json!(if failure == MissFailure::ProcessDied { Some(false) } else { alive });
+    }
+    out
 }
 
 /// Formats the loud stderr warning when `launchApp` misses the Flutter
@@ -510,6 +706,26 @@ mod tests {
                 expected: waits.clone(),
             },
             Case {
+                name: "a build proven to dial waits the same time (what a miss means is decided later)",
+                input: LaunchPlanInput { driver: DriverKnowledge::Proven, ..cold_launch },
+                expected: waits.clone(),
+            },
+            Case {
+                name: "--input flutter is the same for a build proven to dial",
+                input: LaunchPlanInput {
+                    lane_mode: InputMode::Flutter,
+                    driver: DriverKnowledge::Proven,
+                    ..cold_launch
+                },
+                expected: LaunchPlan::AcceptHandshake {
+                    relaunched: false,
+                    expected_pid: Some(300),
+                    reject_pids: vec![],
+                    can_fall_back: false,
+                    accept_timeout: DEFAULT_ACCEPT_TIMEOUT,
+                },
+            },
+            Case {
                 name: "no probe waits as before",
                 input: LaunchPlanInput { driver: DriverKnowledge::NotProbed, ..cold_launch },
                 expected: waits,
@@ -566,6 +782,206 @@ mod tests {
         for c in cases {
             assert_eq!(decide_launch_plan(&c.input), c.expected, "case failed: {}", c.name);
         }
+    }
+
+    #[test]
+    fn handshake_timing_defaults_are_the_documented_deadlines() {
+        let t = HandshakeTiming::default();
+        assert_eq!((t.base, t.slow_start), (Duration::from_secs(15), Duration::from_secs(60)));
+        assert_eq!(t.liveness_every, Duration::from_secs(1));
+    }
+
+    #[test]
+    fn decide_handshake_miss_table() {
+        let timing = HandshakeTiming::default();
+        let proven = HandshakeMiss {
+            driver: DriverKnowledge::Proven,
+            alive: Some(true),
+            slow_start_spent: false,
+            waited: Duration::from_secs(15),
+            timing,
+        };
+        struct Case {
+            name: &'static str,
+            input: HandshakeMiss,
+            expected: MissDecision,
+        }
+        let cases = [
+            Case {
+                name: "proven, alive, first miss: wait out the rest of the slow-start deadline",
+                input: proven,
+                expected: MissDecision::WaitLonger { more: Duration::from_secs(45) },
+            },
+            Case {
+                name: "proven, liveness unknown: still bounded by the same deadline",
+                input: HandshakeMiss { alive: None, ..proven },
+                expected: MissDecision::WaitLonger { more: Duration::from_secs(45) },
+            },
+            Case {
+                name: "proven, process gone: fail at once, whatever is left of the wait",
+                input: HandshakeMiss { alive: Some(false), ..proven },
+                expected: MissDecision::Fail(MissFailure::ProcessDied),
+            },
+            Case {
+                name: "proven, process gone, long wait spent: the crash is still the cause",
+                input: HandshakeMiss { alive: Some(false), slow_start_spent: true, ..proven },
+                expected: MissDecision::Fail(MissFailure::ProcessDied),
+            },
+            Case {
+                name: "proven, long wait already spent in this shard: fail after the short wait",
+                input: HandshakeMiss { slow_start_spent: true, ..proven },
+                expected: MissDecision::Fail(MissFailure::NeverConnectedShortWait),
+            },
+            Case {
+                name: "proven, the whole slow-start deadline has passed",
+                input: HandshakeMiss { waited: Duration::from_secs(60), ..proven },
+                expected: MissDecision::Fail(MissFailure::NeverConnected),
+            },
+            Case {
+                name: "proven, waited past the deadline",
+                input: HandshakeMiss { waited: Duration::from_secs(61), ..proven },
+                expected: MissDecision::Fail(MissFailure::NeverConnected),
+            },
+            Case {
+                name: "unknown or driver linked without a dial path: black-box as before",
+                input: HandshakeMiss { driver: DriverKnowledge::Wait, ..proven },
+                expected: MissDecision::BlackBox,
+            },
+            Case {
+                name: "unknown with the long wait spent by an earlier proven launch: still black-box",
+                input: HandshakeMiss {
+                    driver: DriverKnowledge::Wait,
+                    slow_start_spent: true,
+                    alive: Some(false),
+                    ..proven
+                },
+                expected: MissDecision::BlackBox,
+            },
+            Case {
+                name: "probe still reading when the wait ran out: black-box as before",
+                input: HandshakeMiss { driver: DriverKnowledge::Pending, ..proven },
+                expected: MissDecision::BlackBox,
+            },
+            Case {
+                name: "no probe: black-box as before",
+                input: HandshakeMiss { driver: DriverKnowledge::NotProbed, ..proven },
+                expected: MissDecision::BlackBox,
+            },
+            Case {
+                name: "a skip verdict that arrived too late to skip: black-box as before",
+                input: HandshakeMiss {
+                    driver: DriverKnowledge::Skip(SkipReason::NoDriver { cached: false }),
+                    ..proven
+                },
+                expected: MissDecision::BlackBox,
+            },
+        ];
+        for c in cases {
+            assert_eq!(decide_handshake_miss(&c.input), c.expected, "case failed: {}", c.name);
+        }
+    }
+
+    #[test]
+    fn proven_miss_texts_name_the_evidence_the_process_the_deadline_and_the_way_out() {
+        let evidence = "found tapwing_driver_hello_v1 in base.apk: lib/arm64-v8a/libapp.so";
+        let miss = ProvenMiss {
+            app_id: "com.example.app",
+            evidence,
+            pid: Some(4321),
+            alive: Some(true),
+            timing: HandshakeTiming::default(),
+        };
+        let waiting = format_slow_start_warning("[shard 1] ", &miss);
+        assert!(
+            waiting.starts_with("[shard 1] warning: launchApp com.example.app: no tapwing_driver handshake after 15 s")
+        );
+        for part in
+            [evidence, "the app process 4321 is running", "up to 45 s more", "60 s in total", "no black-box fallback"]
+        {
+            assert!(waiting.contains(part), "missing {part:?} in {waiting}");
+        }
+
+        let never = format_driver_never_connected(&miss, MissFailure::NeverConnected);
+        for part in [
+            "the installed build contains tapwing_driver",
+            evidence,
+            "never connected",
+            "no handshake within 60 s",
+            "the app process 4321 is running",
+            "--input native",
+            "docs/troubleshooting.md",
+        ] {
+            assert!(never.contains(part), "missing {part:?} in {never}");
+        }
+        assert!(!never.contains("not repeated"), "{never}");
+
+        let short = format_driver_never_connected(&miss, MissFailure::NeverConnectedShortWait);
+        for part in ["no handshake within 15 s", "(60 s) was not repeated", "already waited that long", evidence] {
+            assert!(short.contains(part), "missing {part:?} in {short}");
+        }
+
+        let unknown = ProvenMiss { alive: None, ..miss };
+        assert!(
+            format_driver_never_connected(&unknown, MissFailure::NeverConnected)
+                .contains("the app process 4321 could not be checked")
+        );
+        let no_pid = ProvenMiss { pid: None, alive: None, ..miss };
+        assert!(
+            format_driver_never_connected(&no_pid, MissFailure::NeverConnected)
+                .contains("the app's process id is unknown")
+        );
+
+        let died = format_driver_never_connected(&ProvenMiss { alive: Some(false), ..miss }, MissFailure::ProcessDied);
+        assert!(died.contains("the app process 4321 died before tapwing_driver connected"), "{died}");
+        assert!(died.contains(evidence) && !died.contains("troubleshooting"), "{died}");
+
+        let note = slow_start_note(evidence, Duration::from_millis(23_400), HandshakeTiming::default());
+        assert!(note.starts_with("tapwing_driver connected after 23.4 s, past the usual 15 s"), "{note}");
+        assert!(note.contains(evidence), "{note}");
+    }
+
+    #[test]
+    fn driver_present_json_says_what_the_wait_was_and_how_it_ended() {
+        use crate::driver_probe::{Presence, Report, Verdict, VerdictSource};
+        let report = |source| Report {
+            verdict: Verdict { presence: Presence::Present, dials: true, evidence: "e".into() },
+            source,
+            fingerprint: Some("f".into()),
+            learned_misses: None,
+        };
+        let late = driver_present_json(&report(VerdictSource::Scan), Duration::from_millis(23_400), Some(true), None);
+        assert_eq!(
+            late,
+            serde_json::json!({
+                "verdict": "present", "source": "scan", "evidence": "e",
+                "handshakeWaitedMs": 23_400, "slowStartWait": "used",
+            })
+        );
+        let never = driver_present_json(
+            &report(VerdictSource::Cache),
+            Duration::from_secs(60),
+            Some(true),
+            Some(MissFailure::NeverConnected),
+        );
+        assert_eq!(
+            (never["source"].as_str(), never["slowStartWait"].as_str(), &never["connected"], &never["processAlive"]),
+            (Some("cache"), Some("used"), &serde_json::json!(false), &serde_json::json!(true))
+        );
+        let short = driver_present_json(
+            &report(VerdictSource::Scan),
+            Duration::from_secs(15),
+            None,
+            Some(MissFailure::NeverConnectedShortWait),
+        );
+        assert_eq!(short["slowStartWait"], "notRepeated");
+        assert!(short["processAlive"].is_null() && short.get("processAlive").is_some(), "{short}");
+        let died = driver_present_json(
+            &report(VerdictSource::Scan),
+            Duration::from_secs(15),
+            None,
+            Some(MissFailure::ProcessDied),
+        );
+        assert_eq!(died["processAlive"], false);
     }
 
     #[test]

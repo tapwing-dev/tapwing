@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tapwing_driver/src/idle/animation_scanner.dart';
@@ -772,6 +773,122 @@ void main() {
     );
   });
 
+  group('busySources', () {
+    testWidgets('is empty on a settled screen', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text('Static'),
+        ),
+      );
+      expect(createDetector().busySources(), isEmpty);
+    });
+
+    testWidgets('lists pending channels oldest first with the age of their '
+        'oldest call, and sums up channels past the cap', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text('Static'),
+        ),
+      );
+      Duration now = Duration.zero;
+      final ChannelTracker tracker = ChannelTracker(
+        safetyTimeout: Duration.zero,
+        clock: () => now,
+      );
+      final IdleDetector detector = createDetector(channelTracker: tracker);
+
+      tracker.track('dev.tapwing/permissions', Completer<ByteData?>().future);
+      now = const Duration(milliseconds: 1200);
+      tracker.track('dev.tapwing/share', Completer<ByteData?>().future);
+      tracker.track('dev.tapwing/permissions', Completer<ByteData?>().future);
+      now = const Duration(milliseconds: 3000);
+
+      expect(detector.busySources(), <Map<String, Object?>>[
+        <String, Object?>{
+          'source': 'channel',
+          'channel': 'dev.tapwing/permissions',
+          'pendingMs': 3000,
+          'calls': 2,
+        },
+        <String, Object?>{
+          'source': 'channel',
+          'channel': 'dev.tapwing/share',
+          'pendingMs': 1800,
+        },
+      ]);
+
+      for (int i = 0; i < IdleDetector.maxBusyEntries; i++) {
+        tracker.track('dev.tapwing/extra$i', Completer<ByteData?>().future);
+      }
+      final List<Map<String, Object?>> capped = detector.busySources();
+      expect(capped, hasLength(IdleDetector.maxBusyEntries + 1));
+      expect(capped.last, <String, Object?>{'source': 'channel', 'more': 2});
+      tracker.reset();
+    });
+
+    testWidgets('names a blocking animation, and frames only when nothing '
+        'else explains the wait', (WidgetTester tester) async {
+      final AnimationController big = AnimationController(
+        vsync: tester,
+        duration: const Duration(seconds: 2),
+      )..forward();
+      try {
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: FadeTransition(
+              opacity: big,
+              child: const SizedBox.expand(
+                child: ColoredBox(color: Color(0xFF4CAF50)),
+              ),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        final List<Map<String, Object?>> animating = createDetector()
+            .busySources();
+        expect(animating, hasLength(1));
+        expect(animating.single['source'], 'animation');
+        expect(animating.single['widget'], 'FadeTransition');
+
+        // A ticker that paints nothing significant: frames keep coming, no
+        // animation blocks.
+        big.stop();
+        await tester.pumpWidget(
+          const Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text('Ticking'),
+          ),
+        );
+        final Ticker ticker = tester.createTicker((_) {})..start();
+        await tester.pump(const Duration(milliseconds: 16));
+        final ChannelTracker tracker = ChannelTracker(
+          safetyTimeout: Duration.zero,
+        );
+        final IdleDetector detector = createDetector(channelTracker: tracker);
+        expect(detector.busySources(), <Map<String, Object?>>[
+          <String, Object?>{'source': 'frames', 'transientCallbacks': 1},
+        ]);
+
+        // Next to a pending channel call the frames are not what holds the
+        // settle, so only the channel is named.
+        tracker.track('dev.tapwing/permissions', Completer<ByteData?>().future);
+        expect(
+          detector.busySources().map((Map<String, Object?> e) => e['source']),
+          <String>['channel'],
+        );
+        tracker.reset();
+        ticker.dispose();
+      } finally {
+        big.dispose();
+      }
+    });
+  });
+
   group('ChannelTracker', () {
     test(
       'ignores flutter/* channels and releases on error or safety timeout',
@@ -810,6 +927,54 @@ void main() {
         expect(tracker.isIdle, isTrue);
       },
     );
+
+    test('hasPendingSince counts only tracked calls that started after the '
+        'mark and still await their reply', () async {
+      final ChannelTracker tracker = ChannelTracker(
+        safetyTimeout: const Duration(milliseconds: 40),
+      );
+      final Completer<ByteData?> before = Completer<ByteData?>();
+      tracker.track('dev.tapwing/poll', before.future);
+      final int mark = tracker.started;
+      expect(tracker.hasPendingSince(mark), isFalse);
+
+      // System channels are not tracked, so they never count.
+      tracker.track('flutter/platform', Completer<ByteData?>().future);
+      expect(tracker.started, mark);
+      expect(tracker.hasPendingSince(mark), isFalse);
+
+      final Completer<ByteData?> after = Completer<ByteData?>();
+      tracker.track('dev.tapwing/permissions', after.future);
+      expect(tracker.hasPendingSince(mark), isTrue);
+
+      // The older call getting its reply changes nothing.
+      before.complete(null);
+      await Future<void>.delayed(Duration.zero);
+      expect(tracker.hasPendingSince(mark), isTrue);
+
+      after.complete(null);
+      await Future<void>.delayed(Duration.zero);
+      expect(tracker.hasPendingSince(mark), isFalse);
+
+      // A call released by the safety cap no longer counts either.
+      final int second = tracker.started;
+      tracker.track('dev.tapwing/hanging', Completer<ByteData?>().future);
+      expect(tracker.hasPendingSince(second), isTrue);
+      await tracker.waitForIdle(const Duration(milliseconds: 200));
+      expect(tracker.hasPendingSince(second), isFalse);
+
+      // A reply that arrives after reset() does not release a newer call.
+      final Completer<ByteData?> stale = Completer<ByteData?>();
+      tracker.track('dev.tapwing/stale', stale.future);
+      tracker.reset();
+      final int third = tracker.started;
+      tracker.track('dev.tapwing/fresh', Completer<ByteData?>().future);
+      stale.complete(null);
+      await Future<void>.delayed(Duration.zero);
+      expect(tracker.pending, 1);
+      expect(tracker.hasPendingSince(third), isTrue);
+      tracker.reset();
+    });
   });
 }
 

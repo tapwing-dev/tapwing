@@ -287,3 +287,102 @@ appId: dev.tapwing.sample_app
 
     let _ = std::fs::remove_dir_all(&out);
 }
+
+/// What `DeviceFlutterBackend` hands out for a `launchApp` of a build that
+/// contains the driver and never got its handshake.
+fn never_connected_details(process_alive: bool) -> Value {
+    serde_json::json!({
+        "pid": 4321,
+        "driverProbe": {
+            "verdict": "present",
+            "source": "scan",
+            "evidence": "found tapwing_driver_hello_v1 in base.apk: lib/arm64-v8a/libapp.so",
+            "handshakeWaitedMs": 60_000,
+            "slowStartWait": "used",
+            "connected": false,
+            "processAlive": process_alive,
+        },
+    })
+}
+
+#[test]
+fn a_launch_whose_driver_never_connected_carries_the_probe_in_every_report() {
+    const MESSAGE: &str = "launchApp dev.tapwing.sample_app: the installed build contains tapwing_driver \
+                           (found tapwing_driver_hello_v1 in base.apk: lib/arm64-v8a/libapp.so) but the driver never \
+                           connected: no handshake within 60 s, the app process 4321 is running";
+    let mut driver = make_driver();
+    driver.launch_error = Some(Box::new(|| anyhow::anyhow!(MESSAGE)));
+    driver.failed_step_details = Some(never_connected_details(true));
+    let out = temp_dir("driver_never_connected");
+    let flow = Loader::new()
+        .parse(Path::new("login.yaml"), "appId: dev.tapwing.sample_app\n---\n- launchApp\n- tapOn: Submit\n")
+        .unwrap();
+    let shard_plan =
+        ShardPlan { shard_index: None, sequence: Vec::new(), continue_on_failure: true, flows: vec![flow] };
+    let opts = OrchestraOpts {
+        lookup_timeout_ms: 0,
+        optional_lookup_timeout_ms: 0,
+        test_output_dir: Some(out.to_path_buf()),
+        trace: Some(tapwing::trace::TraceOpts::default()),
+        ..Default::default()
+    };
+    let suite = execute_shard_on_fake_driver(&mut driver, &shard_plan, &opts, Some("fake-1"));
+    assert!(!suite.passed);
+
+    // run.json: the failed step has the probe where a passed launch has its result.
+    let flow = &suite.flows[0];
+    let raw = &flow.raw_json;
+    assert_eq!(raw["steps"].as_array().map(Vec::len), Some(1), "the flow stops at the launch: {raw}");
+    let step = &raw["steps"][0];
+    assert_eq!((step["command"].as_str(), step["status"].as_str()), (Some("launchApp"), Some("failed")), "{step}");
+    assert_eq!(step["error"], MESSAGE);
+    assert_eq!(step["driver"], never_connected_details(true));
+    assert!(raw.get("blackbox").is_none() && !flow.blackbox, "the flow was not driven black-box: {raw}");
+    assert_eq!(flow.failure_message.as_deref(), Some(MESSAGE));
+    assert!(driver.failed_step_details.is_none(), "taken once");
+
+    // The trace carries the same step.
+    let single =
+        tapwing::trace::write_shard_trace(&suite, &out.join("trace"), &tapwing::trace::TraceOpts::default()).unwrap();
+    let doc: Value = serde_json::from_str(&std::fs::read_to_string(&single.json).unwrap()).unwrap();
+    let traced = &doc["flows"][0];
+    assert_eq!(traced["steps"][0]["driver"]["driverProbe"]["verdict"], "present", "{traced}");
+    assert_eq!(traced["error"], MESSAGE);
+    assert!(traced.get("blackbox").is_none(), "{traced}");
+
+    let summary = TestExecutionSummary {
+        passed: false,
+        suite_name: Some("Suite".into()),
+        input_mode: "auto".into(),
+        total_ms: 60_000.0,
+        utc_offset_secs: 0,
+        interrupted: None,
+        suites: vec![suite],
+    };
+    let html = report::html::render_html(&summary, true);
+    assert!(html.contains("but the driver never connected: no handshake within 60 s"), "{html}");
+    assert!(!html.contains("blackbox"), "{html}");
+    let xml = report::junit::render_junit(&summary).unwrap();
+    assert!(xml.contains("but the driver never connected: no handshake within 60 s"), "{xml}");
+    assert!(!xml.contains("Black-box:"), "{xml}");
+}
+
+#[test]
+fn a_launch_whose_app_died_before_the_driver_connected_is_a_crash_with_the_probe() {
+    use tapwing::backend::TransportError;
+    let mut driver = make_driver();
+    driver.launch_error = Some(Box::new(|| {
+        TransportError("launchApp a: the app process 4321 died before tapwing_driver connected".into()).into()
+    }));
+    driver.failed_step_details = Some(never_connected_details(false));
+    driver.crash = Some(tapwing::app_health::crash_issue("App crashed", Some("AndroidRuntime: java.lang.Error: boom")));
+    let res = run_flow(&mut driver, "crash.yaml", "appId: a\n---\n- launchApp\n", None);
+    assert!(!res.success);
+    let err = res.error.unwrap();
+    assert!(err.is::<TransportError>());
+    assert_eq!(err.to_string(), "App crashed during `launchApp`: AndroidRuntime: java.lang.Error: boom");
+    let step = &res.steps[0];
+    assert_eq!(step["status"], "failed");
+    assert_eq!(step["driver"]["driverProbe"]["processAlive"], false, "{step}");
+    assert_eq!(step["appIssues"][0]["kind"], "appCrash", "{step}");
+}

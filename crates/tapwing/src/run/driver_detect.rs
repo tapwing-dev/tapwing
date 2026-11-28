@@ -15,11 +15,15 @@ use serde_json::Value;
 
 use super::DeviceFlutterBackend;
 use super::launch::{
-    DriverKnowledge, driver_probe_json, driver_skip_note, driver_skip_report_reason, format_driver_skip_warning,
+    DriverKnowledge, HandshakeMiss, HandshakeTiming, MissDecision, MissFailure, ProvenMiss, decide_handshake_miss,
+    driver_present_json, driver_probe_json, driver_skip_note, driver_skip_report_reason, format_driver_never_connected,
+    format_driver_skip_warning, format_slow_start_warning, slow_start_note,
 };
+use crate::backend::TransportError;
 use crate::device::Device;
 use crate::device::LaunchMetrics;
 use crate::device::adb_client::AdbClient;
+use crate::driver::{AcceptOutcome, SlowAccept};
 use crate::driver_probe::cache::{DriverCache, InstallKey};
 use crate::driver_probe::{self, Presence, Report, SkipReason};
 use crate::ios_native_lane::IosNativeLaneHandle;
@@ -40,6 +44,15 @@ struct Outcome {
     /// An iOS native runner the probe started the moment it proved the app has
     /// no driver, so the runner warms up while the app launches.
     runner: Mutex<Option<IosNativeLaneHandle>>,
+}
+
+/// A hello that came during the longer wait a build proven to dial gets.
+pub(super) struct LateHandshake {
+    pub outcome: AcceptOutcome,
+    /// The launch step's `driverProbe` object.
+    pub probe: Value,
+    /// The launch step's `warning`.
+    pub note: String,
 }
 
 /// A probe running for one `launchApp`. Dropping it cancels what is left of it.
@@ -113,7 +126,11 @@ impl LaunchProbe {
     pub(super) fn knowledge(&self) -> DriverKnowledge {
         match self.report() {
             None => DriverKnowledge::Pending,
-            Some(report) => report.skip_reason().map_or(DriverKnowledge::Wait, DriverKnowledge::Skip),
+            Some(report) => match report.skip_reason() {
+                Some(reason) => DriverKnowledge::Skip(reason),
+                None if report.proves_dialing() => DriverKnowledge::Proven,
+                None => DriverKnowledge::Wait,
+            },
         }
     }
 
@@ -214,9 +231,7 @@ impl DeviceFlutterBackend<'_> {
     pub(super) fn learn_missed_handshake(&mut self, app_id: &str, pid: Option<i64>, probe: Option<&LaunchProbe>) {
         let Some(probe) = probe else { return };
         let Some(report) = probe.report() else { return };
-        if report.verdict.presence == Presence::Absent
-            || (report.verdict.presence == Presence::Present && report.verdict.dials)
-        {
+        if report.verdict.presence == Presence::Absent || report.proves_dialing() {
             return;
         }
         let alive = pid.and_then(|pid| self.drv.process_alive(pid)) == Some(true);
@@ -229,6 +244,120 @@ impl DeviceFlutterBackend<'_> {
         }
     }
 
+    /// How long this launch waits for the hello.
+    pub(super) fn handshake_timing(&self) -> HandshakeTiming {
+        #[cfg(test)]
+        if let Some(timing) = self.timing_override {
+            return timing;
+        }
+        HandshakeTiming::default()
+    }
+
+    /// The wait for the handshake ran out with the native lane ready to take
+    /// over. `Ok(None)` for every build but one the probe proved to dial: the
+    /// caller then drives the app black-box and counts the miss, as before.
+    ///
+    /// A build proven to dial is never driven black-box and never demoted, so
+    /// every later `launchApp` tries the driver again. While its process is not
+    /// known to be dead it gets the rest of [`HandshakeTiming::slow_start`],
+    /// with a liveness check every [`HandshakeTiming::liveness_every`], and a
+    /// hello in that time continues the launch on the Flutter lane. When the
+    /// time runs out the step fails and names the evidence, the process and
+    /// the deadline. A dead process fails the step at once as a transport
+    /// error, which is what starts the crash diagnosis.
+    ///
+    /// The longer wait is spent once per shard and app: after it ran out, later
+    /// launches fail after [`HandshakeTiming::base`] and say why, until a
+    /// handshake restores it. So a setup that cannot connect (a dead `adb
+    /// reverse`) pays the long wait once.
+    pub(super) fn wait_for_proven_driver(
+        &mut self,
+        app_id: &str,
+        launch: &LaunchMetrics,
+        probe: Option<&LaunchProbe>,
+        waiting_since: Instant,
+        expected_pid: Option<i64>,
+        reject_pids: &[i64],
+    ) -> Result<Option<LateHandshake>> {
+        let driver = probe.map_or(DriverKnowledge::NotProbed, LaunchProbe::knowledge);
+        if driver != DriverKnowledge::Proven {
+            return Ok(None);
+        }
+        let Some(report) = probe.and_then(LaunchProbe::report).cloned() else { return Ok(None) };
+        let evidence = report.verdict.evidence.as_str();
+        let timing = self.handshake_timing();
+        let (pid, mut alive) = self.launched_process(app_id, launch);
+        let decision = decide_handshake_miss(&HandshakeMiss {
+            driver,
+            alive,
+            slow_start_spent: self.drv.slow_start_spent(app_id),
+            waited: waiting_since.elapsed(),
+            timing,
+        });
+        let failure = match decision {
+            MissDecision::BlackBox => return Ok(None),
+            MissDecision::Fail(failure) => failure,
+            MissDecision::WaitLonger { more } => {
+                let miss = ProvenMiss { app_id, evidence, pid, alive, timing };
+                eprintln!("{}", format_slow_start_warning(&self.opts.log_prefix, &miss));
+                // Counted from here on, so a slow start that ends in a failure is reported as well.
+                self.lanes.cold_start_retries += 1;
+                match self.drv.accept_while_alive(more, expected_pid, reject_pids, pid, timing.liveness_every)? {
+                    SlowAccept::Connected(outcome) => {
+                        let waited = waiting_since.elapsed();
+                        return Ok(Some(LateHandshake {
+                            outcome,
+                            probe: driver_present_json(&report, waited, alive, None),
+                            note: slow_start_note(evidence, waited, timing),
+                        }));
+                    }
+                    SlowAccept::ProcessDied => MissFailure::ProcessDied,
+                    SlowAccept::TimedOut => {
+                        // The message says what the process does now, not 45 s ago.
+                        alive = pid.and_then(|pid| self.drv.process_alive(pid));
+                        if alive == Some(false) {
+                            MissFailure::ProcessDied
+                        } else {
+                            self.drv.spend_slow_start(app_id);
+                            MissFailure::NeverConnected
+                        }
+                    }
+                }
+            }
+        };
+        if failure == MissFailure::ProcessDied {
+            alive = Some(false);
+        }
+        self.drv.disconnect();
+        let message = format_driver_never_connected(&ProvenMiss { app_id, evidence, pid, alive, timing }, failure);
+        self.failed_step_details = Some(serde_json::json!({
+            "pid": pid,
+            "driverProbe": driver_present_json(&report, waiting_since.elapsed(), alive, Some(failure)),
+        }));
+        Err(match failure {
+            MissFailure::ProcessDied => TransportError(message).into(),
+            MissFailure::NeverConnected | MissFailure::NeverConnectedShortWait => anyhow::anyhow!(message),
+        })
+    }
+
+    /// The launched process and whether it is alive (`Some(false)` only when
+    /// it is certainly gone), asked once the usual wait has run out. The launch
+    /// itself gives up on the pid after 1.5 s on Android, which a slow start
+    /// exceeds, so it is looked up again here.
+    fn launched_process(&mut self, app_id: &str, launch: &LaunchMetrics) -> (Option<i64>, Option<bool>) {
+        let pid = match (launch.pid, &*self.dev) {
+            (Some(pid), _) => Some(pid),
+            (None, Device::Android(android)) => match android.pid_of(app_id) {
+                Ok(Some(pid)) => Some(pid),
+                // The launch succeeded and no process of the app is left.
+                Ok(None) => return (None, Some(false)),
+                Err(_) => None,
+            },
+            (None, Device::Ios(_)) => None,
+        };
+        (pid, pid.and_then(|pid| self.drv.process_alive(pid)))
+    }
+
     /// A handshake arrived: what earlier runs learned against this app is stale.
     pub(super) fn forget_learned_misses(&self, app_id: &str) {
         if let Some(cache) = self.probe_cache() {
@@ -237,5 +366,7 @@ impl DeviceFlutterBackend<'_> {
     }
 }
 
+#[cfg(test)]
+mod slow_start_tests;
 #[cfg(test)]
 mod tests;

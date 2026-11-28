@@ -60,6 +60,8 @@ tapwing test .maestro --report timings.json
 | `--debug-output <DIR>` | Base directory for run artifacts when `--test-output-dir` is unset |
 | `--flatten-debug-output` | Write artifacts directly into the output root without `run-*` or `shard-N/` subfolders |
 
+In the JSON report each step has the driver's reply under `driver`: the settle outcome (`settle`), the phase timings (`t.findUs`, `t.actUs`, `t.settleUs`) and, when the settle ran into its timeout, `settleBusy` with what it was still waiting for (see [Troubleshooting](troubleshooting.md#a-tap-that-opens-a-system-alert-or-system-sheet-on-ios-takes-3-s)).
+
 JUnit reports follow Maestro's XML structure (one `<testsuite>` per shard, custom `junitId` / `junitClassname` properties, and `[shard N] ` prefixes on failures). HTML and `html-detailed` reports are single self-contained files with no external CDN requests.
 
 Every report (`--report`, `--format`, `--trace`) is written to a temporary file next to its target and then renamed over it, so a crash or kill during the write leaves the previous report or the complete new one, never a truncated file.

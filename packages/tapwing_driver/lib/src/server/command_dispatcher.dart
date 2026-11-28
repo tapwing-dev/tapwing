@@ -65,12 +65,30 @@ class CommandDispatcher {
 
   /// Dispatches [method] with raw JSON [params], or throws
   /// [DriverError.unknownMethod] if no handler is registered.
+  ///
+  /// A result that reports a settle `timeout` (`settle`, or `state` for
+  /// `waitIdle`) gains `settleBusy`, the list of what the settle was still
+  /// waiting for when it gave up (see [IdleDetector.busySources]). The field
+  /// is absent when nothing was busy, and a host that does not know it
+  /// ignores it.
   Future<Object?> dispatch(String method, Map<String, Object?> params) {
     final RpcCommandHandler? handler = _handlers[method];
     if (handler == null) {
       throw DriverError.unknownMethod(method);
     }
-    return handler(params);
+    _context.lastSettleBusy = null;
+    return handler(params).then(_withSettleBusy);
+  }
+
+  /// Every handler reports the outcome of its last settle, which is the one
+  /// [DriverContext.lastSettleBusy] describes.
+  Object? _withSettleBusy(Object? result) {
+    final List<Map<String, Object?>>? busy = _context.lastSettleBusy;
+    if (busy == null || result is! Map<String, Object?>) return result;
+    if (result['settle'] != 'timeout' && result['state'] != 'timeout') {
+      return result;
+    }
+    return <String, Object?>{...result, 'settleBusy': busy};
   }
 
   Future<Object?> _handlePing(Map<String, Object?> _) async => 'pong';

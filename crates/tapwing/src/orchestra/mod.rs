@@ -11,7 +11,7 @@ mod diagnostics;
 mod dispatch;
 mod eval;
 
-pub use describe::{describe_command, is_optional, kind, settles, settles_for_platform};
+pub use describe::{describe_command, is_optional, kind, settle_timeout_note, settles, settles_for_platform};
 pub use dispatch::{adjusted_timeout, is_condition_truthy};
 pub use eval::evaluate_command_scripts;
 
@@ -709,6 +709,9 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                             if let Some(w) = extra.get("warning").and_then(Value::as_str) {
                                 print_prefixed(&self.opts.log_prefix, &format!("      ⚠ {w}"));
                             }
+                            if let Some(note) = settle_timeout_note(&extra) {
+                                print_prefixed(&self.opts.log_prefix, &format!("      ⚠ {note}"));
+                            }
                         }
                         if !matches!(cmd, MaestroCommand::ApplyConfiguration(_) | MaestroCommand::DefineVariables(_)) {
                             let mut entry = json!({
@@ -813,6 +816,9 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                                 "ms": ms,
                                 "error": msg,
                             });
+                            if let Some(details) = self.driver.take_failed_step_details() {
+                                entry["driver"] = details;
+                            }
                             if let Some(d) = &diag
                                 && let Ok(v) = serde_json::to_value(d)
                             {
@@ -879,6 +885,9 @@ impl<'a, D: FlowDriver + ?Sized> Orchestra<'a, D> {
                             "ms": ms,
                             "error": e.to_string(),
                         });
+                        if let Some(details) = self.driver.take_failed_step_details() {
+                            entry["driver"] = details;
+                        }
                         if let Some(d) = &diag
                             && let Ok(v) = serde_json::to_value(d)
                         {
