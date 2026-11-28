@@ -48,11 +48,11 @@ pub(crate) fn app_bundle_dir(udid: &str, bundle_id: &str, deadline: Instant, can
     if !out.status.success() {
         bail!("simctl get_app_container: {}", out.stderr_lossy().trim());
     }
-    let path = out.stdout_lossy().trim().to_string();
-    if path.is_empty() {
-        bail!("simctl get_app_container printed no path");
-    }
-    Ok(PathBuf::from(path))
+    let out_str = out.stdout_lossy();
+    let Some(path) = crate::device::ios::parse_container_path(&out_str) else {
+        bail!("simctl get_app_container printed no valid path: `{}`", out_str.trim());
+    };
+    Ok(path)
 }
 
 fn read_small(path: &Path) -> Option<Vec<u8>> {

@@ -451,7 +451,7 @@ fn defaults_found_nothing(err: &anyhow::Error) -> bool {
 pub struct IosSim {
     pub udid: String,
     pub name: String,
-    data_containers: HashMap<String, PathBuf>,
+    data_containers: HashMap<String, Option<PathBuf>>,
     display_names: HashMap<String, Option<String>>,
     /// Last permissions set applied per bundle in this session (reset by reinstall).
     /// Used only to skip redundant `simctl privacy` calls when `launchApp` is
@@ -549,6 +549,20 @@ where
     out
 }
 
+/// Parses the path printed by `simctl get_app_container`.
+///
+/// System apps without a container (for example `com.apple.Preferences` for
+/// `data`) make `simctl` print `(null)` and exit 0. Treat empty output,
+/// `(null)`, and any non-absolute path as "no container".
+pub(crate) fn parse_container_path(out: &str) -> Option<PathBuf> {
+    let trimmed = out.trim();
+    if trimmed.is_empty() || trimmed == "(null)" {
+        return None;
+    }
+    let path = PathBuf::from(trimmed);
+    path.is_absolute().then_some(path)
+}
+
 fn write_port_file_in_dir(tmp: &Path, port: u16) -> Result<()> {
     std::fs::create_dir_all(tmp).with_context(|| format!("creating {}", tmp.display()))?;
     let path = tmp.join(PORT_FILE);
@@ -585,22 +599,47 @@ impl IosSim {
         simctl(args)
     }
 
-    /// The app's data container (cached until the app is reinstalled).
-    pub fn data_container(&mut self, bundle: &str) -> Result<PathBuf> {
+    /// The app's data container, or `None` when the app has no data container
+    /// (for example a system app where `simctl get_app_container` prints
+    /// `(null)`). Cached until the app is reinstalled.
+    pub fn data_container(&mut self, bundle: &str) -> Result<Option<PathBuf>> {
+        self.data_container_with(bundle, simctl)
+    }
+
+    fn data_container_with(
+        &mut self,
+        bundle: &str,
+        simctl: impl FnOnce(&[&str]) -> Result<String>,
+    ) -> Result<Option<PathBuf>> {
         if let Some(p) = self.data_containers.get(bundle) {
             return Ok(p.clone());
         }
-        let out = self
-            .simctl(&["get_app_container", &self.udid, bundle, "data"])
+        let out = simctl(&["get_app_container", &self.udid, bundle, "data"])
             .with_context(|| format!("{bundle} is not installed on simulator {}", self.name))?;
-        let p = PathBuf::from(out.trim());
+        let p = parse_container_path(&out);
         self.data_containers.insert(bundle.to_string(), p.clone());
         Ok(p)
     }
 
     /// Hands the session's host port to the app (`tmp/tapwing_port`).
+    ///
+    /// Skips writing when the app has no data container (for example a system
+    /// app): such an app cannot embed `tapwing_driver`, so nothing would read
+    /// the port file.
     pub fn write_port_file(&mut self, bundle: &str, port: u16) -> Result<()> {
-        let tmp = self.data_container(bundle)?.join("tmp");
+        self.write_port_file_with(bundle, port, simctl)
+    }
+
+    fn write_port_file_with(
+        &mut self,
+        bundle: &str,
+        port: u16,
+        simctl: impl FnOnce(&[&str]) -> Result<String>,
+    ) -> Result<()> {
+        let Some(container) = self.data_container_with(bundle, simctl)? else {
+            return Ok(());
+        };
+        let tmp = container.join("tmp");
         write_port_file_in_dir(&tmp, port)
     }
 
@@ -611,7 +650,7 @@ impl IosSim {
             return n.clone();
         }
         let name = self.simctl(&["get_app_container", &self.udid, bundle, "app"]).ok().and_then(|app| {
-            let plist = Path::new(app.trim()).join("Info.plist");
+            let plist = parse_container_path(&app)?.join("Info.plist");
             ["CFBundleDisplayName", "CFBundleName"].iter().find_map(|key| {
                 let mut plutil = Command::new("plutil");
                 plutil.args(["-extract", key, "raw", "-o", "-"]).arg(&plist);
@@ -699,7 +738,8 @@ impl IosSim {
         reset_privacy: bool,
         simctl: &(impl Fn(&[&str]) -> Result<String> + Sync),
     ) -> Result<()> {
-        let container = self.data_container(bundle)?;
+        let container =
+            self.data_container_with(bundle, simctl)?.ok_or_else(|| anyhow!("{bundle} has no data container"))?;
         validate_data_container(&container, &self.udid, bundle)?;
         // Whatever happens next, the permissions applied earlier no longer hold.
         self.applied_permissions.remove(bundle);
@@ -725,10 +765,11 @@ impl IosSim {
     }
 
     fn reinstall(&mut self, bundle: &str) -> Result<()> {
-        let app = self.simctl(&["get_app_container", &self.udid, bundle, "app"])?.trim().to_string();
-        if app.is_empty() {
+        let app_out = self.simctl(&["get_app_container", &self.udid, bundle, "app"])?;
+        let Some(app_path) = parse_container_path(&app_out) else {
             bail!("Could not find app binary for bundle {bundle}");
-        }
+        };
+        let app = path_str(&app_path)?;
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis())
@@ -742,8 +783,8 @@ impl IosSim {
         let mut keep_copy = false;
         let result = (|| -> Result<()> {
             // `cp -c` clones on APFS (copy-on-write), making the copy ~free.
-            run("cp", &["-Rc", &app, path_str(&copy)?], APP_COPY_TIMEOUT)
-                .or_else(|_| run("cp", &["-R", &app, path_str(&copy)?], APP_COPY_TIMEOUT))?;
+            run("cp", &["-Rc", app, path_str(&copy)?], APP_COPY_TIMEOUT)
+                .or_else(|_| run("cp", &["-R", app, path_str(&copy)?], APP_COPY_TIMEOUT))?;
             self.simctl(&["uninstall", &self.udid, bundle])?;
             let install = ["install", self.udid.as_str(), path_str(&copy)?];
             install_with_one_retry(|| self.simctl(&install).map(|_| ())).map_err(|e| {
@@ -1450,6 +1491,57 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn parse_container_path_rejects_empty_null_and_relative_outputs() {
+        for bad in ["", "   \n", "(null)", "(null)\n", "relative/path", ".", "(null)/tmp"] {
+            assert_eq!(parse_container_path(bad), None, "expected None for {bad:?}");
+        }
+        let valid = "/Users/dev/Library/Developer/CoreSimulator/Devices/SIM/data/Containers/Data/Application/UUID\n";
+        assert_eq!(
+            parse_container_path(valid),
+            Some(PathBuf::from(
+                "/Users/dev/Library/Developer/CoreSimulator/Devices/SIM/data/Containers/Data/Application/UUID"
+            ))
+        );
+    }
+
+    #[test]
+    fn write_port_file_skips_missing_container_caches_none_and_writes_valid_container() {
+        let mut sim = IosSim::new(SimInfo { udid: SIM.into(), name: "iPhone".into() });
+        let unique_rel = format!("tapwing-issue34-rel-{}-{}", std::process::id(), next_tmp_seq());
+        let cases = [
+            ("com.example.empty", String::new()),
+            ("com.apple.Preferences", "(null)\n".to_string()),
+            ("com.example.relative", unique_rel.clone()),
+        ];
+        for (bundle, out) in &cases {
+            sim.write_port_file_with(bundle, 45678, |args| {
+                assert_eq!(args, ["get_app_container", SIM, *bundle, "data"]);
+                Ok(out.clone())
+            })
+            .unwrap();
+            assert_eq!(sim.data_containers.get(*bundle), Some(&None));
+            // Cached `None` prevents subsequent `simctl` calls.
+            sim.write_port_file_with(bundle, 45678, |_| panic!("cached None should skip simctl")).unwrap();
+        }
+        assert!(!Path::new("(null)").exists());
+        assert!(!Path::new(&unique_rel).exists());
+
+        let dir =
+            std::env::temp_dir().join(format!("tapwing-ios-valid-port-{}-{}", std::process::id(), next_tmp_seq()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let dir_str = dir.to_str().unwrap().to_string();
+        sim.write_port_file_with(BUNDLE, 45678, |_| Ok(format!("{dir_str}\n"))).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("tmp").join(PORT_FILE)).unwrap(), "45678");
+        assert_eq!(sim.data_containers.get(BUNDLE), Some(&Some(dir.clone())));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let err = sim.write_port_file_with("com.example.missing", 45678, |_| bail!("No such app")).unwrap_err();
+        assert!(format!("{err:#}").contains("No such app"), "{err:#}");
+        assert!(!sim.data_containers.contains_key("com.example.missing"));
+    }
+
     /// Lets `parties` threads wait for each other, so a test can tell whether
     /// calls really overlapped without sleeping or racing a timer.
     struct Rendezvous {
@@ -1741,7 +1833,7 @@ mod tests {
 
     fn sim_with_container(container: &Path) -> IosSim {
         let mut sim = IosSim::new(SimInfo { udid: SIM.into(), name: "iPhone".into() });
-        sim.data_containers.insert(BUNDLE.into(), container.to_path_buf());
+        sim.data_containers.insert(BUNDLE.into(), Some(container.to_path_buf()));
         sim
     }
 
@@ -1870,6 +1962,18 @@ mod tests {
     }
 
     #[test]
+    fn wipe_fails_cleanly_when_app_has_no_data_container() {
+        let mut sim = IosSim::new(SimInfo { udid: SIM.into(), name: "iPhone".into() });
+        let err = sim
+            .wipe_data_container_with("com.apple.Preferences", true, &|args| {
+                assert_eq!(args, ["get_app_container", SIM, "com.apple.Preferences", "data"]);
+                Ok("(null)\n".to_string())
+            })
+            .unwrap_err();
+        assert!(format!("{err:#}").contains("has no data container"), "{err:#}");
+    }
+
+    #[test]
     fn a_wipe_drops_the_preferences_first_keeps_the_container_path_and_skips_the_reset_when_asked() {
         let tree = TempTree::new("order");
         let c = fake_container(&tree.0, SIM, BUNDLE);
@@ -1886,7 +1990,7 @@ mod tests {
         assert_eq!(simctl.documents_at_defaults.lock().unwrap().clone().unwrap(), ["tapwing_state.txt"]);
         assert!(names(&c.join("Documents")).is_empty());
         // Same container UUID: the cached path stays, the permissions cache does not.
-        assert_eq!(sim.data_containers.get(BUNDLE), Some(&c));
+        assert_eq!(sim.data_containers.get(BUNDLE), Some(&Some(c)));
         assert!(!sim.applied_permissions.contains_key(BUNDLE));
     }
 
